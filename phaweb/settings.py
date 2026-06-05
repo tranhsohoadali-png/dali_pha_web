@@ -96,5 +96,11 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Đăng nhập
+LOGIN_URL = '/login'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/login'
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 30   # giữ đăng nhập 30 ngày (nhân viên đỡ phải nhập lại)
+
 # Nếu chạy sau reverse-proxy (nginx) có HTTPS:
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

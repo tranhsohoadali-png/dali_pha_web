@@ -7,8 +7,13 @@ try:
 except Exception:
     _VN = None
 
+from functools import wraps
+
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.http import JsonResponse, HttpResponse, HttpResponseNotFound, FileResponse, Http404
 from django.shortcuts import render, redirect
 from django.views.decorators.csrf import csrf_exempt
@@ -16,6 +21,75 @@ from django.views.decorators.csrf import csrf_exempt
 from pha import mixing
 from pha import recipes
 from pha.models import ProductionLog
+
+
+def staff_required(view):
+    """Chỉ CHỦ (is_staff) mới vào được trang quản lý; nhân viên bị đẩy về /app."""
+    @wraps(view)
+    @login_required(login_url='/login')
+    def wrapped(request, *args, **kwargs):
+        if not request.user.is_staff:
+            return redirect('/app')
+        return view(request, *args, **kwargs)
+    return wrapped
+
+
+def login_view(request):
+    if request.user.is_authenticated:
+        return redirect('/' if request.user.is_staff else '/app')
+    if request.method == 'POST':
+        u = authenticate(request, username=request.POST.get('username', '').strip(),
+                         password=request.POST.get('password', ''))
+        if u is not None:
+            login(request, u)
+            nxt = request.GET.get('next')
+            return redirect(nxt or ('/' if u.is_staff else '/app'))
+        messages.error(request, 'Sai tài khoản hoặc mật khẩu.')
+    return render(request, 'login.html')
+
+
+def logout_view(request):
+    logout(request)
+    return redirect('/login')
+
+
+@csrf_exempt
+@staff_required
+def nhan_vien(request):
+    """Quản lý tài khoản nhân viên / quản lý (chỉ chủ)."""
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'add_user':
+            uname = request.POST.get('username', '').strip()
+            pwd = request.POST.get('password', '')
+            is_manager = request.POST.get('is_manager') == 'on'
+            if not uname or not pwd:
+                messages.error(request, 'Thiếu tên đăng nhập hoặc mật khẩu.')
+            elif User.objects.filter(username__iexact=uname).exists():
+                messages.error(request, f'Tài khoản "{uname}" đã tồn tại.')
+            else:
+                u = User.objects.create_user(username=uname, password=pwd)
+                u.is_staff = is_manager
+                u.save()
+                messages.info(request, f'Đã tạo {"quản lý" if is_manager else "nhân viên"}: {uname}.')
+        elif action == 'delete_user':
+            uname = request.POST.get('username', '')
+            if uname == request.user.username:
+                messages.error(request, 'Không thể tự xoá tài khoản đang dùng.')
+            else:
+                User.objects.filter(username=uname, is_superuser=False).delete()
+                messages.info(request, f'Đã xoá tài khoản {uname}.')
+        elif action == 'reset_pw':
+            uname = request.POST.get('username', '')
+            pwd = request.POST.get('password', '')
+            u = User.objects.filter(username=uname).first()
+            if u and pwd:
+                u.set_password(pwd)
+                u.save()
+                messages.info(request, f'Đã đổi mật khẩu cho {uname}.')
+        return redirect('/nhan-vien')
+    users = User.objects.order_by('-is_superuser', '-is_staff', 'username')
+    return render(request, 'nhan_vien.html', {'users': users})
 
 
 def _now():
@@ -66,6 +140,7 @@ def _stats(range_, month_param):
 
 
 @csrf_exempt
+@staff_required
 def cong_thuc_mau(request):
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -105,12 +180,14 @@ def cong_thuc_mau(request):
 
 
 @csrf_exempt
+@staff_required
 def thong_ke(request):
     label, rows = _stats(request.GET.get('range', 'today'), request.GET.get('month'))
     return JsonResponse({'label': label, 'rows': rows})
 
 
 @csrf_exempt
+@login_required(login_url='/login')
 def lich_su(request):
     """Lịch sử các mẻ đã pha (mới nhất trước). ?range=today|all."""
     now = _now()
@@ -126,7 +203,7 @@ def lich_su(request):
         except Exception:
             pass
         rows.append({'dt': t.strftime('%d/%m %H:%M'), 'dali': log.dali,
-                     'mult': '×' + ('%g' % log.multiplier)})
+                     'mult': '×' + ('%g' % log.multiplier), 'user': log.user or ''})
     return JsonResponse({'rows': rows})
 
 
@@ -183,6 +260,7 @@ def export_thong_ke_excel(request):
 
 
 @csrf_exempt
+@login_required(login_url='/login')
 def pha(request):
     if request.method != 'POST':
         return HttpResponseNotFound("POST only")
@@ -202,11 +280,13 @@ def pha(request):
     ProductionLog.objects.create(
         day=now.strftime('%Y-%m-%d'), month=now.strftime('%Y-%m'),
         dali=rec['dali'], hex=rec['hex'], multiplier=mult, components=comps, total=total,
+        user=request.user.username,
     )
     return JsonResponse({'ok': True, 'msg': f'Đã ghi nhận pha {rec["dali"]} ×{("%g" % mult)}'})
 
 
 @csrf_exempt
+@login_required(login_url='/login')
 def mobile(request):
     bases = {b['name']: b['rgb'] for b in mixing.get_bases()}
     rec_list = []

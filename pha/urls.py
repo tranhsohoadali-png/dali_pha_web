@@ -2,6 +2,9 @@ from django.urls import path, re_path
 from pha import views
 
 urlpatterns = [
+    path('login', views.login_view, name='login'),
+    path('logout', views.logout_view, name='logout'),
+    path('nhan-vien', views.nhan_vien, name='nhan_vien'),
     path('', views.cong_thuc_mau, name='home'),
     path('cong-thuc-mau', views.cong_thuc_mau, name='cong_thuc_mau'),
     path('app', views.mobile, name='mobile'),

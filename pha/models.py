@@ -25,6 +25,7 @@ class ProductionLog(models.Model):
     multiplier = models.FloatField(default=1)
     components = models.JSONField(default=list)
     total = models.FloatField(default=0)
+    user = models.CharField(max_length=80, blank=True, default='')   # ai đã pha
 
     def __str__(self):
         return f'{self.day} {self.dali} x{self.multiplier}'
