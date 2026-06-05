@@ -531,6 +531,36 @@ def media_icon(request, name):
     return FileResponse(open(path, 'rb'), content_type='image/png')
 
 
+@csrf_exempt
+@staff_required
+def dali_colors(request):
+    """Bảng màu DALI: xem / tìm / thêm-sửa / xoá / nạp lại (chỉ chủ)."""
+    from pha import dali_match
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'add':
+            ok, msg = dali_match.add_entry(request.POST.get('hex', ''), request.POST.get('dali', ''))
+            messages.info(request, msg)
+        elif action == 'delete':
+            n = dali_match.delete_entry(request.POST.get('hex', ''), request.POST.get('dali') or None)
+            messages.info(request, f'Đã xoá {n} mục.' if n else 'Không tìm thấy mục để xoá.')
+        elif action == 'reload':
+            n = dali_match.reload_reference()
+            messages.info(request, f'Đã nạp lại {n} màu từ file.')
+        return redirect('/dali-colors')
+
+    query = (request.GET.get('q') or '').strip().lower()
+    items = dali_match.get_all()
+    if query:
+        items = [it for it in items if query in it['hex'].lower() or query in it['dali'].lower()]
+    total = dali_match.reference_size()
+    shown = items[:500]
+    return render(request, 'dali_colors.html', {
+        'items': shown, 'total': total, 'query': request.GET.get('q') or '',
+        'found': len(items), 'truncated': len(items) > 500,
+    })
+
+
 # ===================== XỬ LÝ ẢNH (tab cho chủ) =====================
 def _fmt_name(filename):
     try:
