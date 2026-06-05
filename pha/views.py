@@ -1,5 +1,7 @@
 import csv
+import json
 import os
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
@@ -21,7 +23,7 @@ from django.http import JsonResponse, HttpResponse, HttpResponseNotFound, FileRe
 from django.shortcuts import render, redirect
 from django.views.decorators.csrf import csrf_exempt
 
-from django.db.models import F
+from django.db.models import F, Sum, Count
 
 from pha import mixing
 from pha import recipes
@@ -106,6 +108,75 @@ def _low_stock_names():
 
 @csrf_exempt
 @staff_required
+def dashboard(request):
+    """Bảng điều khiển: số liệu, biểu đồ, dự báo mua sơn, năng suất."""
+    now = _now()
+    today = now.strftime('%Y-%m-%d')
+    this_month = now.strftime('%Y-%m')
+
+    today_n = ProductionLog.objects.filter(day=today).count()
+    month_n = ProductionLog.objects.filter(month=this_month).count()
+    month_cost = ProductionLog.objects.filter(month=this_month).aggregate(s=Sum('cost'))['s'] or 0
+
+    # 30 ngày qua: số mẻ mỗi ngày
+    days = [now.date() - timedelta(days=i) for i in range(29, -1, -1)]
+    dc = dict(ProductionLog.objects.filter(day__gte=days[0].strftime('%Y-%m-%d'))
+              .values_list('day').annotate(n=Count('id')))
+    day_labels = [d.strftime('%d/%m') for d in days]
+    day_data = [dc.get(d.strftime('%Y-%m-%d'), 0) for d in days]
+
+    # 12 tháng: chi phí
+    months, y, m = [], now.year, now.month
+    for _ in range(12):
+        months.append(f'{y:04d}-{m:02d}')
+        m -= 1
+        if m == 0:
+            m = 12; y -= 1
+    months = months[::-1]
+    mc = dict(ProductionLog.objects.values_list('month').annotate(c=Sum('cost')))
+    month_labels = [_fmt_month(mm) for mm in months]
+    month_cost_data = [round(mc.get(mm, 0) or 0) for mm in months]
+
+    # màu dùng nhiều tháng này
+    _, top_rows = _stats('month', this_month)
+
+    # dự báo mua sơn (theo 30 ngày qua)
+    since = days[0].strftime('%Y-%m-%d')
+    usage30 = defaultdict(float)
+    for log in ProductionLog.objects.filter(day__gte=since):
+        for c in (log.components or []):
+            try:
+                usage30[c['name']] += float(c['grams'])
+            except (KeyError, TypeError, ValueError):
+                pass
+    forecast = []
+    for b in mixing.get_bases():
+        ps, _ = PaintStock.objects.get_or_create(name=b['name'])
+        used = usage30.get(b['name'], 0)
+        per_day = used / 30.0
+        days_left = round(ps.stock / per_day) if per_day > 0 else None
+        forecast.append({
+            'name': b['name'], 'stock': round(ps.stock, 1), 'used30': round(used),
+            'per_day': round(per_day, 1), 'days_left': days_left,
+            'suggest': max(0, round(used - ps.stock)),   # đủ dùng ~30 ngày tới
+            'low': ps.low_threshold > 0 and ps.stock <= ps.low_threshold,
+        })
+
+    users = list(ProductionLog.objects.filter(month=this_month).values('user')
+                 .annotate(n=Count('id'), c=Sum('cost')).order_by('-n'))
+
+    return render(request, 'dashboard.html', {
+        'today_n': today_n, 'month_n': month_n, 'month_cost': round(month_cost),
+        'low_stock': _low_stock_names(),
+        'day_labels': json.dumps(day_labels), 'day_data': json.dumps(day_data),
+        'month_labels': json.dumps(month_labels), 'month_cost_data': json.dumps(month_cost_data),
+        'top_rows': top_rows, 'forecast': forecast, 'users': users,
+        'month_label': _fmt_month(this_month), 'today_label': now.strftime('%d/%m/%Y'),
+    })
+
+
+@csrf_exempt
+@staff_required
 def kho_son(request):
     """Quản lý tồn kho màu sơn gốc (chỉ chủ)."""
     if request.method == 'POST':
@@ -125,17 +196,24 @@ def kho_son(request):
         elif action == 'set_threshold':
             ps.low_threshold = val; ps.save()
             messages.info(request, f'Đã đặt ngưỡng cảnh báo "{name}" = {val:g}g.')
+        elif action == 'set_price':
+            ps.price_per_kg = val; ps.save()
+            messages.info(request, f'Đã đặt giá "{name}" = {val:,.0f} đ/kg.')
         return redirect('/kho-son')
 
     items = []
+    total_value = 0
     for b in mixing.get_bases():
         ps, _ = PaintStock.objects.get_or_create(name=b['name'])
+        value = ps.stock * ps.price_per_kg / 1000.0
+        total_value += value
         items.append({
             'name': b['name'], 'rgb': b['rgb'], 'stock': round(ps.stock, 1),
-            'threshold': ps.low_threshold,
+            'threshold': ps.low_threshold, 'price': ps.price_per_kg,
+            'value': round(value),
             'low': ps.low_threshold > 0 and ps.stock <= ps.low_threshold,
         })
-    return render(request, 'kho_son.html', {'items': items})
+    return render(request, 'kho_son.html', {'items': items, 'total_value': round(total_value)})
 
 
 def _now():
@@ -323,11 +401,14 @@ def pha(request):
         return JsonResponse({'ok': False, 'msg': 'Không tìm thấy công thức.'})
     comps = [{'name': c['name'], 'grams': round(c['grams'] * mult, 2)} for c in rec['components']]
     total = round(sum(c['grams'] for c in comps), 2)
+    # Chi phí sơn của mẻ (theo giá hiện tại, đồng)
+    prices = {p.name: p.price_per_kg for p in PaintStock.objects.all()}
+    cost = round(sum(c['grams'] * prices.get(c['name'], 0) / 1000.0 for c in comps))
     now = _now()
     ProductionLog.objects.create(
         day=now.strftime('%Y-%m-%d'), month=now.strftime('%Y-%m'),
         dali=rec['dali'], hex=rec['hex'], multiplier=mult, components=comps, total=total,
-        user=request.user.username,
+        user=request.user.username, cost=cost,
     )
     # Trừ kho sơn theo lượng đã dùng (chỉ trừ màu có theo dõi tồn kho)
     for c in comps:

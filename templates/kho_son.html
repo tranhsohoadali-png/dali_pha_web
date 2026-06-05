@@ -23,7 +23,7 @@
     <div class="card-body p-0">
       <table class="table mb-0 align-middle">
         <thead class="table-light">
-          <tr><th>Màu gốc</th><th class="text-end">Tồn kho (g)</th><th>Ngưỡng cảnh báo</th><th>Nhập thêm</th></tr>
+          <tr><th>Màu gốc</th><th class="text-end">Tồn kho (g)</th><th>Giá (đ/kg)</th><th class="text-end">Giá trị tồn</th><th>Ngưỡng cảnh báo</th><th>Nhập thêm</th></tr>
         </thead>
         <tbody>
           {% for it in items %}
@@ -42,6 +42,14 @@
               </form>
             </td>
             <td>
+              <form method="POST" action="/kho-son" class="d-flex gap-1" style="max-width:170px">{% csrf_token %}
+                <input type="hidden" name="action" value="set_price"><input type="hidden" name="name" value="{{ it.name }}">
+                <input type="number" name="value" class="form-control form-control-sm" value="{{ it.price|floatformat:'-0' }}" step="any" min="0" placeholder="đ/kg">
+                <button class="btn btn-sm btn-outline-secondary">Lưu</button>
+              </form>
+            </td>
+            <td class="text-end">{{ it.value|floatformat:'0' }} đ</td>
+            <td>
               <form method="POST" action="/kho-son" class="d-flex gap-1" style="max-width:200px">{% csrf_token %}
                 <input type="hidden" name="action" value="set_threshold"><input type="hidden" name="name" value="{{ it.name }}">
                 <input type="number" name="value" class="form-control form-control-sm" value="{{ it.threshold|floatformat:'-1' }}" step="any" min="0">
@@ -57,9 +65,12 @@
             </td>
           </tr>
           {% empty %}
-          <tr><td colspan="4" class="text-secondary text-center py-3">Chưa khai báo màu gốc nào (vào trang quản lý công thức để thêm).</td></tr>
+          <tr><td colspan="6" class="text-secondary text-center py-3">Chưa khai báo màu gốc nào (vào trang quản lý công thức để thêm).</td></tr>
           {% endfor %}
         </tbody>
+        {% if items %}
+        <tfoot class="table-light fw-bold"><tr><td colspan="3" class="text-end">Tổng giá trị tồn kho:</td><td class="text-end">{{ total_value|floatformat:'0' }} đ</td><td colspan="2"></td></tr></tfoot>
+        {% endif %}
       </table>
     </div>
   </div>

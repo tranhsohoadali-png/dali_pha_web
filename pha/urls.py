@@ -9,6 +9,7 @@ urlpatterns = [
     path('logout', views.logout_view, name='logout'),
     path('nhan-vien', views.nhan_vien, name='nhan_vien'),
     path('kho-son', views.kho_son, name='kho_son'),
+    path('dashboard', views.dashboard, name='dashboard'),
     path('', views.cong_thuc_mau, name='home'),
     path('cong-thuc-mau', views.cong_thuc_mau, name='cong_thuc_mau'),
     path('app', views.mobile, name='mobile'),

@@ -38,6 +38,7 @@ class PaintStock(models.Model):
     name = models.CharField(max_length=100, unique=True)
     stock = models.FloatField(default=0)            # tồn kho hiện tại (g)
     low_threshold = models.FloatField(default=0)    # ngưỡng cảnh báo sắp hết (g)
+    price_per_kg = models.FloatField(default=0)     # giá (đồng / kg)
 
     def __str__(self):
         return f'{self.name}: {self.stock}g'
@@ -54,6 +55,7 @@ class ProductionLog(models.Model):
     components = models.JSONField(default=list)
     total = models.FloatField(default=0)
     user = models.CharField(max_length=80, blank=True, default='')   # ai đã pha
+    cost = models.FloatField(default=0)            # chi phí sơn của mẻ này (đồng)
 
     def __str__(self):
         return f'{self.day} {self.dali} x{self.multiplier}'
