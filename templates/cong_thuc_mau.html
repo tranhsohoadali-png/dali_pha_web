@@ -226,6 +226,19 @@
 <datalist id="baseList">{% for b in bases %}<option value="{{ b.name }}"></option>{% endfor %}</datalist>
 
 <script>
+  // ---- Chống bộ gõ tiếng Việt làm hỏng mã (X->ngã, F->huyền...) ----
+  // Đảo ký tự tiếng Việt về chữ Latin gốc kèm phím dấu Telex rồi viết hoa.
+  function normCode(s){
+    var TONE = {'́':'s','̀':'f','̉':'r','̃':'x','̣':'j'};
+    return s.normalize('NFD').replace(/[̀-ͯ]/g, function(m){ return TONE[m] || ''; })
+            .replace(/đ/g,'dd').replace(/Đ/g,'DD').toUpperCase();
+  }
+  function attachCode(el){
+    if(!el) return;
+    el.addEventListener('input', function(){ var v = normCode(this.value); if(v !== this.value) this.value = v; });
+  }
+  ['fDali','fHex','recipeSearch'].forEach(function(id){ attachCode(document.getElementById(id)); });
+
   function rowHtml(name, grams){
     name = name || ''; grams = grams || '';
     return '<div class="row g-2 mb-2 recipe-row">' +

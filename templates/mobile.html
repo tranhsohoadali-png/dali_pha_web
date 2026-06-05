@@ -117,6 +117,14 @@
   function toast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(function(){t.style.display='none';},2000); }
   function round1(x){ return Math.round(x*10)/10; }
 
+  // Chống bộ gõ tiếng Việt làm hỏng mã khi tìm kiếm (X->ngã...)
+  function normCode(s){
+    var TONE = {'́':'s','̀':'f','̉':'r','̃':'x','̣':'j'};
+    return s.normalize('NFD').replace(/[̀-ͯ]/g, function(m){ return TONE[m] || ''; })
+            .replace(/đ/g,'dd').replace(/Đ/g,'DD').toUpperCase();
+  }
+  (function(){ var q=document.getElementById('q'); if(q) q.addEventListener('input', function(){ var v=normCode(this.value); if(v!==this.value) this.value=v; }); })();
+
   // ----- Mẻ pha (×4 / ×5) -----
   var curMult = 5;
   function applyMult(){
