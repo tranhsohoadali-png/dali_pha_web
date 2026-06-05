@@ -1,4 +1,6 @@
+import csv
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
 try:
@@ -14,13 +16,16 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
+from django.core.files.storage import FileSystemStorage
 from django.http import JsonResponse, HttpResponse, HttpResponseNotFound, FileResponse, Http404
 from django.shortcuts import render, redirect
 from django.views.decorators.csrf import csrf_exempt
 
 from pha import mixing
 from pha import recipes
-from pha.models import ProductionLog
+from pha.models import ProductionLog, ImageResult
+
+_img_executor = ThreadPoolExecutor(max_workers=2)
 
 
 def staff_required(view):
@@ -331,3 +336,124 @@ def media_icon(request, name):
     if not os.path.exists(path):
         raise Http404
     return FileResponse(open(path, 'rb'), content_type='image/png')
+
+
+# ===================== XỬ LÝ ẢNH (tab cho chủ) =====================
+def _fmt_name(filename):
+    try:
+        first_dot = filename.find('.')
+        return filename[:first_dot] + ' ' + filename[filename.find('_') + 1:]
+    except Exception:
+        return filename
+
+
+def _get_img(request):
+    data = request.GET.get('file_url') or request.POST.get('file_url')
+    if not data:
+        return None
+    return ImageResult.objects.filter(name=data.replace('/media/', '')) \
+        .order_by('-created_time').first()
+
+
+@csrf_exempt
+@staff_required
+def xu_ly_anh(request):
+    from pha.imageproc import process_image
+    last = ImageResult.objects.all().order_by('-created_time')[:30]
+    last_query = [{'name': _fmt_name(q.name), 'url': q.name} for q in last]
+    if request.method == 'POST' and request.FILES.get('image'):
+        upload = request.FILES['image']
+        fss = FileSystemStorage()
+        name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_{upload.name}'
+        fss.save(name, upload)
+        rec = ImageResult.objects.create(name=name, status=ImageResult.STATUS_PROCESSING,
+                                         user=request.user.username)
+        _img_executor.submit(process_image, rec.id, name)
+        return render(request, 'xu_ly_anh.html', {'file_url': '/media/' + name, 'last_query': last_query})
+    return render(request, 'xu_ly_anh.html', {'last_query': last_query})
+
+
+@csrf_exempt
+@staff_required
+def anh_result(request):
+    from pha.imageproc import split_list
+    res = _get_img(request)
+    if not res:
+        return JsonResponse({'status': 'processing'})
+    if res.status == ImageResult.STATUS_PROCESSING:
+        return JsonResponse({'status': 'processing'})
+    if res.status == ImageResult.STATUS_ERROR:
+        return JsonResponse({'status': 'error', 'error': res.error_message})
+    return JsonResponse({'status': 'done', 'img_output': '/media/' + res.name_output,
+                         'colors': split_list(10, res.colors)})
+
+
+@csrf_exempt
+@staff_required
+def anh_export_colors(request):
+    res = _get_img(request)
+    if not res:
+        return HttpResponseNotFound('no result')
+    resp = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    resp['Content-Disposition'] = 'attachment; filename="bang_mau_dali.csv"'
+    resp.write('﻿')
+    w = csv.writer(resp)
+    w.writerow(['STT', 'HEX', 'R', 'G', 'B', 'Ma_DALI', 'Phan_tram'])
+    for row in res.colors:
+        h = row[1].lstrip('#')
+        try:
+            r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        except (ValueError, IndexError):
+            r = g = b = ''
+        w.writerow([row[0], row[1], r, g, b, row[2] if len(row) > 2 else '', row[3] if len(row) > 3 else ''])
+    return resp
+
+
+@csrf_exempt
+@staff_required
+def anh_export_xlsx(request):
+    from pha.exports import build_xlsx
+    res = _get_img(request)
+    if not res:
+        return HttpResponseNotFound('no result')
+    out = os.path.join(settings.MEDIA_ROOT, 'bang_mau_dali.xlsx')
+    build_xlsx(res.colors, out)
+    with open(out, 'rb') as f:
+        data = f.read()
+    resp = HttpResponse(data, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = 'attachment; filename="bang_mau_dali.xlsx"'
+    return resp
+
+
+@csrf_exempt
+@staff_required
+def anh_legend(request):
+    from pha.exports import build_legend_image
+    res = _get_img(request)
+    if not res:
+        return HttpResponseNotFound('no result')
+    left = res.name if os.path.exists(os.path.join(settings.MEDIA_ROOT, res.name)) else res.name_output
+    left_path = os.path.join(settings.MEDIA_ROOT, left)
+    title = (request.GET.get('title') or '').strip()
+    out = os.path.join(settings.MEDIA_ROOT, f'{res.name_output or res.name}_legend.png')
+    build_legend_image(left_path, res.colors, out, title=title)
+    with open(out, 'rb') as f:
+        data = f.read()
+    resp = HttpResponse(data, content_type='image/png')
+    resp['Content-Disposition'] = 'attachment; filename="bang_mau_DALI.png"'
+    return resp
+
+
+@csrf_exempt
+@staff_required
+def anh_download_result(request):
+    from pha.imageproc import get_paint_image
+    result_url = request.GET.get('result_url')
+    image_name = request.GET.get('image_name') or 'result'
+    scale = request.GET.get('scale_option') or '20x20'
+    orientation = request.GET.get('orientation_option') or 'auto'
+    try:
+        file_paint, file_a3 = get_paint_image(result_url, image_name, scale, orientation)
+        return JsonResponse({'file_paint': file_paint, 'file_a3': file_a3, 'origin_result': result_url})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Xử lý ảnh · DALI</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <style>
+    .dropzone{border:2px dashed var(--bs-border-color);border-radius:.6rem;padding:1.2rem;text-align:center;cursor:pointer;background:var(--bs-tertiary-bg)}
+    .dropzone:hover{border-color:var(--bs-success)}
+    .result-img{width:100%;border:1px solid var(--bs-border-color);border-radius:.5rem;cursor:zoom-in}
+    .swatch{width:100%;height:42px;border-radius:.4rem;border:1px solid rgba(0,0,0,.15)}
+    .color-card{border:1px solid var(--bs-border-color);border-radius:.6rem;padding:.5rem;height:100%}
+    .hist{cursor:pointer}.hist:hover{background:var(--bs-tertiary-bg)}
+  </style>
+</head>
+<body class="bg-body-tertiary">
+<nav class="navbar navbar-expand bg-success" data-bs-theme="dark">
+  <div class="container-fluid">
+    <span class="navbar-brand mb-0 h1"><i class="bi bi-image"></i> Xử lý ảnh → mã DALI</span>
+    <div class="d-flex align-items-center gap-2">
+      <a href="/" class="btn btn-outline-light btn-sm"><i class="bi bi-droplet-half"></i> Công thức pha</a>
+      <span class="text-white small"><i class="bi bi-person-circle"></i> {{ user.username }}</span>
+      <a href="/logout" class="btn btn-outline-light btn-sm"><i class="bi bi-box-arrow-right"></i></a>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid py-3">
+  <div class="row g-3">
+    <!-- Upload + lịch sử -->
+    <div class="col-xl-3 col-lg-4">
+      <div class="card shadow-sm mb-3">
+        <div class="card-header fw-semibold"><i class="bi bi-cloud-arrow-up"></i> Tải ảnh lên</div>
+        <div class="card-body">
+          <form id="up" method="POST" action="/xu-ly-anh" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div id="dz" class="dropzone mb-2"><i class="bi bi-image fs-3 text-secondary"></i>
+              <div class="small text-secondary">Kéo–thả hoặc bấm chọn ảnh</div>
+              <input id="image" name="image" type="file" accept="image/*" class="d-none"></div>
+            <img id="preview" class="img-fluid rounded mb-2" hidden>
+            <button id="sub" class="btn btn-success w-100" disabled><i class="bi bi-magic"></i> Xử lý ảnh</button>
+          </form>
+        </div>
+      </div>
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-clock-history"></i> Ảnh gần đây</div>
+        <div class="list-group list-group-flush" style="max-height:340px;overflow:auto">
+          {% for q in last_query %}
+          <button type="button" class="list-group-item list-group-item-action hist small" onclick="getResult('{{ q.url }}')">
+            <i class="bi bi-file-image text-secondary"></i> {{ q.name }}</button>
+          {% empty %}<div class="list-group-item text-secondary small">Chưa có ảnh.</div>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Ảnh gốc + kết quả -->
+    <div class="col-xl-5 col-lg-8">
+      <div class="card shadow-sm h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-semibold"><i class="bi bi-images"></i> Ảnh gốc & Bản đồ màu</span>
+          <span id="spin" class="d-none align-items-center text-success small"><span class="spinner-border spinner-border-sm me-1"></span> Đang xử lý…</span>
+        </div>
+        <div class="card-body">
+          <div id="err" class="alert alert-danger d-none"></div>
+          <div class="row g-2 mb-3">
+            <div class="col-6"><div class="small text-secondary mb-1">Ảnh gốc</div><img id="imgOrigin" src="{{ file_url }}" class="result-img"></div>
+            <div class="col-6"><div class="small text-secondary mb-1">Bản đồ đánh số</div><img id="imgResult" src="#" class="result-img" hidden></div>
+          </div>
+          <div class="border-top pt-3">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-4"><label class="form-label small mb-1">Tên (in lên bản)</label><input id="imgName" class="form-control form-control-sm" placeholder="VD: K496"></div>
+              <div class="col-md-4"><label class="form-label small mb-1">Khổ (cm)</label>
+                <select id="scale" class="form-select form-select-sm">
+                  <option value="20x20">20x20</option><option value="30x30">30x30</option><option value="40x40">40x40</option>
+                  <option value="50x50">50x50</option><option value="40x50">40x50</option><option value="50x65">50x65</option></select></div>
+              <div class="col-md-4"><label class="form-label small mb-1">Hướng</label>
+                <select id="orient" class="form-select form-select-sm"><option value="auto">Tự động</option><option value="portrait">Dọc</option><option value="landscape">Ngang</option></select></div>
+            </div>
+            <button id="btnPrint" class="btn btn-success btn-sm mt-3" hidden><i class="bi bi-download"></i> Tải bản in + A3</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bảng màu DALI -->
+    <div class="col-xl-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-semibold"><i class="bi bi-palette"></i> Bảng màu &amp; mã DALI</span>
+          <span id="cnt" class="badge text-bg-secondary" hidden></span>
+        </div>
+        <div class="card-body">
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            <button id="dXlsx" class="btn btn-success btn-sm" hidden><i class="bi bi-file-earmark-excel"></i> Excel</button>
+            <button id="dLegend" class="btn btn-primary btn-sm" hidden><i class="bi bi-card-image"></i> Ảnh + chú giải</button>
+            <button id="dCsv" class="btn btn-outline-success btn-sm" hidden><i class="bi bi-filetype-csv"></i> CSV</button>
+          </div>
+          <div id="palette" class="row g-2"></div>
+          <div id="empty" class="text-secondary small text-center py-4">Tải ảnh lên để xem bảng màu + mã DALI.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var curUrl = "";
+  var dz=document.getElementById('dz'), fi=document.getElementById('image');
+  dz.addEventListener('click',function(){fi.click()});
+  ['dragover','dragenter'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.style.borderColor='#198754'}));
+  ['dragleave','drop'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.style.borderColor=''}));
+  dz.addEventListener('drop',ev=>{ if(ev.dataTransfer.files.length){fi.files=ev.dataTransfer.files;onPick();} });
+  fi.addEventListener('change',onPick);
+  function onPick(){ var f=fi.files[0]; if(!f)return; document.getElementById('sub').disabled=false;
+    var r=new FileReader(); r.onload=e=>{var p=document.getElementById('preview');p.src=e.target.result;p.hidden=false;}; r.readAsDataURL(f); }
+
+  function spin(on){ var s=document.getElementById('spin'); s.classList.toggle('d-none',!on); s.classList.toggle('d-flex',on); }
+  function showPalette(pages){
+    var rows=[]; pages.forEach(p=>rows=rows.concat(p));
+    var el=document.getElementById('palette'); el.innerHTML='';
+    if(!rows.length){document.getElementById('empty').style.display='';return;}
+    document.getElementById('empty').style.display='none';
+    document.getElementById('cnt').hidden=false; document.getElementById('cnt').textContent=rows.length+' màu';
+    rows.forEach(function(r){ var stt=r[0],hex=r[1],dali=r[2]||'',pct=(r[3]!=null?r[3]:'');
+      el.insertAdjacentHTML('beforeend','<div class="col-6 col-md-4 col-xl-6"><div class="color-card">'+
+        '<div class="swatch mb-1" style="background:'+hex+'"></div>'+
+        '<div class="d-flex justify-content-between"><span class="badge text-bg-secondary">'+stt+'</span><b class="small">'+dali+'</b></div>'+
+        '<div class="d-flex justify-content-between mt-1"><span class="small" style="font-family:monospace">'+hex+'</span>'+(pct!==''?'<span class="small text-secondary">'+pct+'%</span>':'')+'</div>'+
+        '</div></div>');
+    });
+  }
+
+  function getResult(url, onDone, onWait){
+    curUrl=url;
+    if(!url.startsWith('/media/')&&!url.startsWith('data:')) document.getElementById('imgOrigin').src='/media/'+url;
+    document.getElementById('err').classList.add('d-none'); spin(true);
+    $.post('/anh-result',{file_url:url},function(res){
+      if(res.status==='processing'){ if(onWait)onWait(); return; }
+      spin(false);
+      if(res.status==='error'){ document.getElementById('err').textContent=res.error||'Lỗi xử lý ảnh'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); return; }
+      document.getElementById('imgResult').src=res.img_output; document.getElementById('imgResult').hidden=false;
+      ['btnPrint','dXlsx','dLegend','dCsv'].forEach(id=>document.getElementById(id).hidden=false);
+      showPalette(res.colors||[]); if(onDone)onDone();
+    }).fail(function(){ spin(false); document.getElementById('err').textContent='Không kết nối được máy chủ.'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); });
+  }
+
+  // tự poll sau khi upload
+  var fu=decodeURIComponent("{{ file_url|default:'' }}");
+  if(fu){ var waited=0,poll=setInterval(function(){ getResult(fu,function(){clearInterval(poll)},function(){ waited+=2000; if(waited>180000){clearInterval(poll);spin(false);} }); },2000); }
+
+  function dl(u){ var a=document.createElement('a'); a.href=u; a.click(); }
+  document.getElementById('dCsv').onclick=function(){ if(curUrl)dl('/anh-export-colors?file_url='+encodeURIComponent(curUrl)); };
+  document.getElementById('dXlsx').onclick=function(){ if(curUrl)dl('/anh-export-xlsx?file_url='+encodeURIComponent(curUrl)); };
+  document.getElementById('dLegend').onclick=function(){ if(curUrl)dl('/anh-legend?file_url='+encodeURIComponent(curUrl)+'&title='+encodeURIComponent(document.getElementById('imgName').value||'')); };
+  document.getElementById('btnPrint').onclick=function(){
+    var ru=decodeURIComponent(document.getElementById('imgResult').src);
+    $.get('/anh-download',{result_url:ru,image_name:(document.getElementById('imgName').value||'result'),scale_option:document.getElementById('scale').value,orientation_option:document.getElementById('orient').value},function(res){
+      if(res.error){alert('Lỗi: '+res.error);return;}
+      [res.origin_result,res.file_paint,res.file_a3].forEach(dl);
+    });
+  };
+  document.getElementById('imgResult').onclick=function(){ if(this.src&&this.src!=='#')window.open(this.src); };
+</script>
+</body>
+</html>

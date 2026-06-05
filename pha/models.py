@@ -15,6 +15,24 @@ class Recipe(models.Model):
         return self.dali
 
 
+class ImageResult(models.Model):
+    """Ảnh đã xử lý: bản đồ màu đánh số + bảng màu DALI."""
+    STATUS_PROCESSING = 'processing'
+    STATUS_DONE = 'done'
+    STATUS_ERROR = 'error'
+
+    created_time = models.DateTimeField(auto_now_add=True)
+    name = models.TextField()                 # tên file ảnh gốc (có timestamp)
+    name_output = models.TextField(blank=True, default='')   # file kết quả png
+    colors = models.JSONField(default=list, blank=True)      # [[stt,hex,dali,percent],...]
+    status = models.CharField(max_length=20, default=STATUS_PROCESSING)
+    error_message = models.TextField(blank=True, default='')
+    user = models.CharField(max_length=80, blank=True, default='')
+
+    def __str__(self):
+        return f'{self.id}-{self.name}'
+
+
 class ProductionLog(models.Model):
     """Nhật ký pha màu (thống kê lượng màu gốc dùng theo ngày/tháng)."""
     created_time = models.DateTimeField(auto_now_add=True)

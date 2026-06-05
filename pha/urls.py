@@ -1,4 +1,7 @@
+from django.conf import settings
 from django.urls import path, re_path
+from django.views.static import serve as static_serve
+
 from pha import views
 
 urlpatterns = [
@@ -12,7 +15,18 @@ urlpatterns = [
     path('thong-ke', views.thong_ke, name='thong_ke'),
     path('lich-su', views.lich_su, name='lich_su'),
     path('thong-ke-excel', views.export_thong_ke_excel, name='thong_ke_excel'),
+
+    # Xử lý ảnh (tab cho chủ)
+    path('xu-ly-anh', views.xu_ly_anh, name='xu_ly_anh'),
+    path('anh-result', views.anh_result, name='anh_result'),
+    path('anh-export-colors', views.anh_export_colors, name='anh_export_colors'),
+    path('anh-export-xlsx', views.anh_export_xlsx, name='anh_export_xlsx'),
+    path('anh-legend', views.anh_legend, name='anh_legend'),
+    path('anh-download', views.anh_download_result, name='anh_download'),
+
     path('manifest.webmanifest', views.manifest, name='manifest'),
     path('sw.js', views.service_worker, name='sw'),
-    re_path(r'^media/(?P<name>icon-(?:192|512)\.png)$', views.media_icon, name='media_icon'),
+
+    # Phục vụ file media (icon PWA + ảnh kết quả). Tên file có timestamp nên khó đoán.
+    re_path(r'^media/(?P<path>.+)$', static_serve, {'document_root': settings.MEDIA_ROOT}),
 ]

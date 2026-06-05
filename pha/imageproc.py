@@ -1,0 +1,83 @@
+"""
+Xử lý ảnh: tạo bản đồ màu đánh số (paint-by-numbers) + khớp mã DALI.
+Port từ phần mềm ảnh trên máy tính, chạy nền bằng ThreadPoolExecutor.
+"""
+import os
+import time
+from datetime import datetime
+
+import cv2
+from PIL import Image
+from django.conf import settings
+
+from pha.color_index_lib import index_color, get_draw_result
+from pha.dali_match import nearest_dali
+from pha.models import ImageResult
+
+
+def split_list(pagination, img_color):
+    out, tmp = [], []
+    for i in img_color:
+        tmp.append(i)
+        if len(tmp) == pagination:
+            out.append(tmp); tmp = []
+    out.append(tmp)
+    return out
+
+
+def convert_to_hex(colors):
+    res = []
+    for i in colors:
+        hx = '#%02x%02x%02x' % i[1]
+        res.append([i[0], hx.upper()])
+    return res
+
+
+def save_img(edge_img, dpi=(72, 72)):
+    now = datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d_%H-%M-%S")
+    name_output = now + "_result.png"
+    rgb = cv2.cvtColor(edge_img, cv2.COLOR_BGR2RGB)
+    os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
+    Image.fromarray(rgb).save(os.path.join(settings.MEDIA_ROOT, name_output), dpi=dpi)
+    return name_output
+
+
+def create_image_color(color_mapping, hex_list, percentages=None):
+    result = []
+    for i in range(len(color_mapping)):
+        rgb = color_mapping[i][1]
+        dali = nearest_dali(rgb)
+        pct = percentages[i] if percentages and i < len(percentages) else 0
+        result.append([color_mapping[i][0], hex_list[i][1], dali, pct])
+    return result
+
+
+def process_image(rec_id, name):
+    """Chạy nền: xử lý ảnh và cập nhật bản ghi ImageResult."""
+    obj = ImageResult.objects.get(id=rec_id)
+    try:
+        path = os.path.join(settings.MEDIA_ROOT, name)
+        edge_img, color_mapping, percentages = index_color(path, debug=False)
+        dpi = Image.open(path).info.get('dpi', (72, 72))
+        name_output = save_img(edge_img, dpi)
+        colors = create_image_color(color_mapping, convert_to_hex(color_mapping), percentages)
+        obj.name_output = name_output
+        obj.colors = colors
+        obj.status = ImageResult.STATUS_DONE
+        obj.save()
+    except Exception as e:
+        obj.status = ImageResult.STATUS_ERROR
+        obj.error_message = str(e)
+        obj.save()
+
+
+def get_paint_image(file_path, image_name, option, orientation='portrait'):
+    """Tạo bản in theo khổ + bản A3 từ ảnh kết quả. Trả (file_paint, file_a3)."""
+    full = os.path.join(settings.MEDIA_ROOT, file_path.replace('/media/', ''))
+    width, height = option.split('x')
+    image_paint, image_a3 = get_draw_result(full, int(width), int(height), image_name, orientation=orientation)
+    fn_paint = f'/media/{image_name}_painting.png'
+    fn_a3 = f'/media/{image_name}_a3.png'
+    cv2.imwrite(os.path.join(settings.MEDIA_ROOT, f'{image_name}_painting.png'), image_paint)
+    cv2.imwrite(os.path.join(settings.MEDIA_ROOT, f'{image_name}_a3.png'), image_a3)
+    return fn_paint, fn_a3
