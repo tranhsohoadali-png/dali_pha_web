@@ -9,8 +9,8 @@ cp pha/recipes.json ~/recipes_backup.json 2>/dev/null || true
 cp pha/base_colors.json ~/base_colors_backup.json 2>/dev/null || true
 cp db.sqlite3 ~/db_backup.sqlite3 2>/dev/null || true
 
-echo ">> Cài thư viện hệ thống cho xử lý ảnh (opencv/shapely)..."
-apt-get install -y libgl1 libglib2.0-0 libgeos-dev >/dev/null 2>&1 || true
+echo ">> Cài thư viện hệ thống cho xử lý ảnh (opencv/shapely) + font cho ảnh chú giải..."
+apt-get install -y libgl1 libglib2.0-0 libgeos-dev fonts-dejavu-core >/dev/null 2>&1 || true
 
 echo ">> Cài/cập nhật thư viện Python (lần đầu có opencv sẽ tải ~100MB, hơi lâu)..."
 ./venv/bin/pip install -q -r requirements.txt

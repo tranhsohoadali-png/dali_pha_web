@@ -170,12 +170,25 @@ def build_xlsx(colors, out_path):
 
 
 def _load_font(size):
-    for path in (r'C:\Windows\Fonts\arial.ttf', r'C:\Windows\Fonts\segoeui.ttf'):
+    # Thử font Windows trước (máy tính), rồi font Linux (VPS) - đều scale theo size.
+    for path in (
+        r'C:\Windows\Fonts\arial.ttf',
+        r'C:\Windows\Fonts\segoeui.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+        '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+        '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+        '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf',
+    ):
         try:
             return ImageFont.truetype(path, size)
         except OSError:
             continue
-    return ImageFont.load_default()
+    # Fallback cuối: font mặc định - thử truyền size (Pillow >=10 mới scale được).
+    try:
+        return ImageFont.load_default(size)
+    except TypeError:
+        return ImageFont.load_default()
 
 
 def build_legend_image(left_image_path, colors, out_path, title='', max_per_col=12):
@@ -191,17 +204,17 @@ def build_legend_image(left_image_path, colors, out_path, title='', max_per_col=
 
     # ---- Kích thước cố định để chú giải luôn rõ, không phụ thuộc số màu ----
     pad = 50
-    gap = 40
-    row_h = 96
-    swatch_w = 250
-    swatch_h = 62
-    num_col_w = 110
-    dali_w = 300
-    col_w = num_col_w + swatch_w + 24 + dali_w
+    gap = 48
+    row_h = 132
+    swatch_w = 300
+    swatch_h = 88
+    num_col_w = 150
+    dali_w = 440
+    col_w = num_col_w + swatch_w + 28 + dali_w
 
-    num_font = _load_font(46)
-    dali_font = _load_font(46)
-    title_font = _load_font(66)
+    num_font = _load_font(88)
+    dali_font = _load_font(82)
+    title_font = _load_font(150)
 
     ncols = (n + max_per_col - 1) // max_per_col
     height_rows = min(n, max_per_col)
@@ -216,7 +229,7 @@ def build_legend_image(left_image_path, colors, out_path, title='', max_per_col=
         scale = legend_h / bh
     bw, bh = int(bw * scale), int(bh * scale)
     base = base.resize((bw, bh))
-    title_h = 110
+    title_h = 210
 
     canvas_w = pad + bw + gap + ncols * col_w + (ncols - 1) * gap + pad
     canvas_h = pad + max(legend_h, bh + title_h) + pad
@@ -246,7 +259,7 @@ def build_legend_image(left_image_path, colors, out_path, title='', max_per_col=
         draw.rectangle([sx0, sy0, sx0 + swatch_w, sy0 + swatch_h],
                        fill=_hex_to_rgb(hex_value), outline=(180, 180, 180))
         # mã DALI
-        draw.text((sx0 + swatch_w + 24, cy), str(dali), fill='black', font=dali_font, anchor='lm')
+        draw.text((sx0 + swatch_w + 28, cy), str(dali), fill='black', font=dali_font, anchor='lm')
 
     canvas.save(out_path)
     return out_path
