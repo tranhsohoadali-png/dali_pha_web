@@ -40,7 +40,8 @@ def _fmt_month(m):
         return m
 
 
-def _stats(range_, month_param):
+def _stats_qs(range_, month_param):
+    """Trả (label, queryset ProductionLog) theo khoảng: today / week / month."""
     now = _now()
     if range_ == 'week':
         d = now.date()
@@ -56,6 +57,11 @@ def _stats(range_, month_param):
     else:
         qs = ProductionLog.objects.filter(day=now.strftime('%Y-%m-%d'))
         label = "Hôm nay (" + now.strftime('%d/%m/%Y') + ")"
+    return label, qs
+
+
+def _stats(range_, month_param):
+    label, qs = _stats_qs(range_, month_param)
     return label, _aggregate(qs)
 
 
@@ -102,6 +108,58 @@ def cong_thuc_mau(request):
 def thong_ke(request):
     label, rows = _stats(request.GET.get('range', 'today'), request.GET.get('month'))
     return JsonResponse({'label': label, 'rows': rows})
+
+
+@csrf_exempt
+def export_thong_ke_excel(request):
+    """Xuất báo cáo lượng màu đã pha ra Excel (.xlsx) theo khoảng thời gian."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    range_ = request.GET.get('range', 'month')
+    month = request.GET.get('month')
+    label, qs = _stats_qs(range_, month)
+    rows = _aggregate(qs)
+
+    wb = Workbook()
+    head_fill = PatternFill('solid', fgColor='2E7D32')
+    head_font = Font(bold=True, color='FFFFFF')
+    center = Alignment(horizontal='center')
+
+    # Sheet 1: tổng theo màu gốc
+    ws = wb.active
+    ws.title = "Tong theo mau"
+    ws.append(["BÁO CÁO LƯỢNG MÀU ĐÃ PHA"])
+    ws.append([label])
+    ws.append(["Màu gốc", "Tổng đã dùng (g)"])
+    for c in ws[3]:
+        c.fill = head_fill; c.font = head_font; c.alignment = center
+    for u in rows:
+        ws.append([u['name'], u['grams']])
+    ws.column_dimensions['A'].width = 22
+    ws.column_dimensions['B'].width = 18
+
+    # Sheet 2: chi tiết từng mẻ pha
+    ws2 = wb.create_sheet("Chi tiet pha")
+    ws2.append(["Ngày giờ", "Mã DALI", "Hệ số nhân", "Tổng (g)", "Chi tiết"])
+    for c in ws2[1]:
+        c.fill = head_fill; c.font = head_font; c.alignment = center
+    for log in qs.order_by('created_time'):
+        detail = " + ".join(f"{x.get('name')} {x.get('grams')}g" for x in (log.components or []))
+        t = log.created_time
+        try:
+            t = t.astimezone(_VN) if _VN else t
+        except Exception:
+            pass
+        ws2.append([t.strftime('%d/%m/%Y %H:%M'), log.dali, f"x{('%g' % log.multiplier)}",
+                    log.total, detail])
+    for col, w in zip('ABCDE', (18, 14, 12, 12, 60)):
+        ws2.column_dimensions[col].width = w
+
+    resp = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = 'attachment; filename="bao_cao_mau.xlsx"'
+    wb.save(resp)
+    return resp
 
 
 @csrf_exempt

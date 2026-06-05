@@ -185,6 +185,9 @@
             <select id="statMonth" class="form-select form-select-sm" style="max-width:150px; display:none;">
               {% for m in stat_months %}<option value="{{ m.value }}">{{ m.label }}</option>{% endfor %}
             </select>
+            <button id="statExcel" type="button" class="btn btn-sm btn-success">
+              <i class="bi bi-file-earmark-excel"></i> Xuất Excel
+            </button>
             <span id="statLabel" class="fw-semibold ms-2">{{ stat_label }}</span>
           </div>
           <table class="table table-sm">
@@ -364,6 +367,14 @@
     });
   });
   if (statMonth) statMonth.addEventListener('change', loadStats);
+
+  // Xuất Excel theo khoảng đang chọn
+  var statExcel = document.getElementById('statExcel');
+  if (statExcel) statExcel.addEventListener('click', function(){
+    var url = 'thong-ke-excel?range=' + curRange;
+    if (curRange === 'month' && statMonth) url += '&month=' + encodeURIComponent(statMonth.value || '');
+    window.location = url;
+  });
 
   // ---- Nút Pha: ghi nhận sản xuất rồi làm mới thống kê đang xem ----
   document.addEventListener('click', function(e){

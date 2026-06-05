@@ -1,0 +1,9 @@
+# KHÔNG đẩy các file dữ liệu/sinh-ra lên GitHub (tránh đè dữ liệu trên VPS)
+db.sqlite3
+*.sqlite3
+venv/
+__pycache__/
+*.pyc
+backups/
+staticfiles/
+*.bak
