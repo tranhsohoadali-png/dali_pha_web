@@ -320,14 +320,32 @@
       navigator.clipboard.writeText(lines.join('\n')).then(function(){toast('Đã sao chép '+lines.length+' công thức');});
     }
     var ed = e.target.closest('.edit-btn');
-    if (ed){ fillForm(ed.dataset.dali, ed.dataset.hex, ed.dataset.components); toast('Đã nạp vào form để sửa'); }
+    if (ed){ fillForm(ed.dataset.dali, ed.dataset.hex, ed.dataset.components); loadedDali = (ed.dataset.dali||'').trim().toLowerCase(); toast('Đã nạp vào form để sửa'); }
     var cf = e.target.closest('.copyform-btn');
     if (cf){
       // chỉ lấy tên màu gốc, để TRỐNG khối lượng
       var namesOnly = (cf.dataset.components || '').split(';').filter(Boolean)
                         .map(function(p){ return p.split('|')[0] + '|'; }).join(';');
       fillForm('', '', namesOnly);
+      loadedDali = null;   // chép = tạo công thức MỚI
       toast('Đã chép màu gốc sang form — nhập khối lượng & mã DALI');
+    }
+  });
+
+  // ---- Cảnh báo khi LƯU mã DALI trùng công thức khác (chống ghi đè nhầm) ----
+  var loadedDali = null;   // mã đang sửa (nếu vào form bằng nút Sửa)
+  document.getElementById('resetForm').addEventListener('click', function(){ loadedDali = null; });
+  document.getElementById('recipeForm').addEventListener('submit', function(e){
+    var raw = (document.getElementById('fDali').value || '').trim();
+    var entered = raw.toLowerCase();
+    if (!entered) return;
+    var dup = Array.prototype.some.call(document.querySelectorAll('.recipe-card'), function(c){
+      return (c.dataset.dali || '').trim().toLowerCase() === entered;
+    });
+    if (dup && entered !== loadedDali){
+      if (!confirm('Mã "' + raw + '" ĐÃ CÓ công thức.\nBạn có muốn GHI ĐÈ công thức cũ không?')){
+        e.preventDefault();
+      }
     }
   });
 
