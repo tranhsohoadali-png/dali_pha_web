@@ -46,11 +46,17 @@
     <h1 class="h4 mb-0 flex-grow-1">Công thức pha</h1>
     <button id="installBtn" class="btn btn-light" style="display:none"><i class="bi bi-download"></i> Cài app</button>
   </div>
-  <input id="q" class="form-control search-lg mb-2" placeholder="🔍 Tìm mã DALI…">
-  <div class="d-flex align-items-center gap-2">
-    <span class="fw-bold" style="font-size:1.1rem; white-space:nowrap;">Mẻ pha:</span>
-    <button type="button" class="btn btn-light flex-fill mq" data-m="4">×4</button>
-    <button type="button" class="btn btn-light flex-fill mq" data-m="5">×5</button>
+  <div class="d-flex gap-2 mb-2">
+    <button id="tabRecipes" class="btn btn-light flex-fill fw-bold" style="height:44px">Công thức</button>
+    <button id="tabHistory" class="btn btn-outline-light flex-fill fw-bold" style="height:44px"><i class="bi bi-clock-history"></i> Lịch sử pha</button>
+  </div>
+  <div id="recipeControls">
+    <input id="q" class="form-control search-lg mb-2" placeholder="🔍 Tìm mã DALI…">
+    <div class="d-flex align-items-center gap-2">
+      <span class="fw-bold" style="font-size:1.1rem; white-space:nowrap;">Mẻ pha:</span>
+      <button type="button" class="btn btn-light flex-fill mq" data-m="4">×4</button>
+      <button type="button" class="btn btn-light flex-fill mq" data-m="5">×5</button>
+    </div>
   </div>
 </div>
 
@@ -80,14 +86,16 @@
   <p id="noResult" class="text-secondary text-center py-4" style="display:none">Không tìm thấy công thức.</p>
 </div>
 
-<!-- Lịch sử pha hôm nay -->
-<div class="px-2">
+<!-- Lịch sử pha (bật bằng nút "Lịch sử pha" ở trên) -->
+<div class="px-2" id="historyView" style="display:none">
   <div class="rc p-2">
-    <div class="d-flex align-items-center justify-content-between mb-2">
-      <span class="fw-bold" style="font-size:1.1rem;"><i class="bi bi-clock-history"></i> Lịch sử pha hôm nay</span>
-      <button id="historyReload" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i></button>
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <button class="btn btn-warning flex-fill fw-bold hr" data-r="today">Hôm nay</button>
+      <button class="btn btn-light flex-fill fw-bold hr" data-r="all">Tất cả</button>
+      <button id="historyReload" class="btn btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i></button>
     </div>
-    <table class="table table-sm mb-0">
+    <table class="table mb-0">
+      <thead><tr><th>Giờ</th><th>Mã DALI</th><th class="text-end">Mẻ</th></tr></thead>
       <tbody id="historyBody"><tr><td colspan="3" class="text-secondary text-center">Đang tải…</td></tr></tbody>
     </table>
   </div>
@@ -147,18 +155,36 @@
     document.getElementById('noResult').style.display = any?'none':'block';
   });
 
-  // ----- Lịch sử pha hôm nay -----
+  // ----- Lịch sử pha -----
+  var histRange = 'today';
   function loadHistory(){
     var tb=document.getElementById('historyBody'); if(!tb) return;
-    fetch('/lich-su?range=today').then(function(r){return r.json();}).then(function(res){
-      if(!res.rows || !res.rows.length){ tb.innerHTML='<tr><td colspan="3" class="text-secondary text-center">Hôm nay chưa pha mẻ nào.</td></tr>'; return; }
+    fetch('/lich-su?range='+histRange).then(function(r){return r.json();}).then(function(res){
+      if(!res.rows || !res.rows.length){ tb.innerHTML='<tr><td colspan="3" class="text-secondary text-center">Chưa có mẻ pha nào.</td></tr>'; return; }
       tb.innerHTML = res.rows.map(function(x){
         return '<tr><td>'+x.dt+'</td><td class="fw-bold">'+x.dali+'</td><td class="text-end fw-bold">'+x.mult+'</td></tr>';
       }).join('');
     }).catch(function(){});
   }
   document.getElementById('historyReload').addEventListener('click', loadHistory);
-  loadHistory();
+  document.querySelectorAll('.hr').forEach(function(b){ b.addEventListener('click', function(){
+    histRange = this.dataset.r;
+    document.querySelectorAll('.hr').forEach(function(x){ var on=(x.dataset.r===histRange); x.classList.toggle('btn-warning',on); x.classList.toggle('btn-light',!on); });
+    loadHistory();
+  }); });
+
+  // ----- Chuyển tab: Công thức / Lịch sử -----
+  var tabR=document.getElementById('tabRecipes'), tabH=document.getElementById('tabHistory');
+  function showTab(hist){
+    document.getElementById('historyView').style.display = hist?'':'none';
+    document.getElementById('list').style.display = hist?'none':'';
+    document.getElementById('recipeControls').style.display = hist?'none':'';
+    tabH.className='btn flex-fill fw-bold '+(hist?'btn-light':'btn-outline-light'); tabH.style.height='44px';
+    tabR.className='btn flex-fill fw-bold '+(hist?'btn-outline-light':'btn-light'); tabR.style.height='44px';
+    if(hist){ loadHistory(); window.scrollTo(0,0); }
+  }
+  tabR.addEventListener('click', function(){ showTab(false); });
+  tabH.addEventListener('click', function(){ showTab(true); });
 
   // ----- Pha: mở hộp xác nhận lớn -----
   var pendingDali = null, phaBusy = false;
