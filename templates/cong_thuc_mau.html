@@ -127,6 +127,7 @@
               <button type="button" class="btn btn-primary mult-quick" data-m="4">×4</button>
               <button type="button" class="btn btn-primary mult-quick" data-m="5">×5</button>
             </div>
+            <button id="toggleAll" type="button" class="btn btn-sm btn-outline-primary">Xem tất cả</button>
             <span id="multNote" class="small text-secondary">Sản xuất thực tế thường nhân ×5</span>
           </div>
           <div class="row g-2" id="recipeGrid">
@@ -299,18 +300,38 @@
     }
   });
 
-  // ---- Tìm kiếm công thức ----
+  // ---- Tìm kiếm + thu gọn (mặc định chỉ hiện 4 công thức mới nhất) ----
+  var LIMIT = 4;
+  var expanded = false;
+  var recipeCols = Array.prototype.slice.call(document.querySelectorAll('#recipeGrid .recipe-col'));
+  var toggleAll = document.getElementById('toggleAll');
+
+  function updateToggle(){
+    if (!toggleAll) return;
+    if (recipeCols.length <= LIMIT){ toggleAll.style.display = 'none'; return; }
+    toggleAll.style.display = '';
+    toggleAll.textContent = expanded ? 'Thu gọn' : ('Xem tất cả (' + recipeCols.length + ')');
+  }
+  function showCollapsed(){
+    recipeCols.forEach(function(col, i){ col.style.display = (expanded || i < LIMIT) ? '' : 'none'; });
+    updateToggle();
+  }
+  if (toggleAll) toggleAll.addEventListener('click', function(){ expanded = !expanded; showCollapsed(); });
+
   var searchInput = document.getElementById('recipeSearch');
   if (searchInput){
     searchInput.addEventListener('input', function(){
       var q = this.value.trim().toLowerCase();
-      document.querySelectorAll('.recipe-col').forEach(function(col){
+      if (!q){ showCollapsed(); return; }            // hết tìm -> quay lại 4 mục
+      recipeCols.forEach(function(col){
         var card = col.querySelector('.recipe-card');
         var hay = card ? (card.dataset.search || '') : '';
-        col.style.display = (!q || hay.indexOf(q) !== -1) ? '' : 'none';
+        col.style.display = (hay.indexOf(q) !== -1) ? '' : 'none';
       });
+      if (toggleAll) toggleAll.style.display = 'none';  // ẩn nút khi đang tìm
     });
   }
+  showCollapsed();   // khởi tạo: chỉ hiện 4 công thức đầu
 
   // ---- Nhân hệ số (x5 cho sản xuất) ----
   var multInput = document.getElementById('multInput');
