@@ -429,6 +429,73 @@ def mobile(request):
     return render(request, 'mobile.html', {'recipes': rec_list})
 
 
+@csrf_exempt
+@staff_required
+def quan_ly(request):
+    """App ĐIỆN THOẠI cho quản lý: nhập kho sơn + xem nhanh dashboard."""
+    now = _now()
+    today_n = ProductionLog.objects.filter(day=now.strftime('%Y-%m-%d')).count()
+    month_n = ProductionLog.objects.filter(month=now.strftime('%Y-%m')).count()
+    month_cost = ProductionLog.objects.filter(month=now.strftime('%Y-%m')).aggregate(s=Sum('cost'))['s'] or 0
+    since = (now.date() - timedelta(days=29)).strftime('%Y-%m-%d')
+    usage30 = defaultdict(float)
+    for log in ProductionLog.objects.filter(day__gte=since):
+        for c in (log.components or []):
+            try:
+                usage30[c['name']] += float(c['grams'])
+            except (KeyError, TypeError, ValueError):
+                pass
+    items, need_buy = [], []
+    for b in mixing.get_bases():
+        ps, _ = PaintStock.objects.get_or_create(name=b['name'])
+        low = ps.low_threshold > 0 and ps.stock <= ps.low_threshold
+        items.append({'name': b['name'], 'rgb': b['rgb'], 'stock': round(ps.stock, 1), 'low': low})
+        suggest = max(0, round(usage30.get(b['name'], 0) - ps.stock))
+        if suggest > 0:
+            need_buy.append({'name': b['name'], 'suggest': suggest})
+    return render(request, 'quan_ly.html', {
+        'items': items, 'today_n': today_n, 'month_n': month_n, 'month_cost': round(month_cost),
+        'low_stock': _low_stock_names(), 'need_buy': need_buy, 'today_label': now.strftime('%d/%m/%Y'),
+    })
+
+
+@csrf_exempt
+@staff_required
+def quan_ly_nhap(request):
+    """AJAX: nhập thêm / đặt lại tồn kho 1 màu. Trả JSON."""
+    if request.method != 'POST':
+        return HttpResponseNotFound('POST only')
+    name = request.POST.get('name', '').strip()
+    action = request.POST.get('action')
+    try:
+        val = float(request.POST.get('value') or 0)
+    except ValueError:
+        val = 0
+    ps, _ = PaintStock.objects.get_or_create(name=name)
+    if action == 'add':
+        ps.stock = round(ps.stock + val, 1)
+    elif action == 'set':
+        ps.stock = val
+    else:
+        return JsonResponse({'ok': False})
+    ps.save()
+    low = ps.low_threshold > 0 and ps.stock <= ps.low_threshold
+    return JsonResponse({'ok': True, 'name': name, 'stock': round(ps.stock, 1), 'low': low})
+
+
+def manifest_ql(request):
+    data = {
+        "name": "Quản lý kho sơn", "short_name": "Quản lý",
+        "start_url": "/quan-ly", "scope": "/", "display": "standalone", "orientation": "portrait",
+        "background_color": "#ffffff", "theme_color": "#0d6efd",
+        "icons": [
+            {"src": "/media/icon-ql-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/media/icon-ql-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ],
+    }
+    return JsonResponse(data, content_type='application/manifest+json')
+
+
 def manifest(request):
     data = {
         "name": "Công thức pha DALI", "short_name": "Pha màu",

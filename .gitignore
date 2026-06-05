@@ -11,3 +11,5 @@ staticfiles/
 media/*
 !media/icon-192.png
 !media/icon-512.png
+!media/icon-ql-192.png
+!media/icon-ql-512.png
