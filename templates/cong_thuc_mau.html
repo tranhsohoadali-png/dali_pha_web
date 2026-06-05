@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Công thức pha màu</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+  <style>
+    .sw { width: 34px; height: 34px; border-radius: .35rem; border: 1px solid rgba(0,0,0,.2); }
+    .sw-sm { width: 20px; height: 20px; border-radius: .25rem; border: 1px solid rgba(0,0,0,.2); display:inline-block; vertical-align:middle; }
+  </style>
+</head>
+<body class="bg-body-tertiary">
+
+<nav class="navbar navbar-expand bg-success" data-bs-theme="dark">
+  <div class="container-fluid">
+    <span class="navbar-brand mb-0 h1"><i class="bi bi-droplet-half"></i> Công thức pha màu</span>
+    <a href="/" class="btn btn-outline-light btn-sm"><i class="bi bi-arrow-left"></i> Về trang xử lý ảnh</a>
+  </div>
+</nav>
+
+<div class="container-fluid py-3">
+  {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
+
+  <div class="row g-3">
+    <!-- Nhập công thức -->
+    <div class="col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-pencil-square"></i> Nhập công thức pha</div>
+        <div class="card-body">
+          <form method="POST" action="cong-thuc-mau" id="recipeForm">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_recipe">
+
+            <div class="row fw-semibold small text-secondary mb-1">
+              <div class="col-6">Màu gốc</div>
+              <div class="col-4">Khối lượng (g)</div>
+              <div class="col-2"></div>
+            </div>
+            <div id="rows"></div>
+            <button type="button" id="addRow" class="btn btn-sm btn-outline-secondary mb-3">
+              <i class="bi bi-plus-lg"></i> Thêm
+            </button>
+            <button type="button" id="fillBases" class="btn btn-sm btn-outline-primary mb-3 ms-1"
+                    title="Điền sẵn tất cả màu gốc đã khai báo vào các dòng">
+              <i class="bi bi-list-ul"></i> Điền tất cả màu gốc
+            </button>
+
+            <hr>
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="form-label small mb-1">Mã màu Dali</label>
+                <input type="text" name="dali" id="fDali" class="form-control" placeholder="VD: BXA.1" required>
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1">Mã màu Hexa</label>
+                <div class="input-group">
+                  <input type="color" id="fPicker" class="form-control form-control-color" value="#cccccc"
+                         oninput="document.getElementById('fHex').value=this.value.substring(1).toUpperCase()">
+                  <input type="text" name="hex" id="fHex" class="form-control" placeholder="VD: FCFFBE"
+                         pattern="#?[0-9A-Fa-f]{6}"
+                         oninput="var v=this.value.replace('#','');if(/^[0-9a-fA-F]{6}$/.test(v))document.getElementById('fPicker').value='#'+v">
+                </div>
+              </div>
+            </div>
+            <button class="btn btn-success w-100 mt-3"><i class="bi bi-save"></i> Lưu công thức</button>
+            <button type="button" id="resetForm" class="btn btn-outline-secondary w-100 mt-2">Làm mới form</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Màu gốc (gợi ý cho ô Màu gốc) -->
+      <div class="card shadow-sm mt-3">
+        <div class="card-header fw-semibold"><i class="bi bi-palette2"></i> Màu gốc đã khai báo ({{ bases|length }})</div>
+        <div class="card-body">
+          <div class="mb-2">
+            <div class="small text-secondary mb-1">Bấm 1 màu để điền vào ô "Màu gốc" đang chọn:</div>
+            {% for b in bases %}
+            <span class="badge text-bg-light border me-1 mb-1">
+              <span class="pick-base" role="button" data-name="{{ b.name }}" title="Điền vào ô Màu gốc đang chọn">
+                <span class="sw-sm" style="background:rgb({{ b.rgb.0 }},{{ b.rgb.1 }},{{ b.rgb.2 }})"></span> {{ b.name }}
+              </span>
+              <form method="POST" action="cong-thuc-mau" class="d-inline">{% csrf_token %}
+                <input type="hidden" name="action" value="delete_base"><input type="hidden" name="name" value="{{ b.name }}">
+                <button class="btn btn-sm btn-link text-danger p-0 ms-1" title="Xoá">&times;</button>
+              </form>
+            </span>
+            {% endfor %}
+          </div>
+          <form method="POST" action="cong-thuc-mau" class="border-top pt-2">{% csrf_token %}
+            <input type="hidden" name="action" value="add_base">
+            <div class="input-group input-group-sm">
+              <input type="color" class="form-control form-control-color" value="#cc4444"
+                     oninput="this.nextElementSibling.value=this.value.substring(1).toUpperCase()">
+              <input type="text" name="hex" class="form-control" placeholder="hex" required pattern="#?[0-9A-Fa-f]{6}">
+              <input type="text" name="name" class="form-control" placeholder="Tên màu gốc" required>
+              <button class="btn btn-outline-success">+ Thêm</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Công thức đã lưu -->
+    <div class="col-lg-7">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-journal-text"></i> Công thức đã lưu
+            {% if recipes %}<span class="badge text-bg-secondary">{{ recipes|length }}</span>{% endif %}</span>
+          {% if recipes %}<button id="copyAll" class="btn btn-sm btn-outline-secondary"><i class="bi bi-clipboard-check"></i> Sao chép tất cả</button>{% endif %}
+        </div>
+        <div class="card-body">
+          {% if not recipes %}
+            <p class="text-secondary text-center py-5">Chưa có công thức. Nhập ở bên trái rồi bấm <b>Lưu công thức</b>.</p>
+          {% else %}
+          <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <div class="input-group input-group-sm" style="max-width:240px;">
+              <span class="input-group-text"><i class="bi bi-search"></i></span>
+              <input id="recipeSearch" class="form-control" placeholder="Tìm mã DALI / hex…">
+            </div>
+            <div class="input-group input-group-sm" style="max-width:230px;">
+              <span class="input-group-text">Nhân</span>
+              <input id="multInput" type="number" min="0.1" step="0.5" value="1" class="form-control">
+              <button type="button" class="btn btn-outline-secondary mult-quick" data-m="1">×1</button>
+              <button type="button" class="btn btn-primary mult-quick" data-m="5">×5</button>
+            </div>
+            <span id="multNote" class="small text-secondary">Sản xuất thực tế thường nhân ×5</span>
+          </div>
+          <div class="row g-2" id="recipeGrid">
+            {% for r in recipes %}
+            <div class="col-md-6 recipe-col">
+              <div class="border rounded p-2 h-100 recipe-card" data-dali="{{ r.dali }}" data-hex="{{ r.hex }}"
+                   data-search="{{ r.dali|lower }} {{ r.hex|lower }}">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                  <div class="sw" style="background:#{{ r.hex }}"></div>
+                  <div class="fw-semibold">{{ r.dali }} <span class="text-secondary small">(#{{ r.hex }})</span></div>
+                  <div class="ms-auto d-flex gap-1">
+                    <button class="btn btn-sm btn-success py-0 pha-btn" data-dali="{{ r.dali }}"
+                            title="Ghi nhận đã pha (theo hệ số đang chọn)"><i class="bi bi-droplet-fill"></i> Pha</button>
+                    <button class="btn btn-sm btn-outline-secondary py-0 edit-btn" title="Sửa vào form"
+                            data-dali="{{ r.dali }}" data-hex="{{ r.hex }}"
+                            data-components='{% for c in r.components %}{{ c.name }}|{{ c.grams }}{% if not forloop.last %};{% endif %}{% endfor %}'>
+                      <i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary py-0 copyform-btn" title="Chép màu gốc sang form (tạo công thức mới)"
+                            data-components='{% for c in r.components %}{{ c.name }}|{{ c.grams }}{% if not forloop.last %};{% endif %}{% endfor %}'>
+                      <i class="bi bi-files"></i></button>
+                    <form method="POST" action="cong-thuc-mau" onsubmit="return confirm('Xoá công thức {{ r.dali }}?')">{% csrf_token %}
+                      <input type="hidden" name="action" value="delete_recipe"><input type="hidden" name="dali" value="{{ r.dali }}">
+                      <button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-trash"></i></button>
+                    </form>
+                  </div>
+                </div>
+                <table class="table table-sm mb-0">
+                  <thead class="table-light"><tr><th>Màu gốc</th><th class="text-end">Khối lượng (g)</th></tr></thead>
+                  <tbody>
+                    {% for c in r.components %}<tr><td>{{ c.name }}</td><td class="text-end gcell" data-g="{{ c.grams }}">{{ c.grams }}</td></tr>{% endfor %}
+                    <tr class="fw-semibold border-top"><td>Tổng</td><td class="text-end tcell" data-g="{{ r.total }}">{{ r.total }}</td></tr>
+                  </tbody>
+                </table>
+                <div class="formula-text d-none">{{ r.formula }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Thống kê sản xuất -->
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-bar-chart-line"></i> Thống kê lượng màu đã pha (sản xuất)</div>
+        <div class="card-body">
+          <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <div class="btn-group btn-group-sm" role="group">
+              <button type="button" class="btn btn-primary stat-range" data-range="today">Hôm nay</button>
+              <button type="button" class="btn btn-outline-primary stat-range" data-range="week">Tuần này</button>
+              <button type="button" class="btn btn-outline-primary stat-range" data-range="month">Theo tháng</button>
+            </div>
+            <select id="statMonth" class="form-select form-select-sm" style="max-width:150px; display:none;">
+              {% for m in stat_months %}<option value="{{ m.value }}">{{ m.label }}</option>{% endfor %}
+            </select>
+            <span id="statLabel" class="fw-semibold ms-2">{{ stat_label }}</span>
+          </div>
+          <table class="table table-sm">
+            <thead class="table-light"><tr><th>Màu gốc</th><th class="text-end">Tổng đã dùng (g)</th></tr></thead>
+            <tbody id="statBody">
+              {% for u in stat_rows %}<tr><td>{{ u.name }}</td><td class="text-end">{{ u.grams }}</td></tr>
+              {% empty %}<tr><td colspan="2" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<datalist id="baseList">{% for b in bases %}<option value="{{ b.name }}"></option>{% endfor %}</datalist>
+
+<script>
+  function rowHtml(name, grams){
+    name = name || ''; grams = grams || '';
+    return '<div class="row g-2 mb-2 recipe-row">' +
+      '<div class="col-6"><input list="baseList" name="base_name" class="form-control form-control-sm" placeholder="Màu gốc" value="'+name+'"></div>' +
+      '<div class="col-4"><input type="number" step="0.1" min="0" name="base_weight" class="form-control form-control-sm" placeholder="g" value="'+grams+'"></div>' +
+      '<div class="col-2"><button type="button" class="btn btn-sm btn-outline-danger w-100 remove-row">Xoá</button></div>' +
+    '</div>';
+  }
+  var rows = document.getElementById('rows');
+  function addRow(name, grams){ rows.insertAdjacentHTML('beforeend', rowHtml(name, grams)); }
+
+  // Ghi nhớ ô "Màu gốc" đang chọn để click-điền
+  var lastBaseInput = null;
+  rows.addEventListener('focusin', function(e){
+    if (e.target.name === 'base_name') lastBaseInput = e.target;
+  });
+  // Bấm 1 màu gốc -> điền vào ô đang chọn (hoặc ô trống đầu tiên)
+  document.addEventListener('mousedown', function(e){
+    var pb = e.target.closest('.pick-base');
+    if (!pb) return;
+    e.preventDefault();  // giữ focus ở ô input
+    var inp = lastBaseInput;
+    if (!inp || !document.body.contains(inp)) {
+      var all = rows.querySelectorAll('input[name=base_name]');
+      inp = [].find.call(all, function(i){ return !i.value; }) || all[all.length-1];
+    }
+    if (inp){
+      inp.value = pb.dataset.name;
+      lastBaseInput = inp;
+      inp.focus();
+      // tự nhảy sang ô khối lượng cùng dòng cho tiện nhập số
+      var w = inp.closest('.recipe-row').querySelector('input[name=base_weight]');
+      if (w && !w.value) w.focus();
+    }
+  });
+  // khởi tạo 3 dòng trống
+  addRow(); addRow(); addRow();
+  document.getElementById('addRow').addEventListener('click', function(){ addRow(); });
+  rows.addEventListener('click', function(e){
+    if (e.target.closest('.remove-row')) {
+      var rs = rows.querySelectorAll('.recipe-row');
+      if (rs.length > 1) e.target.closest('.recipe-row').remove();
+      else { e.target.closest('.recipe-row').querySelectorAll('input').forEach(function(i){i.value='';}); }
+    }
+  });
+  document.getElementById('resetForm').addEventListener('click', function(){
+    rows.innerHTML=''; addRow(); addRow(); addRow();
+    document.getElementById('fDali').value=''; document.getElementById('fHex').value='';
+  });
+
+  // Điền dữ liệu vào form (dùng cho Sửa và Chép sang form)
+  function fillForm(dali, hex, compStr){
+    document.getElementById('fDali').value = dali || '';
+    document.getElementById('fHex').value = hex || '';
+    if (hex && /^[0-9a-fA-F]{6}$/.test(hex)) document.getElementById('fPicker').value = '#' + hex;
+    rows.innerHTML = '';
+    (compStr || '').split(';').filter(Boolean).forEach(function(p){ var x = p.split('|'); addRow(x[0], x[1]); });
+    if (!rows.children.length){ addRow(); addRow(); addRow(); }
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+
+  // Điền sẵn TẤT CẢ màu gốc đã khai báo (khối lượng để trống)
+  document.getElementById('fillBases').addEventListener('click', function(){
+    var opts = document.querySelectorAll('#baseList option');
+    if (!opts.length){ toast('Chưa khai báo màu gốc nào'); return; }
+    rows.innerHTML = '';
+    opts.forEach(function(o){ addRow(o.value, ''); });
+    toast('Đã điền ' + opts.length + ' màu gốc — nhập khối lượng');
+  });
+
+  function toast(msg){
+    var t=document.createElement('div'); t.textContent=msg;
+    t.style.cssText='position:fixed;bottom:20px;right:20px;background:#212529;color:#fff;padding:8px 14px;border-radius:6px;z-index:9999;font-size:.9rem';
+    document.body.appendChild(t); setTimeout(function(){t.remove()},1500);
+  }
+  document.addEventListener('click', function(e){
+    if (e.target.closest('#copyAll')){
+      var lines=[].map.call(document.querySelectorAll('.formula-text'), el=>el.textContent);
+      navigator.clipboard.writeText(lines.join('\n')).then(function(){toast('Đã sao chép '+lines.length+' công thức');});
+    }
+    var ed = e.target.closest('.edit-btn');
+    if (ed){ fillForm(ed.dataset.dali, ed.dataset.hex, ed.dataset.components); toast('Đã nạp vào form để sửa'); }
+    var cf = e.target.closest('.copyform-btn');
+    if (cf){
+      // chỉ lấy tên màu gốc, để TRỐNG khối lượng
+      var namesOnly = (cf.dataset.components || '').split(';').filter(Boolean)
+                        .map(function(p){ return p.split('|')[0] + '|'; }).join(';');
+      fillForm('', '', namesOnly);
+      toast('Đã chép màu gốc sang form — nhập khối lượng & mã DALI');
+    }
+  });
+
+  // ---- Tìm kiếm công thức ----
+  var searchInput = document.getElementById('recipeSearch');
+  if (searchInput){
+    searchInput.addEventListener('input', function(){
+      var q = this.value.trim().toLowerCase();
+      document.querySelectorAll('.recipe-col').forEach(function(col){
+        var card = col.querySelector('.recipe-card');
+        var hay = card ? (card.dataset.search || '') : '';
+        col.style.display = (!q || hay.indexOf(q) !== -1) ? '' : 'none';
+      });
+    });
+  }
+
+  // ---- Nhân hệ số (x5 cho sản xuất) ----
+  var multInput = document.getElementById('multInput');
+  function round1(x){ return Math.round(x*10)/10; }
+  function applyMult(){
+    var m = parseFloat(multInput.value) || 1;
+    if (m <= 0) m = 1;
+    document.querySelectorAll('.recipe-card').forEach(function(card){
+      var comps = [];
+      card.querySelectorAll('tr').forEach(function(tr){
+        var g = tr.querySelector('.gcell');
+        if (g){
+          var v = round1(parseFloat(g.dataset.g) * m);
+          g.textContent = v;
+          comps.push(tr.querySelector('td').textContent + ' (' + v + ')');
+        }
+      });
+      var t = card.querySelector('.tcell');
+      if (t) t.textContent = round1(parseFloat(t.dataset.g) * m);
+      var ft = card.querySelector('.formula-text');
+      if (ft) ft.textContent = comps.join(' + ') + ' = ' + card.dataset.dali + ' (' + card.dataset.hex + ')';
+      var cp = card.querySelector('.copy-btn');
+      if (cp && ft) cp.dataset.formula = ft.textContent;
+    });
+    var note = document.getElementById('multNote');
+    if (note) note.textContent = (m === 1) ? 'Sản xuất thực tế thường nhân ×5' : ('Đang hiển thị ×' + m + ' — công thức gốc giữ nguyên');
+  }
+  if (multInput){
+    multInput.addEventListener('input', applyMult);
+    document.querySelectorAll('.mult-quick').forEach(function(b){
+      b.addEventListener('click', function(){ multInput.value = this.dataset.m; applyMult(); });
+    });
+  }
+
+  // ---- Thống kê theo khoảng thời gian (Hôm nay / Tuần này / Theo tháng) ----
+  var curRange = 'today';
+  var statMonth = document.getElementById('statMonth');
+  function loadStats(){
+    var url = 'thong-ke?range=' + curRange;
+    if (curRange === 'month' && statMonth) url += '&month=' + encodeURIComponent(statMonth.value || '');
+    fetch(url).then(function(r){ return r.json(); }).then(function(res){
+      var lbl = document.getElementById('statLabel'); if (lbl) lbl.textContent = res.label;
+      var tb = document.getElementById('statBody'); if (!tb) return;
+      if (!res.rows || !res.rows.length){ tb.innerHTML = '<tr><td colspan="2" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>'; }
+      else tb.innerHTML = res.rows.map(function(u){ return '<tr><td>'+u.name+'</td><td class="text-end">'+u.grams+'</td></tr>'; }).join('');
+    });
+  }
+  document.querySelectorAll('.stat-range').forEach(function(b){
+    b.addEventListener('click', function(){
+      curRange = this.dataset.range;
+      document.querySelectorAll('.stat-range').forEach(function(x){ x.classList.remove('btn-primary'); x.classList.add('btn-outline-primary'); });
+      this.classList.remove('btn-outline-primary'); this.classList.add('btn-primary');
+      if (statMonth) statMonth.style.display = (curRange === 'month') ? '' : 'none';
+      loadStats();
+    });
+  });
+  if (statMonth) statMonth.addEventListener('change', loadStats);
+
+  // ---- Nút Pha: ghi nhận sản xuất rồi làm mới thống kê đang xem ----
+  document.addEventListener('click', function(e){
+    var pb = e.target.closest('.pha-btn');
+    if (!pb) return;
+    var m = multInput ? (parseFloat(multInput.value) || 1) : 1;
+    var fd = new FormData();
+    fd.append('dali', pb.dataset.dali);
+    fd.append('multiplier', m);
+    pb.disabled = true;
+    fetch('pha', {method:'POST', body:fd, headers:{'X-CSRFToken':'{{ csrf_token }}'}})
+      .then(function(r){ return r.json(); })
+      .then(function(res){
+        pb.disabled = false;
+        if (!res.ok){ toast(res.msg || 'Lỗi'); return; }
+        toast(res.msg);
+        loadStats();
+      })
+      .catch(function(){ pb.disabled = false; toast('Lỗi kết nối'); });
+  });
+</script>
+</body>
+</html>

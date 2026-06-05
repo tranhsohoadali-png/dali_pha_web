@@ -1,0 +1,532 @@
+[
+ {
+  "dali": "IXK.5",
+  "hex": "A1CB67",
+  "components": [
+   {
+    "name": "TRẮNG",
+    "grams": 140.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 0.2
+   },
+   {
+    "name": "216",
+    "grams": 85.0
+   },
+   {
+    "name": "056",
+    "grams": 42.0
+   },
+   {
+    "name": "069",
+    "grams": 28.0
+   }
+  ]
+ },
+ {
+  "dali": "IXK.6",
+  "hex": "96BE5D",
+  "components": [
+   {
+    "name": "TRẮNG",
+    "grams": 130.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 0.4
+   },
+   {
+    "name": "216",
+    "grams": 80.0
+   },
+   {
+    "name": "056",
+    "grams": 51.0
+   },
+   {
+    "name": "069",
+    "grams": 34.0
+   }
+  ]
+ },
+ {
+  "dali": "IXK.4",
+  "hex": "A1C86A",
+  "components": [
+   {
+    "name": "TRẮNG",
+    "grams": 150.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 0.1
+   },
+   {
+    "name": "216",
+    "grams": 90.0
+   },
+   {
+    "name": "056",
+    "grams": 36.0
+   },
+   {
+    "name": "069",
+    "grams": 24.0
+   }
+  ]
+ },
+ {
+  "dali": "IXK.3",
+  "hex": "B1D46D",
+  "components": [
+   {
+    "name": "TRẮNG",
+    "grams": 160.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 0.1
+   },
+   {
+    "name": "216",
+    "grams": 94.0
+   },
+   {
+    "name": "056",
+    "grams": 28.0
+   },
+   {
+    "name": "69",
+    "grams": 18.0
+   }
+  ]
+ },
+ {
+  "dali": "IXK.2",
+  "hex": "BDDB73",
+  "components": [
+   {
+    "name": "TRẮNG",
+    "grams": 165.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 0.1
+   },
+   {
+    "name": "216",
+    "grams": 97.0
+   },
+   {
+    "name": "056",
+    "grams": 23.0
+   },
+   {
+    "name": "069",
+    "grams": 15.0
+   }
+  ]
+ },
+ {
+  "dali": "IXK.1",
+  "hex": "C4E379",
+  "components": [
+   {
+    "name": "TRẮNG",
+    "grams": 190.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 0.1
+   },
+   {
+    "name": "216",
+    "grams": 100.0
+   },
+   {
+    "name": "056",
+    "grams": 18.0
+   },
+   {
+    "name": "069",
+    "grams": 12.0
+   }
+  ]
+ },
+ {
+  "dali": "IXH.16",
+  "hex": "426963",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 60.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 21.9
+   },
+   {
+    "name": "560",
+    "grams": 125.0
+   },
+   {
+    "name": "447",
+    "grams": 84.0
+   }
+  ]
+ },
+ {
+  "dali": "IXH.15",
+  "hex": "47746D",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 89.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 17.7
+   },
+   {
+    "name": "560",
+    "grams": 108.0
+   },
+   {
+    "name": "447",
+    "grams": 73.0
+   }
+  ]
+ },
+ {
+  "dali": "IXH.14",
+  "hex": "487A73",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 114.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 14.8
+   },
+   {
+    "name": "560",
+    "grams": 92.0
+   },
+   {
+    "name": "447",
+    "grams": 63.0
+   }
+  ]
+ },
+ {
+  "dali": "IXH.13",
+  "hex": "5E948D",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 136.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 12.2
+   },
+   {
+    "name": "560",
+    "grams": 80.0
+   },
+   {
+    "name": "447",
+    "grams": 54.0
+   }
+  ]
+ },
+ {
+  "dali": "IXH.12",
+  "hex": "68A197",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 155.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 9.9
+   },
+   {
+    "name": "560",
+    "grams": 69.0
+   },
+   {
+    "name": "447",
+    "grams": 46.0
+   }
+  ]
+ },
+ {
+  "dali": "IXH.11",
+  "hex": "70B2A6",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 172.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 7.9
+   },
+   {
+    "name": "560",
+    "grams": 59.0
+   },
+   {
+    "name": "447",
+    "grams": 39.0
+   }
+  ]
+ },
+ {
+  "dali": "IXH.10",
+  "hex": "78BCB0",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 187.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 6.2
+   },
+   {
+    "name": "560",
+    "grams": 50.0
+   },
+   {
+    "name": "447",
+    "grams": 33.0
+   }
+  ]
+ },
+ {
+  "dali": "IXH.9",
+  "hex": "80C5B9",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 200.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 4.8
+   },
+   {
+    "name": "560",
+    "grams": 42.0
+   },
+   {
+    "name": "447",
+    "grams": 28.0
+   }
+  ]
+ },
+ {
+  "dali": "IXH.8",
+  "hex": "8FD6CA",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 223.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 2.6
+   },
+   {
+    "name": "560",
+    "grams": 28.0
+   },
+   {
+    "name": "447",
+    "grams": 19.0
+   }
+  ]
+ },
+ {
+  "dali": "IXH.6",
+  "hex": "A7EAD5",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 233.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 1.8
+   },
+   {
+    "name": "560",
+    "grams": 22.0
+   },
+   {
+    "name": "447",
+    "grams": 15.0
+   }
+  ]
+ },
+ {
+  "dali": "IXK.7",
+  "hex": "8AB358",
+  "components": [
+   {
+    "name": "TRẮNG",
+    "grams": 120.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 0.6
+   },
+   {
+    "name": "216",
+    "grams": 74.0
+   },
+   {
+    "name": "056",
+    "grams": 63.0
+   },
+   {
+    "name": "069",
+    "grams": 43.0
+   }
+  ]
+ },
+ {
+  "dali": "BXA.1",
+  "hex": "FCFFBE",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 265.0
+   },
+   {
+    "name": "215",
+    "grams": 3.5
+   },
+   {
+    "name": "562",
+    "grams": 1.5
+   }
+  ]
+ },
+ {
+  "dali": "IXH.1",
+  "hex": "E2FFF3",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 268.0
+   },
+   {
+    "name": "Đen",
+    "grams": 0.2
+   },
+   {
+    "name": "560",
+    "grams": 1.2
+   },
+   {
+    "name": "447",
+    "grams": 0.8
+   }
+  ]
+ },
+ {
+  "dali": "IXH.2",
+  "hex": "D2FDEB",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 263.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 0.3
+   },
+   {
+    "name": "560",
+    "grams": 4.2
+   },
+   {
+    "name": "447",
+    "grams": 2.8
+   }
+  ]
+ },
+ {
+  "dali": "IXH.3",
+  "hex": "AEF8DD",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 257.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 0.5
+   },
+   {
+    "name": "560",
+    "grams": 7.8
+   },
+   {
+    "name": "447",
+    "grams": 5.2
+   }
+  ]
+ },
+ {
+  "dali": "IXH.4",
+  "hex": "A5EDD3",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 250.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 0.8
+   },
+   {
+    "name": "560",
+    "grams": 12.0
+   },
+   {
+    "name": "447",
+    "grams": 8.0
+   }
+  ]
+ },
+ {
+  "dali": "IXH.5",
+  "hex": "BDEFDC",
+  "components": [
+   {
+    "name": "Trắng",
+    "grams": 242.0
+   },
+   {
+    "name": "ĐEN",
+    "grams": 1.2
+   },
+   {
+    "name": "560",
+    "grams": 17.0
+   },
+   {
+    "name": "447",
+    "grams": 11.0
+   }
+  ]
+ }
+]
