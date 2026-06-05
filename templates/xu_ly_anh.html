@@ -159,9 +159,12 @@
   if(fu){ var waited=0,poll=setInterval(function(){ getResult(fu,function(){clearInterval(poll)},function(){ waited+=2000; if(waited>180000){clearInterval(poll);spin(false);} }); },2000); }
 
   function dl(u){ var a=document.createElement('a'); a.href=u; a.click(); }
-  document.getElementById('dCsv').onclick=function(){ if(curUrl)dl('/anh-export-colors?file_url='+encodeURIComponent(curUrl)); };
-  document.getElementById('dXlsx').onclick=function(){ if(curUrl)dl('/anh-export-xlsx?file_url='+encodeURIComponent(curUrl)); };
-  document.getElementById('dLegend').onclick=function(){ if(curUrl)dl('/anh-legend?file_url='+encodeURIComponent(curUrl)+'&title='+encodeURIComponent(document.getElementById('imgName').value||'')); };
+  // Gom mã DALI đang hiển thị (kể cả mã vừa sửa tay) -> gửi kèm để file tải về dùng mã đó.
+  // Đây chỉ áp cho file tải về, KHÔNG ghi vào bảng màu DALI.
+  function curEdits(){ var m={}; $('#palette .dali-input').each(function(){ m[$(this).data('stt')]=(this.value||'').trim(); }); return encodeURIComponent(JSON.stringify(m)); }
+  document.getElementById('dCsv').onclick=function(){ if(curUrl)dl('/anh-export-colors?file_url='+encodeURIComponent(curUrl)+'&edits='+curEdits()); };
+  document.getElementById('dXlsx').onclick=function(){ if(curUrl)dl('/anh-export-xlsx?file_url='+encodeURIComponent(curUrl)+'&edits='+curEdits()); };
+  document.getElementById('dLegend').onclick=function(){ if(curUrl)dl('/anh-legend?file_url='+encodeURIComponent(curUrl)+'&title='+encodeURIComponent(document.getElementById('imgName').value||'')+'&edits='+curEdits()); };
   document.getElementById('btnPrint').onclick=function(){
     var ru=decodeURIComponent(document.getElementById('imgResult').src);
     $.get('/anh-download',{result_url:ru,image_name:(document.getElementById('imgName').value||'result'),scale_option:document.getElementById('scale').value,orientation_option:document.getElementById('orient').value},function(res){

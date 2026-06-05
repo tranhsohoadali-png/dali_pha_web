@@ -578,6 +578,28 @@ def _get_img(request):
         .order_by('-created_time').first()
 
 
+def _colors_with_edits(res, request):
+    """Trả về bản sao bảng màu, áp mã DALI người dùng vừa sửa (gửi qua 'edits',
+    dạng {stt: 'MÃ'}). KHÔNG ghi vào bảng tham chiếu DALI và KHÔNG lưu DB —
+    chỉ dùng cho file tải về (vì mã sửa chưa qua kiểm nghiệm)."""
+    colors = [list(r) for r in (res.colors or [])]
+    raw = request.GET.get('edits') or request.POST.get('edits')
+    if raw:
+        try:
+            edits = json.loads(raw)
+        except (ValueError, TypeError):
+            edits = {}
+        if isinstance(edits, dict):
+            for row in colors:
+                key = str(row[0])
+                val = edits.get(key)
+                if val:
+                    while len(row) < 3:
+                        row.append('')
+                    row[2] = str(val).strip()
+    return colors
+
+
 @csrf_exempt
 @staff_required
 def xu_ly_anh(request):
@@ -649,7 +671,7 @@ def anh_export_colors(request):
     resp.write('﻿')
     w = csv.writer(resp)
     w.writerow(['STT', 'HEX', 'R', 'G', 'B', 'Ma_DALI', 'Phan_tram'])
-    for row in res.colors:
+    for row in _colors_with_edits(res, request):
         h = row[1].lstrip('#')
         try:
             r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
@@ -667,7 +689,7 @@ def anh_export_xlsx(request):
     if not res:
         return HttpResponseNotFound('no result')
     out = os.path.join(settings.MEDIA_ROOT, 'bang_mau_dali.xlsx')
-    build_xlsx(res.colors, out)
+    build_xlsx(_colors_with_edits(res, request), out)
     with open(out, 'rb') as f:
         data = f.read()
     resp = HttpResponse(data, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -686,7 +708,7 @@ def anh_legend(request):
     left_path = os.path.join(settings.MEDIA_ROOT, left)
     title = (request.GET.get('title') or '').strip()
     out = os.path.join(settings.MEDIA_ROOT, f'{res.name_output or res.name}_legend.png')
-    build_legend_image(left_path, res.colors, out, title=title)
+    build_legend_image(left_path, _colors_with_edits(res, request), out, title=title)
     with open(out, 'rb') as f:
         data = f.read()
     resp = HttpResponse(data, content_type='image/png')
