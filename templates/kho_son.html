@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kho sơn · Pha màu</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>.sw{width:30px;height:30px;border-radius:.35rem;border:1px solid rgba(0,0,0,.2);display:inline-block;vertical-align:middle}</style>
+</head>
+<body class="bg-body-tertiary">
+<nav class="navbar navbar-expand bg-success" data-bs-theme="dark">
+  <div class="container-fluid">
+    <span class="navbar-brand mb-0 h1"><i class="bi bi-box-seam"></i> Kho sơn gốc</span>
+    <a href="/" class="btn btn-outline-light btn-sm"><i class="bi bi-arrow-left"></i> Về quản lý công thức</a>
+  </div>
+</nav>
+<div class="container py-3" style="max-width:900px;">
+  {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
+
+  <div class="card shadow-sm">
+    <div class="card-header fw-semibold"><i class="bi bi-box-seam"></i> Tồn kho từng màu (gram)</div>
+    <div class="card-body p-0">
+      <table class="table mb-0 align-middle">
+        <thead class="table-light">
+          <tr><th>Màu gốc</th><th class="text-end">Tồn kho (g)</th><th>Ngưỡng cảnh báo</th><th>Nhập thêm</th></tr>
+        </thead>
+        <tbody>
+          {% for it in items %}
+          <tr class="{% if it.low %}table-danger{% endif %}">
+            <td><span class="sw" style="background:rgb({{ it.rgb.0 }},{{ it.rgb.1 }},{{ it.rgb.2 }})"></span>
+              <b>{{ it.name }}</b>
+              {% if it.low %}<span class="badge text-bg-danger ms-1"><i class="bi bi-exclamation-triangle"></i> Sắp hết</span>{% endif %}
+            </td>
+            <td class="text-end">
+              <span class="fw-bold {% if it.stock <= 0 %}text-danger{% endif %}" style="font-size:1.1rem">{{ it.stock }}</span> g
+              <form method="POST" action="/kho-son" class="d-inline ms-1">{% csrf_token %}
+                <input type="hidden" name="action" value="set_stock"><input type="hidden" name="name" value="{{ it.name }}">
+                <button class="btn btn-sm btn-link p-0 text-secondary" title="Đặt lại tồn kho (kiểm kê)"
+                        onclick="this.form.querySelector('.v').value=prompt('Đặt tồn kho thực tế cho {{ it.name }} (g):','{{ it.stock }}')||'';return this.form.querySelector('.v').value!==''">sửa</button>
+                <input type="hidden" name="value" class="v">
+              </form>
+            </td>
+            <td>
+              <form method="POST" action="/kho-son" class="d-flex gap-1" style="max-width:200px">{% csrf_token %}
+                <input type="hidden" name="action" value="set_threshold"><input type="hidden" name="name" value="{{ it.name }}">
+                <input type="number" name="value" class="form-control form-control-sm" value="{{ it.threshold|floatformat:'-1' }}" step="any" min="0">
+                <button class="btn btn-sm btn-outline-secondary">Lưu</button>
+              </form>
+            </td>
+            <td>
+              <form method="POST" action="/kho-son" class="d-flex gap-1" style="max-width:220px">{% csrf_token %}
+                <input type="hidden" name="action" value="add_stock"><input type="hidden" name="name" value="{{ it.name }}">
+                <input type="number" name="value" class="form-control form-control-sm" placeholder="vd: 1000" step="any" min="0" required>
+                <button class="btn btn-sm btn-success">+ Nhập</button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="text-secondary text-center py-3">Chưa khai báo màu gốc nào (vào trang quản lý công thức để thêm).</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <p class="text-secondary small mt-2">
+    • <b>Nhập thêm</b>: khi mua sơn về, cộng thêm vào tồn kho.<br>
+    • <b>Ngưỡng cảnh báo</b>: khi tồn kho ≤ ngưỡng → báo "Sắp hết" (đặt 0 = không cảnh báo).<br>
+    • Mỗi lần nhân viên bấm <b>Pha</b>, hệ thống tự trừ lượng màu đã dùng khỏi tồn kho.
+  </p>
+</div>
+</body>
+</html>

@@ -21,9 +21,11 @@ from django.http import JsonResponse, HttpResponse, HttpResponseNotFound, FileRe
 from django.shortcuts import render, redirect
 from django.views.decorators.csrf import csrf_exempt
 
+from django.db.models import F
+
 from pha import mixing
 from pha import recipes
-from pha.models import ProductionLog, ImageResult
+from pha.models import ProductionLog, ImageResult, PaintStock
 
 _img_executor = ThreadPoolExecutor(max_workers=2)
 
@@ -95,6 +97,45 @@ def nhan_vien(request):
         return redirect('/nhan-vien')
     users = User.objects.order_by('-is_superuser', '-is_staff', 'username')
     return render(request, 'nhan_vien.html', {'users': users})
+
+
+def _low_stock_names():
+    return [p.name for p in PaintStock.objects.all()
+            if p.low_threshold > 0 and p.stock <= p.low_threshold]
+
+
+@csrf_exempt
+@staff_required
+def kho_son(request):
+    """Quản lý tồn kho màu sơn gốc (chỉ chủ)."""
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        action = request.POST.get('action')
+        try:
+            val = float(request.POST.get('value') or 0)
+        except ValueError:
+            val = 0
+        ps, _ = PaintStock.objects.get_or_create(name=name)
+        if action == 'add_stock':
+            ps.stock = round(ps.stock + val, 1); ps.save()
+            messages.info(request, f'Đã nhập thêm {val:g}g vào "{name}".')
+        elif action == 'set_stock':
+            ps.stock = val; ps.save()
+            messages.info(request, f'Đã đặt tồn kho "{name}" = {val:g}g.')
+        elif action == 'set_threshold':
+            ps.low_threshold = val; ps.save()
+            messages.info(request, f'Đã đặt ngưỡng cảnh báo "{name}" = {val:g}g.')
+        return redirect('/kho-son')
+
+    items = []
+    for b in mixing.get_bases():
+        ps, _ = PaintStock.objects.get_or_create(name=b['name'])
+        items.append({
+            'name': b['name'], 'rgb': b['rgb'], 'stock': round(ps.stock, 1),
+            'threshold': ps.low_threshold,
+            'low': ps.low_threshold > 0 and ps.stock <= ps.low_threshold,
+        })
+    return render(request, 'kho_son.html', {'items': items})
 
 
 def _now():
@@ -181,6 +222,7 @@ def cong_thuc_mau(request):
     return render(request, 'cong_thuc_mau.html', {
         'bases': mixing.get_bases(), 'recipes': rec_list,
         'stat_months': stat_months, 'stat_label': label, 'stat_rows': rows,
+        'low_stock': _low_stock_names(),
     })
 
 
@@ -287,6 +329,9 @@ def pha(request):
         dali=rec['dali'], hex=rec['hex'], multiplier=mult, components=comps, total=total,
         user=request.user.username,
     )
+    # Trừ kho sơn theo lượng đã dùng (chỉ trừ màu có theo dõi tồn kho)
+    for c in comps:
+        PaintStock.objects.filter(name=c['name']).update(stock=F('stock') - c['grams'])
     return JsonResponse({'ok': True, 'msg': f'Đã ghi nhận pha {rec["dali"]} ×{("%g" % mult)}'})
 
 

@@ -33,6 +33,16 @@ class ImageResult(models.Model):
         return f'{self.id}-{self.name}'
 
 
+class PaintStock(models.Model):
+    """Tồn kho từng màu sơn gốc (gram). Mỗi lần pha tự trừ."""
+    name = models.CharField(max_length=100, unique=True)
+    stock = models.FloatField(default=0)            # tồn kho hiện tại (g)
+    low_threshold = models.FloatField(default=0)    # ngưỡng cảnh báo sắp hết (g)
+
+    def __str__(self):
+        return f'{self.name}: {self.stock}g'
+
+
 class ProductionLog(models.Model):
     """Nhật ký pha màu (thống kê lượng màu gốc dùng theo ngày/tháng)."""
     created_time = models.DateTimeField(auto_now_add=True)
