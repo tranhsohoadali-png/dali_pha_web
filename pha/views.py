@@ -583,6 +583,33 @@ def anh_result(request):
 
 @csrf_exempt
 @staff_required
+def anh_save_color(request):
+    """Sửa mã DALI cho 1 màu: ghi vào bảng tham chiếu DALI + cập nhật ảnh hiện tại."""
+    from pha import dali_match
+    if request.method != 'POST':
+        return HttpResponseNotFound('POST only')
+    hex_value = request.POST.get('hex', '')
+    dali = request.POST.get('dali', '')
+    stt = request.POST.get('stt', '')
+    file_url = request.POST.get('file_url', '')
+    ok, msg = dali_match.add_entry(hex_value, dali)
+    if not ok:
+        return JsonResponse({'ok': False, 'msg': msg})
+    if file_url:
+        res = ImageResult.objects.filter(name=file_url.replace('/media/', '')) \
+            .order_by('-created_time').first()
+        if res and res.colors:
+            changed = False
+            for row in res.colors:
+                if str(row[0]) == str(stt) and len(row) > 2:
+                    row[2] = dali; changed = True
+            if changed:
+                res.save()
+    return JsonResponse({'ok': True, 'msg': msg})
+
+
+@csrf_exempt
+@staff_required
 def anh_export_colors(request):
     res = _get_img(request)
     if not res:
