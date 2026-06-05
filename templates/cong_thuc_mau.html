@@ -203,6 +203,24 @@
       </div>
     </div>
   </div>
+
+  <!-- Lịch sử pha màu -->
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-clock-history"></i> Lịch sử pha màu (mới nhất)</span>
+          <button id="historyReload" type="button" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i></button>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <thead class="table-light"><tr><th style="width:140px">Giờ</th><th>Mã DALI</th><th class="text-end" style="width:80px">Mẻ</th></tr></thead>
+            <tbody id="historyBody"><tr><td colspan="3" class="text-secondary text-center py-3">Đang tải…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <datalist id="baseList">{% for b in bases %}<option value="{{ b.name }}"></option>{% endfor %}</datalist>
@@ -413,10 +431,24 @@
         pb.disabled = false;
         if (!res.ok){ toast(res.msg || 'Lỗi'); return; }
         toast(res.msg);
-        loadStats();
+        loadStats(); loadHistory();
       })
       .catch(function(){ pb.disabled = false; toast('Lỗi kết nối'); });
   });
+
+  // ---- Lịch sử pha màu ----
+  function loadHistory(){
+    var tb = document.getElementById('historyBody'); if(!tb) return;
+    fetch('lich-su').then(function(r){ return r.json(); }).then(function(res){
+      if (!res.rows || !res.rows.length){ tb.innerHTML = '<tr><td colspan="3" class="text-secondary text-center py-3">Chưa có lần pha nào.</td></tr>'; return; }
+      tb.innerHTML = res.rows.map(function(x){
+        return '<tr><td>'+x.dt+'</td><td class="fw-semibold">'+x.dali+'</td><td class="text-end">'+x.mult+'</td></tr>';
+      }).join('');
+    }).catch(function(){});
+  }
+  var historyReload = document.getElementById('historyReload');
+  if (historyReload) historyReload.addEventListener('click', loadHistory);
+  loadHistory();
 </script>
 </body>
 </html>

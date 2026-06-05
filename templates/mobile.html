@@ -80,6 +80,19 @@
   <p id="noResult" class="text-secondary text-center py-4" style="display:none">Không tìm thấy công thức.</p>
 </div>
 
+<!-- Lịch sử pha hôm nay -->
+<div class="px-2">
+  <div class="rc p-2">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <span class="fw-bold" style="font-size:1.1rem;"><i class="bi bi-clock-history"></i> Lịch sử pha hôm nay</span>
+      <button id="historyReload" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+    <table class="table table-sm mb-0">
+      <tbody id="historyBody"><tr><td colspan="3" class="text-secondary text-center">Đang tải…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
 <!-- Hộp xác nhận Pha -->
 <div id="phaModal" class="pha-modal">
   <div class="pha-box">
@@ -126,6 +139,19 @@
     document.getElementById('noResult').style.display = any?'none':'block';
   });
 
+  // ----- Lịch sử pha hôm nay -----
+  function loadHistory(){
+    var tb=document.getElementById('historyBody'); if(!tb) return;
+    fetch('/lich-su?range=today').then(function(r){return r.json();}).then(function(res){
+      if(!res.rows || !res.rows.length){ tb.innerHTML='<tr><td colspan="3" class="text-secondary text-center">Hôm nay chưa pha mẻ nào.</td></tr>'; return; }
+      tb.innerHTML = res.rows.map(function(x){
+        return '<tr><td>'+x.dt+'</td><td class="fw-bold">'+x.dali+'</td><td class="text-end fw-bold">'+x.mult+'</td></tr>';
+      }).join('');
+    }).catch(function(){});
+  }
+  document.getElementById('historyReload').addEventListener('click', loadHistory);
+  loadHistory();
+
   // ----- Pha: mở hộp xác nhận lớn -----
   var pendingDali = null, phaBusy = false;
   var phaModal = document.getElementById('phaModal');
@@ -153,6 +179,7 @@
     var fd=new FormData(); fd.append('dali',dali); fd.append('multiplier',curMult);
     fetch('/pha',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(res){
       toast(res.ok?('✓ '+res.msg):(res.msg||'Lỗi'));
+      if(res.ok) loadHistory();
     }).catch(function(){ toast('Lỗi kết nối'); }).then(function(){
       phaBusy=false; yes.disabled=false; yes.innerHTML='<i class="bi bi-check-lg"></i> Đồng ý, đã pha'; closePha();
     });

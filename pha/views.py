@@ -111,6 +111,26 @@ def thong_ke(request):
 
 
 @csrf_exempt
+def lich_su(request):
+    """Lịch sử các mẻ đã pha (mới nhất trước). ?range=today|all."""
+    now = _now()
+    if request.GET.get('range') == 'today':
+        qs = ProductionLog.objects.filter(day=now.strftime('%Y-%m-%d'))
+    else:
+        qs = ProductionLog.objects.all()
+    rows = []
+    for log in qs.order_by('-created_time')[:100]:
+        t = log.created_time
+        try:
+            t = t.astimezone(_VN) if _VN else t
+        except Exception:
+            pass
+        rows.append({'dt': t.strftime('%d/%m %H:%M'), 'dali': log.dali,
+                     'mult': '×' + ('%g' % log.multiplier)})
+    return JsonResponse({'rows': rows})
+
+
+@csrf_exempt
 def export_thong_ke_excel(request):
     """Xuất báo cáo lượng màu đã pha ra Excel (.xlsx) theo khoảng thời gian."""
     from openpyxl import Workbook

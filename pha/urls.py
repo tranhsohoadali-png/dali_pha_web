@@ -7,6 +7,7 @@ urlpatterns = [
     path('app', views.mobile, name='mobile'),
     path('pha', views.pha, name='pha'),
     path('thong-ke', views.thong_ke, name='thong_ke'),
+    path('lich-su', views.lich_su, name='lich_su'),
     path('thong-ke-excel', views.export_thong_ke_excel, name='thong_ke_excel'),
     path('manifest.webmanifest', views.manifest, name='manifest'),
     path('sw.js', views.service_worker, name='sw'),
