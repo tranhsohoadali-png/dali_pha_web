@@ -220,7 +220,8 @@ def kho_son(request):
             'value': round(value),
             'low': ps.low_threshold > 0 and ps.stock <= ps.low_threshold,
         })
-    return render(request, 'kho_son.html', {'items': items, 'total_value': round(total_value)})
+    return render(request, 'kho_son.html', {'items': items, 'total_value': round(total_value),
+                                            'low_stock': _low_stock_names()})
 
 
 def _now():

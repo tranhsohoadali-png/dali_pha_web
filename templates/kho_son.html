@@ -6,74 +6,91 @@
   <title>Kho sơn · Pha màu</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-  <style>.sw{width:30px;height:30px;border-radius:.35rem;border:1px solid rgba(0,0,0,.2);display:inline-block;vertical-align:middle}</style>
+  <style>
+    body{background:#eef1f5}
+    .sw{width:34px;height:34px;border-radius:.45rem;border:1px solid rgba(0,0,0,.2);display:inline-block;flex:0 0 auto}
+    .kcard{border:none;border-radius:1rem;box-shadow:0 4px 14px rgba(20,30,60,.08)}
+    .kcard.is-low{box-shadow:0 4px 14px rgba(220,53,69,.18);outline:1.5px solid #f5c2c7}
+    .stockbig{font-size:1.7rem;font-weight:800;line-height:1}
+    .lbl{font-size:.74rem;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.02em}
+    .cfg-form{display:flex;gap:.4rem;align-items:center;margin-bottom:.5rem}
+    .cfg-form label{flex:0 0 96px;font-size:.85rem;color:#475569}
+  </style>
 </head>
-<body class="bg-body-tertiary">
+<body>
 {% include '_nav.html' %}
-<div class="container py-3" style="max-width:900px;">
+<div class="container py-3" style="max-width:1080px;">
   {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
 
-  <div class="card shadow-sm">
-    <div class="card-header fw-semibold"><i class="bi bi-box-seam"></i> Tồn kho từng màu (gram)</div>
-    <div class="card-body p-0">
-      <table class="table mb-0 align-middle">
-        <thead class="table-light">
-          <tr><th>Màu gốc</th><th class="text-end">Tồn kho (g)</th><th>Giá (đ/kg)</th><th class="text-end">Giá trị tồn</th><th>Ngưỡng cảnh báo</th><th>Nhập thêm</th></tr>
-        </thead>
-        <tbody>
-          {% for it in items %}
-          <tr class="{% if it.low %}table-danger{% endif %}">
-            <td><span class="sw" style="background:rgb({{ it.rgb.0 }},{{ it.rgb.1 }},{{ it.rgb.2 }})"></span>
-              <b>{{ it.name }}</b>
-              {% if it.low %}<span class="badge text-bg-danger ms-1"><i class="bi bi-exclamation-triangle"></i> Sắp hết</span>{% endif %}
-            </td>
-            <td class="text-end">
-              <span class="fw-bold {% if it.stock <= 0 %}text-danger{% endif %}" style="font-size:1.1rem">{{ it.stock }}</span> g
-              <form method="POST" action="/kho-son" class="d-inline ms-1">{% csrf_token %}
-                <input type="hidden" name="action" value="set_stock"><input type="hidden" name="name" value="{{ it.name }}">
-                <button class="btn btn-sm btn-link p-0 text-secondary" title="Đặt lại tồn kho (kiểm kê)"
-                        onclick="this.form.querySelector('.v').value=prompt('Đặt tồn kho thực tế cho {{ it.name }} (g):','{{ it.stock }}')||'';return this.form.querySelector('.v').value!==''">sửa</button>
-                <input type="hidden" name="value" class="v">
-              </form>
-            </td>
-            <td>
-              <form method="POST" action="/kho-son" class="d-flex gap-1" style="max-width:170px">{% csrf_token %}
-                <input type="hidden" name="action" value="set_price"><input type="hidden" name="name" value="{{ it.name }}">
-                <input type="number" name="value" class="form-control form-control-sm" value="{{ it.price|floatformat:'-0' }}" step="any" min="0" placeholder="đ/kg">
-                <button class="btn btn-sm btn-outline-secondary">Lưu</button>
-              </form>
-            </td>
-            <td class="text-end">{{ it.value|floatformat:'0' }} đ</td>
-            <td>
-              <form method="POST" action="/kho-son" class="d-flex gap-1" style="max-width:200px">{% csrf_token %}
-                <input type="hidden" name="action" value="set_threshold"><input type="hidden" name="name" value="{{ it.name }}">
-                <input type="number" name="value" class="form-control form-control-sm" value="{{ it.threshold|floatformat:'-1' }}" step="any" min="0">
-                <button class="btn btn-sm btn-outline-secondary">Lưu</button>
-              </form>
-            </td>
-            <td>
-              <form method="POST" action="/kho-son" class="d-flex gap-1" style="max-width:220px">{% csrf_token %}
-                <input type="hidden" name="action" value="add_stock"><input type="hidden" name="name" value="{{ it.name }}">
-                <input type="number" name="value" class="form-control form-control-sm" placeholder="vd: 1000" step="any" min="0" required>
-                <button class="btn btn-sm btn-success">+ Nhập</button>
-              </form>
-            </td>
-          </tr>
-          {% empty %}
-          <tr><td colspan="6" class="text-secondary text-center py-3">Chưa khai báo màu gốc nào (vào trang quản lý công thức để thêm).</td></tr>
-          {% endfor %}
-        </tbody>
-        {% if items %}
-        <tfoot class="table-light fw-bold"><tr><td colspan="3" class="text-end">Tổng giá trị tồn kho:</td><td class="text-end">{{ total_value|floatformat:'0' }} đ</td><td colspan="2"></td></tr></tfoot>
-        {% endif %}
-      </table>
+  <!-- Tổng quan -->
+  <div class="card kcard mb-3">
+    <div class="card-body d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div><div class="lbl">Tổng giá trị tồn kho</div><span class="fw-bold text-success" style="font-size:1.6rem">{{ total_value|floatformat:'0' }} đ</span></div>
+      <div class="text-end"><div class="lbl">Số màu sắp hết</div><span class="fw-bold {% if low_stock %}text-danger{% else %}text-success{% endif %}" style="font-size:1.6rem">{{ low_stock|length }}</span></div>
     </div>
   </div>
-  <p class="text-secondary small mt-2">
-    • <b>Nhập thêm</b>: khi mua sơn về, cộng thêm vào tồn kho.<br>
-    • <b>Ngưỡng cảnh báo</b>: khi tồn kho ≤ ngưỡng → báo "Sắp hết" (đặt 0 = không cảnh báo).<br>
-    • Mỗi lần nhân viên bấm <b>Pha</b>, hệ thống tự trừ lượng màu đã dùng khỏi tồn kho.
-  </p>
+
+  <div class="row g-3">
+    {% for it in items %}
+    <div class="col-12 col-md-6 col-xl-4">
+      <div class="card kcard h-100 {% if it.low %}is-low{% endif %}">
+        <div class="card-body">
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <span class="sw" style="background:rgb({{ it.rgb.0 }},{{ it.rgb.1 }},{{ it.rgb.2 }})"></span>
+            <b class="flex-grow-1" style="font-size:1.15rem">{{ it.name }}</b>
+            {% if it.low %}<span class="badge text-bg-danger"><i class="bi bi-exclamation-triangle"></i> Sắp hết</span>{% endif %}
+          </div>
+          <div class="d-flex justify-content-between align-items-end mb-3">
+            <div><div class="lbl">Tồn kho</div><span class="stockbig {% if it.stock <= 0 %}text-danger{% endif %}">{{ it.stock }}</span> <span class="text-secondary">g</span></div>
+            <div class="text-end"><div class="lbl">Giá trị tồn</div><b>{{ it.value|floatformat:'0' }} đ</b><div class="text-secondary small">{{ it.price|floatformat:'-0' }} đ/kg</div></div>
+          </div>
+
+          <!-- Hành động chính: nhập thêm -->
+          <form method="POST" action="/kho-son" class="input-group input-group-lg mb-2">{% csrf_token %}
+            <input type="hidden" name="action" value="add_stock"><input type="hidden" name="name" value="{{ it.name }}">
+            <input type="number" name="value" class="form-control" inputmode="numeric" placeholder="số gram mua về" step="any" min="0" required>
+            <button class="btn btn-success px-3 fw-semibold"><i class="bi bi-plus-lg"></i> Nhập</button>
+          </form>
+
+          <button class="btn btn-sm btn-link text-decoration-none p-0 text-secondary" data-bs-toggle="collapse" data-bs-target="#cfg{{ forloop.counter }}">
+            <i class="bi bi-sliders"></i> Giá · ngưỡng · kiểm kê
+          </button>
+          <div class="collapse mt-2" id="cfg{{ forloop.counter }}">
+            <div class="border-top pt-2">
+              <form method="POST" action="/kho-son" class="cfg-form">{% csrf_token %}
+                <input type="hidden" name="action" value="set_price"><input type="hidden" name="name" value="{{ it.name }}">
+                <label>Giá (đ/kg)</label>
+                <input type="number" name="value" class="form-control" value="{{ it.price|floatformat:'-0' }}" step="any" min="0">
+                <button class="btn btn-outline-secondary">Lưu</button>
+              </form>
+              <form method="POST" action="/kho-son" class="cfg-form">{% csrf_token %}
+                <input type="hidden" name="action" value="set_threshold"><input type="hidden" name="name" value="{{ it.name }}">
+                <label>Ngưỡng (g)</label>
+                <input type="number" name="value" class="form-control" value="{{ it.threshold|floatformat:'-1' }}" step="any" min="0">
+                <button class="btn btn-outline-secondary">Lưu</button>
+              </form>
+              <form method="POST" action="/kho-son" class="cfg-form mb-0">{% csrf_token %}
+                <input type="hidden" name="action" value="set_stock"><input type="hidden" name="name" value="{{ it.name }}">
+                <label>Đặt tồn (g)</label>
+                <input type="number" name="value" class="form-control" value="{{ it.stock }}" step="any" placeholder="kiểm kê">
+                <button class="btn btn-outline-secondary">Lưu</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% empty %}
+    <div class="col-12"><div class="card kcard"><div class="card-body text-secondary text-center py-4">Chưa khai báo màu gốc nào (vào trang Công thức pha để thêm).</div></div></div>
+    {% endfor %}
+  </div>
+
+  <div class="card kcard mt-3"><div class="card-body text-secondary small">
+    • <b>Nhập</b>: mua sơn về → gõ số gram → bấm <b>+ Nhập</b> (cộng dồn vào tồn).<br>
+    • <b>Ngưỡng cảnh báo</b>: tồn ≤ ngưỡng → báo "Sắp hết" (đặt 0 = tắt cảnh báo).<br>
+    • <b>Đặt tồn</b>: kiểm kê thực tế, ghi đè số tồn.<br>
+    • Mỗi lần nhân viên bấm <b>Pha</b>, hệ thống tự trừ lượng màu đã dùng.
+  </div></div>
 </div>
 </body>
 </html>
