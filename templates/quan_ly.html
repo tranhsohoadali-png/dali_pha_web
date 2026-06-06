@@ -53,19 +53,34 @@
   </div>
   {% endif %}
 
-  <!-- Nhập kho sơn -->
+  <!-- Thống kê tồn kho sơn -->
   <div class="rc">
-    <div class="fw-bold mb-2" style="font-size:1.15rem"><i class="bi bi-pencil-square"></i> Nhập kho sơn</div>
-    <div class="small text-secondary mb-2">Mua sơn về → gõ số gram → bấm <b>+ Nhập</b>. Tồn kho tự cộng.</div>
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="fw-bold" style="font-size:1.15rem"><i class="bi bi-clipboard-data"></i> Tồn kho sơn</div>
+      <div class="text-end"><div class="small text-secondary" style="line-height:1">Tổng giá trị tồn</div><b class="text-primary" style="font-size:1.15rem">{{ total_value }} đ</b></div>
+    </div>
+    <div class="small text-secondary mb-2">Bấm <i class="bi bi-pencil-square"></i> ở từng màu để nhập sơn mua về.</div>
     {% for it in items %}
-    <div class="border-top py-2" data-name="{{ it.name }}">
-      <div class="d-flex align-items-center gap-2 mb-2">
+    <div class="kho-row border-top py-2" data-name="{{ it.name }}" data-price="{{ it.price }}">
+      <div class="d-flex align-items-center gap-2">
         <span class="sw" style="background:rgb({{ it.rgb.0 }},{{ it.rgb.1 }},{{ it.rgb.2 }})"></span>
-        <b style="font-size:1.1rem">{{ it.name }}</b>
-        <span class="ms-auto">Tồn: <b class="stockv {% if it.low %}text-danger{% endif %}" style="font-size:1.2rem">{{ it.stock }}</b> g
-          {% if it.low %}<span class="badge text-bg-danger">sắp hết</span>{% endif %}</span>
+        <div class="flex-grow-1">
+          <b style="font-size:1.1rem">{{ it.name }}</b>
+          {% if it.low %}<span class="badge text-bg-danger ms-1">sắp hết</span>{% endif %}
+          <div class="small text-secondary">
+            <span class="valv">{{ it.value }}</span> đ ·
+            {% if it.days != None %}đủ ~<b class="{% if it.level == 'low' %}text-danger{% elif it.level == 'warn' %}text-warning{% else %}text-success{% endif %}">{{ it.days }}</b> ngày{% else %}chưa dùng đến{% endif %}
+          </div>
+        </div>
+        <div class="text-end">
+          <div><b class="stockv {% if it.low %}text-danger{% endif %}" style="font-size:1.3rem">{{ it.stock }}</b> <span class="text-secondary">g</span></div>
+          <button class="btn btn-sm btn-outline-primary py-0 px-2 edit-toggle" title="Nhập sơn mua về"><i class="bi bi-pencil-square"></i></button>
+        </div>
       </div>
-      <div class="input-group">
+      <div class="progress mt-2" style="height:7px">
+        <div class="progress-bar bg-{% if it.level == 'low' %}danger{% elif it.level == 'warn' %}warning{% else %}success{% endif %}" style="width:{{ it.bar }}%"></div>
+      </div>
+      <div class="input-group mt-2 edit-box" style="display:none">
         <input type="number" class="form-control addinp gnum" inputmode="numeric" placeholder="số gram mua về" min="0" step="any">
         <button class="btn btn-success addbtn px-3" data-act="add"><i class="bi bi-plus-lg"></i> Nhập</button>
         <button class="btn btn-outline-secondary addbtn px-2" data-act="set" title="Đặt lại tồn (kiểm kê)">Đặt</button>
@@ -88,6 +103,17 @@
   function toast(m){var t=document.getElementById('toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(function(){t.style.display='none';},2000);}
 
   function csrf(){var m=document.cookie.match(/csrftoken=([^;]+)/);return m?m[1]:'';}
+  function fmtVnd(n){return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.');}
+
+  // Mở/đóng ô nhập của từng màu
+  document.addEventListener('click',function(e){
+    var t=e.target.closest('.edit-toggle'); if(!t) return;
+    var row=t.closest('.kho-row'); var box=row.querySelector('.edit-box');
+    var show=box.style.display==='none';
+    box.style.display=show?'flex':'none';
+    if(show){ var inp=row.querySelector('.gnum'); inp.focus(); }
+  });
+
   document.addEventListener('click',function(e){
     var b=e.target.closest('.addbtn'); if(!b) return;
     var row=b.closest('[data-name]'); var name=row.dataset.name;
@@ -101,7 +127,8 @@
       b.disabled=false;
       if(!res.ok){toast('Lỗi');return;}
       var sv=row.querySelector('.stockv'); sv.textContent=res.stock; sv.classList.toggle('text-danger',res.low);
-      inp.value='';
+      var price=parseFloat(row.dataset.price)||0; var vv=row.querySelector('.valv'); if(vv) vv.textContent=fmtVnd(res.stock/1000*price);
+      inp.value=''; row.querySelector('.edit-box').style.display='none';
       toast((act==='add'?'Đã nhập +':'Đã đặt tồn ')+(act==='add'?v+'g':res.stock+'g')+' · '+name);
     }).catch(function(){b.disabled=false;toast('Lỗi kết nối');});
   });

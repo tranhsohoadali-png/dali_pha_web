@@ -446,16 +446,33 @@ def quan_ly(request):
             except (KeyError, TypeError, ValueError):
                 pass
     items, need_buy = [], []
+    total_value = 0.0
     for b in mixing.get_bases():
         ps, _ = PaintStock.objects.get_or_create(name=b['name'])
         low = ps.low_threshold > 0 and ps.stock <= ps.low_threshold
-        items.append({'name': b['name'], 'rgb': b['rgb'], 'stock': round(ps.stock, 1), 'low': low})
+        value = ps.stock / 1000.0 * (ps.price_per_kg or 0)
+        total_value += value
+        # Ước tính số ngày còn dùng được theo mức dùng 30 ngày gần nhất
+        avg_day = usage30.get(b['name'], 0) / 30.0
+        days = int(ps.stock / avg_day) if avg_day > 0 else None
+        if low or (days is not None and days < 7):
+            level, bar = 'low', (min(100, round(days / 30.0 * 100)) if days is not None else 8)
+        elif days is not None and days < 14:
+            level, bar = 'warn', min(100, round(days / 30.0 * 100))
+        else:
+            level, bar = 'ok', (min(100, round(days / 30.0 * 100)) if days is not None else 100)
+        items.append({
+            'name': b['name'], 'rgb': b['rgb'], 'stock': round(ps.stock, 1), 'low': low,
+            'value': f'{round(value):,.0f}'.replace(',', '.'), 'days': days,
+            'level': level, 'bar': bar, 'price': round(ps.price_per_kg or 0),
+        })
         suggest = max(0, round(usage30.get(b['name'], 0) - ps.stock))
         if suggest > 0:
             need_buy.append({'name': b['name'], 'suggest': suggest})
     return render(request, 'quan_ly.html', {
         'items': items, 'today_n': today_n, 'month_n': month_n, 'month_cost': round(month_cost),
         'low_stock': _low_stock_names(), 'need_buy': need_buy, 'today_label': now.strftime('%d/%m/%Y'),
+        'total_value': f'{round(total_value):,.0f}'.replace(',', '.'),
     })
 
 
