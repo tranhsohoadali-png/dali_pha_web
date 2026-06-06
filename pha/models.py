@@ -23,6 +23,7 @@ class ImageResult(models.Model):
 
     created_time = models.DateTimeField(auto_now_add=True)
     name = models.TextField()                 # tên file ảnh gốc (có timestamp)
+    enhanced_name = models.TextField(blank=True, default='')  # file ảnh đã tăng cường bằng AI (nếu có)
     name_output = models.TextField(blank=True, default='')   # file kết quả png
     colors = models.JSONField(default=list, blank=True)      # [[stt,hex,dali,percent],...]
     status = models.CharField(max_length=20, default=STATUS_PROCESSING)

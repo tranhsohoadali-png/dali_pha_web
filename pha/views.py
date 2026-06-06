@@ -629,18 +629,22 @@ def _colors_with_edits(res, request):
 @staff_required
 def xu_ly_anh(request):
     from pha.imageproc import process_image
+    from pha.ai_enhance import is_configured as ai_configured
     last = ImageResult.objects.all().order_by('-created_time')[:30]
     last_query = [{'name': _fmt_name(q.name), 'url': q.name} for q in last]
+    ctx = {'last_query': last_query, 'ai_available': ai_configured()}
     if request.method == 'POST' and request.FILES.get('image'):
         upload = request.FILES['image']
         fss = FileSystemStorage()
         name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_{upload.name}'
         fss.save(name, upload)
+        enhance = request.POST.get('enhance') in ('1', 'on', 'true')
         rec = ImageResult.objects.create(name=name, status=ImageResult.STATUS_PROCESSING,
                                          user=request.user.username)
-        _img_executor.submit(process_image, rec.id, name)
-        return render(request, 'xu_ly_anh.html', {'file_url': '/media/' + name, 'last_query': last_query})
-    return render(request, 'xu_ly_anh.html', {'last_query': last_query})
+        _img_executor.submit(process_image, rec.id, name, enhance)
+        ctx['file_url'] = '/media/' + name
+        return render(request, 'xu_ly_anh.html', ctx)
+    return render(request, 'xu_ly_anh.html', ctx)
 
 
 @csrf_exempt
@@ -655,6 +659,7 @@ def anh_result(request):
     if res.status == ImageResult.STATUS_ERROR:
         return JsonResponse({'status': 'error', 'error': res.error_message})
     return JsonResponse({'status': 'done', 'img_output': '/media/' + res.name_output,
+                         'enhanced': ('/media/' + res.enhanced_name) if res.enhanced_name else '',
                          'colors': split_list(10, res.colors)})
 
 
