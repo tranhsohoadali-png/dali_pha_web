@@ -156,11 +156,18 @@ def dashboard(request):
         per_day = used / 30.0
         days_left = round(ps.stock / per_day) if per_day > 0 else None
         forecast.append({
-            'name': b['name'], 'stock': round(ps.stock, 1), 'used30': round(used),
+            'name': b['name'], 'rgb': b['rgb'], 'stock': round(ps.stock, 1), 'used30': round(used),
             'per_day': round(per_day, 1), 'days_left': days_left,
             'suggest': max(0, round(used - ps.stock)),   # đủ dùng ~30 ngày tới
             'low': ps.low_threshold > 0 and ps.stock <= ps.low_threshold,
         })
+
+    # Gắn ô màu + thanh tỉ lệ cho bảng "màu dùng nhiều"
+    base_rgb = {b['name']: b['rgb'] for b in mixing.get_bases()}
+    max_g = max((r['grams'] for r in top_rows), default=0) or 1
+    for r in top_rows:
+        r['rgb'] = base_rgb.get(r['name'])
+        r['pct'] = round(r['grams'] / max_g * 100)
 
     users = list(ProductionLog.objects.filter(month=this_month).values('user')
                  .annotate(n=Count('id'), c=Sum('cost')).order_by('-n'))
