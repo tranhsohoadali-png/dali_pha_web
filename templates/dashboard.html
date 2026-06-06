@@ -12,10 +12,12 @@
     .dash-card{border:none;border-radius:1rem;box-shadow:0 6px 18px rgba(20,30,60,.08);overflow:hidden}
     .dash-card .card-header{background:#fff;border-bottom:1px solid #eef0f4;font-weight:600;display:flex;align-items:center;gap:.45rem}
     .stat-card{border:none;border-radius:1rem;color:#fff;position:relative;overflow:hidden;box-shadow:0 8px 22px rgba(20,30,60,.16)}
-    .stat-card .ico{position:absolute;right:-8px;top:-10px;font-size:5.2rem;opacity:.18}
-    .stat-card .lbl{font-size:.82rem;opacity:.92;font-weight:500}
-    .stat-card .val{font-size:2.3rem;font-weight:800;line-height:1.1}
-    .stat-card .sub{font-size:.78rem;opacity:.85}
+    .stat-card .card-body{padding:1.1rem 1.3rem;padding-right:72px;min-height:122px;display:flex;flex-direction:column;justify-content:center}
+    .stat-card .ico{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:3.6rem;opacity:.22}
+    .stat-card .lbl{font-size:.85rem;opacity:.92;font-weight:600;margin-bottom:.15rem}
+    .stat-card .val{font-size:2.2rem;font-weight:800;line-height:1.05}
+    .stat-card .sub{font-size:.78rem;opacity:.85;margin-top:.15rem}
+    @media (min-width:1200px){.stat-card .val{font-size:2.5rem}}
     .g-green{background:linear-gradient(135deg,#1e9e5a,#0f7a3d)}
     .g-blue{background:linear-gradient(135deg,#3b82f6,#1d4ed8)}
     .g-amber{background:linear-gradient(135deg,#f59e0b,#d97706)}
@@ -51,7 +53,7 @@
       <div class="lbl">Mẻ pha tháng này</div><div class="val">{{ month_n }}</div><div class="sub">{{ month_label }}</div></div></div></div>
     <div class="col-6 col-xl-3"><div class="stat-card g-amber h-100"><div class="card-body">
       <i class="bi bi-cash-coin ico"></i>
-      <div class="lbl">Chi phí sơn tháng này</div><div class="val" style="font-size:1.7rem">{{ month_cost|intcomma }} đ</div><div class="sub">{{ month_label }}</div></div></div></div>
+      <div class="lbl">Chi phí sơn tháng này</div><div class="val" style="font-size:1.7rem;word-break:break-word">{{ month_cost|intcomma }} <span style="font-size:1.1rem;font-weight:600">đ</span></div><div class="sub">{{ month_label }}</div></div></div></div>
     <div class="col-6 col-xl-3"><div class="stat-card {% if low_stock %}g-red{% else %}g-slate{% endif %} h-100"><div class="card-body">
       <i class="bi bi-exclamation-triangle ico"></i>
       <div class="lbl">Màu sắp hết</div><div class="val">{{ low_stock|length }}</div><div class="sub">{% if low_stock %}{{ low_stock|join:", "|truncatechars:24 }}{% else %}Kho ổn định{% endif %}</div></div></div></div>
