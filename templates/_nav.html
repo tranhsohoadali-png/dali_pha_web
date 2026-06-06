@@ -1,0 +1,47 @@
+{% comment %}Thanh header dùng chung cho mọi trang quản lý.
+- Responsive: thu thành nút ☰ trên điện thoại.
+- Tự highlight trang hiện tại theo request.path.
+- Badge "sắp hết sơn" lấy từ context processor (nav_low_count).{% endcomment %}
+<nav class="navbar navbar-expand-lg bg-success sticky-top shadow-sm" data-bs-theme="dark">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-semibold" href="/"><i class="bi bi-droplet-half"></i> DALI Pha màu</a>
+    <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#mainnav" aria-controls="mainnav" aria-expanded="false" aria-label="Mở menu">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="mainnav">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item">
+          <a class="nav-link{% if request.path == '/' or request.path == '/cong-thuc-mau' %} active fw-semibold{% endif %}" href="/"><i class="bi bi-droplet-half"></i> Công thức pha</a>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle{% if '/xu-ly-anh' in request.path or '/dali-colors' in request.path %} active fw-semibold{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-image"></i> Xử lý ảnh</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="/xu-ly-anh"><i class="bi bi-card-image"></i> Tạo bản đồ màu</a></li>
+            <li><a class="dropdown-item" href="/dali-colors"><i class="bi bi-collection"></i> Bảng màu DALI</a></li>
+          </ul>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link position-relative{% if '/kho-son' in request.path %} active fw-semibold{% endif %}" href="/kho-son"><i class="bi bi-box-seam"></i> Kho sơn{% if nav_low_count %} <span class="badge text-bg-danger">{{ nav_low_count }}</span>{% endif %}</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link{% if '/dashboard' in request.path %} active fw-semibold{% endif %}" href="/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link{% if '/nhan-vien' in request.path %} active fw-semibold{% endif %}" href="/nhan-vien"><i class="bi bi-people"></i> Nhân viên</a>
+        </li>
+      </ul>
+      <ul class="navbar-nav">
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-person-circle"></i> {{ user.username }}</a>
+          <ul class="dropdown-menu dropdown-menu-lg-end">
+            <li><a class="dropdown-item" href="/app"><i class="bi bi-phone"></i> App nhân viên</a></li>
+            <li><a class="dropdown-item" href="/quan-ly"><i class="bi bi-phone-vibrate"></i> App quản lý</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item text-danger" href="/logout"><i class="bi bi-box-arrow-right"></i> Đăng xuất</a></li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

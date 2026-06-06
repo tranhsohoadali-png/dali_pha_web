@@ -9,15 +9,7 @@
   <style>.sw{width:28px;height:28px;border-radius:.3rem;border:1px solid rgba(0,0,0,.2);display:inline-block;vertical-align:middle}</style>
 </head>
 <body class="bg-body-tertiary">
-<nav class="navbar navbar-expand bg-success" data-bs-theme="dark">
-  <div class="container-fluid">
-    <span class="navbar-brand mb-0 h1"><i class="bi bi-collection-fill"></i> Bảng màu DALI</span>
-    <div class="d-flex align-items-center gap-2">
-      <a href="/xu-ly-anh" class="btn btn-outline-light btn-sm"><i class="bi bi-image"></i> Xử lý ảnh</a>
-      <a href="/" class="btn btn-outline-light btn-sm"><i class="bi bi-arrow-left"></i> Về quản lý</a>
-    </div>
-  </div>
-</nav>
+{% include '_nav.html' %}
 <div class="container py-3">
   {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
   <div class="row g-3">
