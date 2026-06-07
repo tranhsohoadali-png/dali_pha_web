@@ -34,11 +34,19 @@
             <img id="preview" class="img-fluid rounded mb-2" hidden>
             {% if ai_available %}
             <div class="form-check mb-2">
-              <input class="form-check-input" type="checkbox" id="enhance" name="enhance" value="1">
+              <input class="form-check-input" type="checkbox" id="enhance" name="enhance" value="1" onchange="document.getElementById('styleWrap').classList.toggle('d-none',!this.checked)">
               <label class="form-check-label small" for="enhance">
                 <i class="bi bi-stars text-warning"></i> Tăng cường ảnh bằng AI (Google)
                 <span class="text-secondary d-block">Làm sạch / nâng nét ảnh khách trước khi số hoá. Chậm hơn vài giây.</span>
               </label>
+            </div>
+            <div id="styleWrap" class="mb-2 d-none">
+              <label class="form-label small mb-1">Phong cách tham chiếu (kho mẫu)</label>
+              <select name="style_category" class="form-select form-select-sm">
+                <option value="">Tự động (mẫu giống nhất, mọi nhãn)</option>
+                {% for c, n in style_categories %}<option value="{{ c }}">{{ c }} ({{ n }} mẫu)</option>{% endfor %}
+              </select>
+              <div class="form-text">AI sẽ bắt chước phong cách các mẫu cùng nhãn trong <a href="/kho-mau" target="_blank">Kho mẫu</a>.</div>
             </div>
             {% endif %}
             <button id="sub" class="btn btn-success w-100" disabled><i class="bi bi-magic"></i> Xử lý ảnh</button>

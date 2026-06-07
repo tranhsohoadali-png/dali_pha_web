@@ -630,21 +630,71 @@ def _colors_with_edits(res, request):
 def xu_ly_anh(request):
     from pha.imageproc import process_image
     from pha.ai_enhance import is_configured as ai_configured
+    from pha import style_library
     last = ImageResult.objects.all().order_by('-created_time')[:30]
     last_query = [{'name': _fmt_name(q.name), 'url': q.name} for q in last]
-    ctx = {'last_query': last_query, 'ai_available': ai_configured()}
+    ctx = {'last_query': last_query, 'ai_available': ai_configured(),
+           'style_categories': style_library.categories()}
     if request.method == 'POST' and request.FILES.get('image'):
         upload = request.FILES['image']
         fss = FileSystemStorage()
         name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_{upload.name}'
         fss.save(name, upload)
         enhance = request.POST.get('enhance') in ('1', 'on', 'true')
+        style_category = (request.POST.get('style_category') or '').strip() or None
         rec = ImageResult.objects.create(name=name, status=ImageResult.STATUS_PROCESSING,
                                          user=request.user.username)
-        _img_executor.submit(process_image, rec.id, name, enhance)
+        _img_executor.submit(process_image, rec.id, name, enhance, style_category)
         ctx['file_url'] = '/media/' + name
         return render(request, 'xu_ly_anh.html', ctx)
     return render(request, 'xu_ly_anh.html', ctx)
+
+
+@csrf_exempt
+@staff_required
+def kho_mau(request):
+    """Kho mẫu thành phẩm: tải hàng loạt + phân loại + xoá. Dùng làm ảnh tham
+    chiếu phong cách cho AI khi tăng cường ảnh khách."""
+    from pha import style_library
+    from pha.models import StyleSample
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'upload':
+            files = request.FILES.getlist('images')
+            category = (request.POST.get('category') or '').strip()
+            n = 0
+            for f in files:
+                if not f.content_type or not f.content_type.startswith('image/'):
+                    continue
+                try:
+                    style_library.add_sample(f, category=category, user=request.user.username)
+                    n += 1
+                except Exception:
+                    continue
+            messages.info(request, f'Đã thêm {n} mẫu' + (f' vào nhãn "{category}".' if category else '.'))
+        elif action == 'delete':
+            sid = request.POST.get('id')
+            obj = StyleSample.objects.filter(id=sid).first()
+            if obj:
+                try:
+                    os.remove(os.path.join(settings.MEDIA_ROOT, obj.name))
+                except OSError:
+                    pass
+                obj.delete()
+                messages.info(request, 'Đã xoá 1 mẫu.')
+        return redirect('/kho-mau')
+
+    cat = (request.GET.get('cat') or '').strip()
+    qs = StyleSample.objects.all()
+    if cat:
+        qs = qs.filter(category=cat)
+    total = StyleSample.objects.count()
+    items = list(qs[:300])
+    return render(request, 'kho_mau.html', {
+        'items': items, 'total': total, 'shown': len(items),
+        'categories': style_library.categories(), 'cur_cat': cat,
+        'truncated': qs.count() > 300,
+    })
 
 
 @csrf_exempt

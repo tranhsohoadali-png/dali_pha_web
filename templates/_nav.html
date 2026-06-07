@@ -14,10 +14,11 @@
           <a class="nav-link{% if request.path == '/' or request.path == '/cong-thuc-mau' %} active fw-semibold{% endif %}" href="/"><i class="bi bi-droplet-half"></i> Công thức pha</a>
         </li>
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle{% if '/xu-ly-anh' in request.path or '/dali-colors' in request.path %} active fw-semibold{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-image"></i> Xử lý ảnh</a>
+          <a class="nav-link dropdown-toggle{% if '/xu-ly-anh' in request.path or '/dali-colors' in request.path or '/kho-mau' in request.path %} active fw-semibold{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-image"></i> Xử lý ảnh</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="/xu-ly-anh"><i class="bi bi-card-image"></i> Tạo bản đồ màu</a></li>
             <li><a class="dropdown-item" href="/dali-colors"><i class="bi bi-collection"></i> Bảng màu DALI</a></li>
+            <li><a class="dropdown-item" href="/kho-mau"><i class="bi bi-images"></i> Kho mẫu (AI)</a></li>
           </ul>
         </li>
         <li class="nav-item">

@@ -45,6 +45,24 @@ class PaintStock(models.Model):
         return f'{self.name}: {self.stock}g'
 
 
+class StyleSample(models.Model):
+    """Mẫu thành phẩm (tranh tô màu số hoá đã hoàn thiện) dùng làm ảnh tham
+    chiếu phong cách cho AI. Mỗi mẫu lưu kèm 'sig' (chữ ký màu/bố cục) để chọn
+    nhanh các mẫu giống ảnh khách nhất khi tăng cường bằng AI."""
+    created_time = models.DateTimeField(auto_now_add=True)
+    name = models.TextField()                                  # file ảnh trong MEDIA_ROOT/style_samples
+    category = models.CharField(max_length=60, blank=True, default='', db_index=True)
+    sig = models.JSONField(default=list, blank=True)           # chữ ký 8x8 RGB (192 số) để so khớp
+    note = models.CharField(max_length=200, blank=True, default='')
+    user = models.CharField(max_length=80, blank=True, default='')
+
+    class Meta:
+        ordering = ['-created_time', '-id']
+
+    def __str__(self):
+        return f'{self.id}-{self.category}-{self.name}'
+
+
 class ProductionLog(models.Model):
     """Nhật ký pha màu (thống kê lượng màu gốc dùng theo ngày/tháng)."""
     created_time = models.DateTimeField(auto_now_add=True)

@@ -23,6 +23,7 @@ urlpatterns = [
 
     # Xử lý ảnh (tab cho chủ)
     path('dali-colors', views.dali_colors, name='dali_colors'),
+    path('kho-mau', views.kho_mau, name='kho_mau'),
     path('xu-ly-anh', views.xu_ly_anh, name='xu_ly_anh'),
     path('anh-result', views.anh_result, name='anh_result'),
     path('anh-save-color', views.anh_save_color, name='anh_save_color'),

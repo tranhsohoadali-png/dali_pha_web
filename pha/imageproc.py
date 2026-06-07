@@ -52,10 +52,11 @@ def create_image_color(color_mapping, hex_list, percentages=None):
     return result
 
 
-def process_image(rec_id, name, enhance=False):
+def process_image(rec_id, name, enhance=False, style_category=None):
     """Chạy nền: (tùy chọn) tăng cường ảnh bằng AI, rồi xử lý + cập nhật ImageResult.
 
     enhance=True: gọi Google AI làm sạch/nâng cấp ảnh khách trước khi đánh số.
+    style_category: nếu có, chọn ảnh mẫu trong kho cùng nhãn làm tham chiếu phong cách.
     Khâu đánh số + khớp mã DALI luôn chạy như cũ trên ảnh (đã hoặc chưa tăng cường).
     """
     obj = ImageResult.objects.get(id=rec_id)
@@ -63,9 +64,11 @@ def process_image(rec_id, name, enhance=False):
         path = os.path.join(settings.MEDIA_ROOT, name)
         if enhance:
             from pha.ai_enhance import enhance_image
+            from pha import style_library
+            refs = style_library.pick_references(path, category=style_category, n=3)
             enhanced_name = f'{os.path.splitext(name)[0]}_ai.png'
             enhanced_path = os.path.join(settings.MEDIA_ROOT, enhanced_name)
-            enhance_image(path, enhanced_path)
+            enhance_image(path, enhanced_path, reference_paths=refs)
             obj.enhanced_name = enhanced_name
             obj.save(update_fields=['enhanced_name'])
             path = enhanced_path  # số hoá trên ảnh đã tăng cường

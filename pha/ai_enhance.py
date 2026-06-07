@@ -52,13 +52,23 @@ def _get_api_key():
     return key
 
 
-def enhance_image(input_path, output_path, prompt=None):
+# Hướng dẫn thêm khi có ảnh mẫu tham chiếu (few-shot style).
+STYLE_REF_INSTRUCTION = (
+    " The additional images provided are reference paint-by-numbers artworks made "
+    "in our shop's style. Match that artistic style — color simplification level, "
+    "region size and clean flat color areas — while keeping the original photo's "
+    "exact composition and subject."
+)
+
+
+def enhance_image(input_path, output_path, prompt=None, reference_paths=None):
     """
     Gọi Google Gemini Image để tăng cường ảnh.
 
-    input_path  : đường dẫn ảnh gốc (ảnh khách).
-    output_path : nơi ghi ảnh đã tăng cường (PNG).
-    prompt      : ghi đè prompt mặc định (tùy chọn).
+    input_path      : đường dẫn ảnh gốc (ảnh khách).
+    output_path     : nơi ghi ảnh đã tăng cường (PNG).
+    prompt          : ghi đè prompt mặc định (tùy chọn).
+    reference_paths : danh sách ảnh mẫu phong cách gửi kèm (few-shot, tối đa ~3-4).
 
     Trả về output_path khi thành công. Ném AIEnhanceError nếu lỗi.
     """
@@ -79,11 +89,26 @@ def enhance_image(input_path, output_path, prompt=None):
     except Exception as e:
         raise AIEnhanceError(f"Không mở được ảnh gốc: {e}") from e
 
+    refs = []
+    for rp in (reference_paths or []):
+        try:
+            ref = Image.open(rp)
+            ref.load()
+            refs.append(ref)
+        except Exception:
+            continue  # bỏ qua mẫu lỗi, không làm hỏng cả lần chạy
+
+    text = prompt or DEFAULT_ENHANCE_PROMPT
+    if refs:
+        text += STYLE_REF_INSTRUCTION
+    # Đưa ảnh gốc cuối cùng để model hiểu đây là ảnh cần xử lý.
+    contents = [text] + refs + [src]
+
     try:
         client = genai.Client(api_key=key)
         resp = client.models.generate_content(
             model=AI_ENHANCE_MODEL,
-            contents=[prompt or DEFAULT_ENHANCE_PROMPT, src],
+            contents=contents,
         )
     except Exception as e:
         raise AIEnhanceError(f"Gọi Google AI thất bại: {e}") from e
