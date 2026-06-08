@@ -46,6 +46,7 @@ class ImageResult(models.Model):
     enhanced_name = models.TextField(blank=True, default='')  # file ảnh đã tăng cường bằng AI (nếu có)
     name_output = models.TextField(blank=True, default='')   # file kết quả png
     colors = models.JSONField(default=list, blank=True)      # [[stt,hex,dali,percent],...]
+    params = models.JSONField(default=dict, blank=True)      # thông số đầu vào: {enhance,color_limit,min_area}
     status = models.CharField(max_length=20, default=STATUS_PROCESSING)
     error_message = models.TextField(blank=True, default='')
     user = models.CharField(max_length=80, blank=True, default='')

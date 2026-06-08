@@ -89,10 +89,12 @@
         </div>
         <div class="card-body">
           <div id="err" class="alert alert-danger d-none"></div>
-          <div class="row g-2 mb-3">
-            <div class="col-6"><div id="lblOrigin" class="small text-secondary mb-1">Ảnh gốc</div><img id="imgOrigin" src="{{ file_url }}" class="result-img"></div>
-            <div class="col-6"><div class="small text-secondary mb-1">Bản đồ đánh số</div><img id="imgResult" src="#" class="result-img" hidden></div>
+          <div class="row g-2 mb-2">
+            <div class="col"><div class="small text-secondary mb-1">Ảnh gốc (đầu vào)</div><img id="imgOrigin" src="{{ file_url }}" class="result-img"></div>
+            <div class="col" id="enhancedWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-stars text-warning"></i> Ảnh đã tăng cường (AI)</div><img id="imgEnhanced" src="#" class="result-img"></div>
+            <div class="col"><div class="small text-secondary mb-1">Bản đồ đánh số</div><img id="imgResult" src="#" class="result-img" hidden></div>
           </div>
+          <div id="paramInfo" class="small text-secondary mb-3 d-none"></div>
           <div class="border-top pt-3">
             <div class="row g-2 align-items-end">
               <div class="col-md-4"><label class="form-label small mb-1">Tên (in lên bản)</label><input id="imgName" class="form-control form-control-sm" placeholder="VD: K496"></div>
@@ -172,9 +174,17 @@
       spin(false);
       if(res.status==='error'){ document.getElementById('err').textContent=res.error||'Lỗi xử lý ảnh'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); return; }
       document.getElementById('imgResult').src=res.img_output; document.getElementById('imgResult').hidden=false;
-      var lbl=document.getElementById('lblOrigin');
-      if(res.enhanced){ document.getElementById('imgOrigin').src=res.enhanced; lbl.innerHTML='<i class="bi bi-stars text-warning"></i> Ảnh đã tăng cường (AI)'; }
-      else { lbl.textContent='Ảnh gốc'; }
+      // Ảnh gốc luôn giữ; ảnh AI (nếu có) hiện ở ô riêng để đối chiếu.
+      if(res.original) document.getElementById('imgOrigin').src=res.original;
+      var ew=document.getElementById('enhancedWrap');
+      if(res.enhanced){ document.getElementById('imgEnhanced').src=res.enhanced; ew.hidden=false; }
+      else { ew.hidden=true; }
+      // Dòng thông số đã dùng (để kiểm tra)
+      var p=res.params||{}; var pi=document.getElementById('paramInfo');
+      var t='<i class="bi bi-sliders"></i> Thông số: '+(p.color_limit?('Số màu '+p.color_limit):'Số màu tự động')
+            +' · '+(p.min_area?('Bỏ mảng <'+p.min_area+'px'):'Không lọc mảng')
+            +' · AI: '+(p.enhance?'có':'không')+(p.enhance&&p.style_category?(' ('+p.style_category+')'):'');
+      pi.innerHTML=t; pi.classList.remove('d-none');
       ['btnPrint','dXlsx','dLegend','dCsv'].forEach(id=>document.getElementById(id).hidden=false);
       showPalette(res.colors||[]); if(onDone)onDone();
     }).fail(function(){ spin(false); document.getElementById('err').textContent='Không kết nối được máy chủ.'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); });

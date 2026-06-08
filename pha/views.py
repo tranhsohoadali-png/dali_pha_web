@@ -721,8 +721,10 @@ def xu_ly_anh(request):
         except ValueError:
             min_area = 0
         min_area = max(0, min(min_area, 100000))  # 0 = không lọc mảng nhỏ
-        rec = ImageResult.objects.create(name=name, status=ImageResult.STATUS_PROCESSING,
-                                         user=request.user.username)
+        rec = ImageResult.objects.create(
+            name=name, status=ImageResult.STATUS_PROCESSING, user=request.user.username,
+            params={'enhance': enhance, 'color_limit': color_limit, 'min_area': min_area,
+                    'style_category': style_category or ''})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
                              color_limit, min_area)
         ctx['file_url'] = '/media/' + name
@@ -847,7 +849,9 @@ def anh_result(request):
     if res.status == ImageResult.STATUS_ERROR:
         return JsonResponse({'status': 'error', 'error': res.error_message})
     return JsonResponse({'status': 'done', 'img_output': '/media/' + res.name_output,
+                         'original': '/media/' + res.name,
                          'enhanced': ('/media/' + res.enhanced_name) if res.enhanced_name else '',
+                         'params': res.params or {},
                          'colors': split_list(10, res.colors)})
 
 
