@@ -302,7 +302,48 @@ def _remove_small_components(mask, min_area):
     return out
 
 
-def _quantize_file(path, n, smooth=0):
+def _merge_small_regions(img_rgb, min_area=0, min_radius=5.5, max_pass=6):
+    """GỘP các vùng KHÔNG ĐÁNH ĐƯỢC SỐ vào màu hàng xóm (để tranh hết 'dăm').
+    Một vùng bị gộp nếu: diện tích < min_area, HOẶC bán kính nội tiếp < min_radius
+    (vùng quá mảnh/nhỏ, số không lọt). Lặp tới khi không còn vùng nào phải gộp.
+    Trả ảnh đã sạch: mọi vùng còn lại đều đủ chỗ để đánh số."""
+    img = img_rgb.copy()
+    H, W = img.shape[:2]
+    k3 = np.ones((3, 3), np.uint8)
+    for _ in range(max_pass):
+        flat = img.reshape(-1, 3)
+        colors, inv = np.unique(flat, axis=0, return_inverse=True)
+        label_img = inv.reshape(H, W).astype(np.int32)
+        changed = False
+        for ci in range(len(colors)):
+            mask = (label_img == ci).astype(np.uint8)
+            if not mask.any():
+                continue
+            dist = cv2.distanceTransform(mask, cv2.DIST_L2, 3)
+            num, comp, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+            for k in range(1, num):
+                area = stats[k, cv2.CC_STAT_AREA]
+                cm = comp == k
+                rad = float(dist[cm].max())
+                too_small = (min_area and area < min_area) or (rad < min_radius)
+                if not too_small:
+                    continue
+                dil = cv2.dilate(cm.astype(np.uint8), k3) > 0
+                border = dil & (~cm)
+                nb = label_img[border]
+                nb = nb[nb != ci]
+                if nb.size == 0:
+                    continue
+                new_ci = int(np.bincount(nb).argmax())
+                img[cm] = colors[new_ci]
+                label_img[cm] = new_ci      # cập nhật để hàng xóm sau dùng đúng
+                changed = True
+        if not changed:
+            break
+    return img
+
+
+def _quantize_file(path, n, smooth=0, min_area=0):
     """Gom ảnh về tối đa n màu (median-cut) rồi lưu file tạm. Trả (đường_dẫn_tạm).
     smooth (0..3): làm phẳng vùng bằng mean-shift trước khi gom màu — biến ảnh
     màu nước/ảnh chụp (chuyển sắc mượt, nhiều chi tiết) thành các MẢNG ĐẶC sạch,
@@ -330,6 +371,9 @@ def _quantize_file(path, n, smooth=0):
     q = im.quantize(colors=k_work, method=Image.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
     arr = np.array(q)
     arr = _reduce_palette_perceptual(arr, target)
+    # GỘP các vùng không đánh được số vào hàng xóm -> hết 'dăm', mọi ô đều numberable.
+    min_radius = (MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0
+    arr = _merge_small_regions(arr, min_area=min_area, min_radius=min_radius)
     fd, out = tempfile.mkstemp(suffix='.png', prefix='quant_')
     os.close(fd)
     Image.fromarray(arr).save(out)
@@ -423,7 +467,7 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
     import os
     import shutil
     effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
-    work_path = _quantize_file(path, effective_n, smooth=smooth)
+    work_path = _quantize_file(path, effective_n, smooth=smooth, min_area=min_area)
     if design_out:
         try:
             shutil.copyfile(work_path, design_out)   # bản màu phẳng để xem trước
@@ -448,10 +492,10 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
     for color, count in colors:
         # print(f"Processing color {color_idx}: {color} with count: {count}")
         range_img = get_color_areas(img_rgb, color, color, color_idx, debug=debug)
-        range_img = _remove_small_components(range_img, min_area)
+        # (Mảng nhỏ đã được GỘP vào hàng xóm ở bước _quantize_file -> không xoá nữa.)
 
         contours, hierarchy = cv2.findContours(range_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-        # Sau khi lọc mảng nhỏ, màu này có thể không còn vùng nào -> bỏ qua.
+        # Phòng trường hợp màu không còn vùng nào -> bỏ qua.
         if hierarchy is None or not contours:
             color_idx += 1
             continue
