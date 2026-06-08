@@ -73,29 +73,32 @@ AI_USE_STYLE_REFS = config("AI_USE_STYLE_REFS", default="0") == "1"
 # Mỗi preset đóng gói: prompt AI riêng + bộ thông số tách màu phù hợp.
 # Chọn preset trên giao diện -> tự điền thông số + dùng đúng prompt khi bật AI.
 _PROMPT_PHOTO = config("AI_PROMPT_PHOTO", default=(
-    "ROLE & GOAL. Redraw this REAL PHOTOGRAPH into a beautiful PORTRAIT coloring "
-    "template for paint-by-numbers: clean, flat color regions with bold closed "
-    "outlines, in a polished semi-anime / soft cartoon portrait style. The output "
-    "feeds a program that traces flat areas and numbers them, so photographic "
-    "texture/noise is harmful — but the FACE must stay detailed and lifelike.\n"
-    "KEEP IDENTITY. Keep the SAME person(s), face shape, pose, hairstyle, clothing "
-    "and composition. Preserve the likeness and the smiling expression — it must "
-    "clearly look like the same person. Re-draw, do not just filter.\n"
-    "FACE — MOST IMPORTANT. Render the facial features CLEARLY and attractively: "
-    "well-shaped EYES with visible iris, pupil, upper eyelid line, eyebrows and a "
-    "few lashes; a clean NOSE (soft bridge, tip, subtle nostrils); well-defined "
-    "smiling LIPS with a lip line. Use FRESH, healthy skin tones — warm and bright "
-    "with soft rosy cheeks and a light blush; NEVER dull, grey, muddy or sickly "
-    "skin. Eyes bright and clear. Keep facial outlines SOFT, thin and smooth (gentle "
-    "curves), much finer than the bold outlines used elsewhere; no harsh or broken "
-    "lines on the face. Shade the face with only a FEW clean flat tones (base skin, "
-    "a soft shadow tone, a highlight) so it stays smooth but three-dimensional.\n"
-    "EVERYTHING ELSE. Flatten hair into a few big smooth locks, clothes into a few "
-    "even tones, and DECLUTTER the background heavily into a few large flat shapes. "
-    "No gradients, pores, photo noise or tiny specks. Big paintable regions; merge "
-    "tiny scattered details. Use a clean, fresh, slightly vivid palette.\n"
-    "Result: a neat, printable, GOOD-LOOKING portrait coloring page — same aspect "
-    "ratio, output only the redrawn image."
+    "ROLE. Turn this REAL PHOTOGRAPH into a paint-by-numbers template by SIMPLIFYING "
+    "it, while keeping it look like the SAME REAL PHOTO. Think of it as a high-quality "
+    "POSTERIZE / cut-out of the real photograph — NOT an artistic re-imagination.\n"
+    "ABSOLUTE RULES (do not break):\n"
+    "- This is REALISTIC, not stylised. Do NOT turn it into anime, manga, cartoon, "
+    "comic, 3D render, oil painting or any illustration style. Do NOT beautify, "
+    "reshape or 'AI-generate' a new face. The result must look like the real person "
+    "in the real photo, just simplified.\n"
+    "- Keep the EXACT same person, real face, real proportions, real expression, "
+    "pose, hair, clothing, objects and background layout. Keep the REAL colours and "
+    "REAL skin tone of the photo — only flatten them; never invent a new palette.\n"
+    "WHAT TO DO (only this):\n"
+    "1) POSTERIZE: merge near-identical neighbouring shades into ONE flat colour, so "
+    "smooth gradients become a few clean flat bands of the SAME real colours.\n"
+    "2) REMOVE photographic noise, grain, fine texture, skin pores and stray wisps so "
+    "every area becomes a clean solid shape (this is the only 'cleaning' allowed).\n"
+    "3) FACE: keep the real eyes, eyebrows, nose, lips and the real smile exactly "
+    "where they are and shaped as they really are — just rendered with a few flat, "
+    "natural skin/feature tones. Skin stays natural and realistic (you may keep its "
+    "healthy warm tone), NEVER grey/muddy, but do NOT cartoonify the features.\n"
+    "4) Use THIN, subtle boundaries where colours meet. Do NOT draw thick black "
+    "cartoon outlines around everything; only soft edges between flat regions.\n"
+    "5) Keep enough flat tones to stay recognisable and three-dimensional "
+    "(realistic posterise), not a flat 2-tone cartoon.\n"
+    "Keep the same framing and aspect ratio. Output ONLY the simplified realistic "
+    "image."
 ))
 _PROMPT_DESIGN = config("AI_PROMPT_DESIGN", default=(
     "ROLE & GOAL. This is already a clean flat/vector-style DESIGN. Standardize it "
@@ -116,8 +119,9 @@ PRESETS = {
     },
     'photo': {
         'label': 'Ảnh thật khách hàng (chân dung, 30–48 màu)',
-        'desc': 'Ảnh chụp người -> tranh chân dung tô màu: rõ mắt/mũi/mồm, da tươi, '
-                'nét mặt mềm. BẬT AI + học phong cách từ Kho mẫu (chân dung).',
+        'desc': 'Giữ NGUYÊN ảnh thật (đúng người/màu/mặt), chỉ giản lược thành tranh '
+                'tô màu (posterize) — KHÔNG đổi sang anime/AI. Bật AI = posterize sạch '
+                'hơn; tắt AI = giản lược thuần thuật toán. Cả hai đều giữ ảnh thật.',
         'color_limit': 40, 'smooth': 2, 'min_area': 60, 'enhance': True,
         'use_refs': True, 'prompt': _PROMPT_PHOTO,
     },
