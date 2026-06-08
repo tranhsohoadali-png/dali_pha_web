@@ -657,11 +657,31 @@ def dali_colors(request):
 
 # ===================== XỬ LÝ ẢNH (tab cho chủ) =====================
 def _fmt_name(filename):
+    """Tên hiển thị gọn: '18:58 08/06 · Asset 2@4x.png' từ tên file có timestamp."""
     try:
-        first_dot = filename.find('.')
-        return filename[:first_dot] + ' ' + filename[filename.find('_') + 1:]
-    except Exception:
+        date_part, time_part, rest = filename.split('_', 2)
+        return f'{time_part[:5].replace("-", ":")} {date_part[8:10]}/{date_part[5:7]} · {rest}'
+    except (ValueError, IndexError):
         return filename
+
+
+# Bộ nhớ tạm: chỉ giữ N kết quả gần nhất, xoá kết quả cũ hơn (kèm file ảnh) cho gọn.
+RESULT_CACHE_KEEP = 10
+
+
+def _prune_image_results(keep=RESULT_CACHE_KEEP):
+    old_ids = list(ImageResult.objects.order_by('-created_time')
+                   .values_list('id', flat=True)[keep:])
+    if not old_ids:
+        return
+    for obj in ImageResult.objects.filter(id__in=old_ids):
+        for fn in (obj.name, obj.enhanced_name, obj.design_name, obj.name_output):
+            if fn:
+                try:
+                    os.remove(os.path.join(settings.MEDIA_ROOT, fn))
+                except OSError:
+                    pass
+    ImageResult.objects.filter(id__in=old_ids).delete()
 
 
 def _get_img(request):
@@ -700,10 +720,13 @@ def xu_ly_anh(request):
     from pha.imageproc import process_image
     from pha.ai_enhance import is_configured as ai_configured
     from pha import style_library
-    last = ImageResult.objects.all().order_by('-created_time')[:30]
-    last_query = [{'name': _fmt_name(q.name), 'url': q.name} for q in last]
-    ctx = {'last_query': last_query, 'ai_available': ai_configured(),
-           'style_categories': style_library.categories()}
+
+    def build_ctx():
+        last = ImageResult.objects.all().order_by('-created_time')[:RESULT_CACHE_KEEP]
+        return {'last_query': [{'name': _fmt_name(q.name), 'url': q.name} for q in last],
+                'ai_available': ai_configured(),
+                'style_categories': style_library.categories()}
+
     if request.method == 'POST' and request.FILES.get('image'):
         upload = request.FILES['image']
         fss = FileSystemStorage()
@@ -732,9 +755,12 @@ def xu_ly_anh(request):
                     'smooth': smooth, 'style_category': style_category or ''})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
                              color_limit, min_area, smooth)
+        _prune_image_results()                 # giữ 10 kết quả gần nhất (bộ nhớ tạm)
+        ctx = build_ctx()
         ctx['file_url'] = '/media/' + name
         return render(request, 'xu_ly_anh.html', ctx)
-    return render(request, 'xu_ly_anh.html', ctx)
+    _prune_image_results()
+    return render(request, 'xu_ly_anh.html', build_ctx())
 
 
 @csrf_exempt
