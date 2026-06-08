@@ -342,14 +342,13 @@ def _merge_small_regions(img_rgb, min_area=0, min_radius=5.5, max_pass=6):
                 if not too_small:
                     continue
                 dil = cv2.dilate(cm.astype(np.uint8), k3) > 0
-                border = dil & (~cm)
-                nb = label_img[border]
+                nb = label_img[dil & (~cm)]
                 nb = nb[nb != ci]
                 if nb.size == 0:
                     continue
                 new_ci = int(np.bincount(nb).argmax())
                 img[cm] = colors[new_ci]
-                label_img[cm] = new_ci      # cập nhật để hàng xóm sau dùng đúng
+                label_img[cm] = new_ci
                 changed = True
         if not changed:
             break
@@ -370,8 +369,8 @@ def _quantize_file(path, n, smooth=0, min_area=0):
         arr = np.array(im)[:, :, ::-1].copy()              # RGB -> BGR cho cv2
         h, w = arr.shape[:2]
         scale = 1.0
-        if max(h, w) > 1200:                               # hạ cỡ để mean-shift nhanh
-            scale = 1200.0 / max(h, w)
+        if max(h, w) > 900:                                # hạ cỡ để mean-shift nhanh
+            scale = 900.0 / max(h, w)
             arr = cv2.resize(arr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
         arr = cv2.pyrMeanShiftFiltering(arr, sp, sr)
         if scale != 1.0:
@@ -386,7 +385,7 @@ def _quantize_file(path, n, smooth=0, min_area=0):
     arr = _reduce_palette_perceptual(arr, target)
     # GỘP các vùng không đánh được số vào hàng xóm -> hết 'dăm', mọi ô đều numberable.
     min_radius = (MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0
-    arr = _merge_small_regions(arr, min_area=min_area, min_radius=min_radius)
+    arr = _merge_small_regions(arr, min_area=min_area, min_radius=min_radius, max_pass=4)
     # LÀM MƯỢT biên vùng (median trên nhãn màu) -> bỏ răng cưa/mảnh thừa do gộp.
     arr = _smooth_boundaries(arr, ksize=5)
     arr = _merge_small_regions(arr, min_area=0, min_radius=min_radius, max_pass=2)

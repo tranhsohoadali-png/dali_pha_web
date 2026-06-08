@@ -757,13 +757,14 @@ def xu_ly_anh(request):
         preset_key = (request.POST.get('preset') or 'anime').strip()
         preset = get_preset(preset_key)
         ai_prompt = preset.get('prompt')        # prompt riêng theo loại tranh
+        use_refs = bool(preset.get('use_refs'))  # dùng Kho mẫu làm tham chiếu phong cách
         rec = ImageResult.objects.create(
             name=name, status=ImageResult.STATUS_PROCESSING, user=request.user.username,
             params={'enhance': enhance, 'color_limit': color_limit, 'min_area': min_area,
                     'smooth': smooth, 'style_category': style_category or '',
                     'preset': preset_key})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
-                             color_limit, min_area, smooth, ai_prompt)
+                             color_limit, min_area, smooth, ai_prompt, use_refs)
         _prune_image_results()                 # giữ 10 kết quả gần nhất (bộ nhớ tạm)
         ctx = build_ctx()
         ctx['file_url'] = '/media/' + name

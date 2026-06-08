@@ -53,7 +53,7 @@ def create_image_color(color_mapping, hex_list, percentages=None):
 
 
 def process_image(rec_id, name, enhance=False, style_category=None, color_limit=0,
-                  min_area=0, smooth=0, ai_prompt=None):
+                  min_area=0, smooth=0, ai_prompt=None, use_refs=False):
     """Chạy nền: (tùy chọn) tăng cường ảnh bằng AI, rồi xử lý + cập nhật ImageResult.
 
     enhance=True: gọi Google AI làm sạch/nâng cấp ảnh khách trước khi đánh số.
@@ -68,11 +68,12 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
         if enhance:
             from pha.ai_enhance import enhance_image
             from pha import style_library
-            refs = style_library.pick_references(path, category=style_category, n=3)
+            refs = (style_library.pick_references(path, category=style_category, n=3)
+                    if use_refs else [])
             enhanced_name = f'{os.path.splitext(name)[0]}_ai.png'
             enhanced_path = os.path.join(settings.MEDIA_ROOT, enhanced_name)
             enhance_image(path, enhanced_path, prompt=ai_prompt, reference_paths=refs,
-                          color_limit=color_limit)
+                          color_limit=color_limit, use_refs=use_refs)
             obj.enhanced_name = enhanced_name
             obj.save(update_fields=['enhanced_name'])
             path = enhanced_path  # số hoá trên ảnh đã tăng cường

@@ -102,19 +102,20 @@ PRESETS = {
         'label': 'Anime / tranh nhỏ (dưới 12 màu)',
         'desc': 'Tranh anime/chibi, nét sạch, ít màu. Số nhỏ gọn, nét mượt.',
         'color_limit': 12, 'smooth': 1, 'min_area': 60, 'enhance': False,
-        'prompt': DEFAULT_ENHANCE_PROMPT,
+        'use_refs': False, 'prompt': DEFAULT_ENHANCE_PROMPT,
     },
     'photo': {
-        'label': 'Ảnh thật khách hàng (đang phát triển)',
-        'desc': 'Ảnh chụp người/cảnh thật -> đơn giản hoá mạnh thành tranh tô màu.',
-        'color_limit': 18, 'smooth': 3, 'min_area': 150, 'enhance': True,
-        'prompt': _PROMPT_PHOTO,
+        'label': 'Ảnh thật khách hàng (30–48 màu)',
+        'desc': 'Ảnh chụp người/cảnh thật -> tranh tô màu nhiều tông (30–48 màu), '
+                'học phong cách từ Kho mẫu (chân dung).',
+        'color_limit': 40, 'smooth': 3, 'min_area': 90, 'enhance': True,
+        'use_refs': True, 'prompt': _PROMPT_PHOTO,
     },
     'design': {
         'label': 'Tranh thiết kế (đang phát triển)',
         'desc': 'Ảnh thiết kế phẳng/vector sẵn -> chuẩn hoá nét + màu phẳng.',
         'color_limit': 16, 'smooth': 0, 'min_area': 40, 'enhance': False,
-        'prompt': _PROMPT_DESIGN,
+        'use_refs': False, 'prompt': _PROMPT_DESIGN,
     },
 }
 DEFAULT_PRESET = 'anime'
@@ -168,17 +169,20 @@ def _get_api_key():
     return key
 
 
-# Hướng dẫn thêm khi có ảnh mẫu tham chiếu (chỉ dùng nếu bật AI_USE_STYLE_REFS).
+# Hướng dẫn khi gửi kèm ảnh mẫu tham chiếu phong cách. Viết CHẶT cho CHÂN DUNG:
+# chỉ học cách vẽ, tuyệt đối không copy khuôn mặt/người từ ảnh mẫu.
 STYLE_REF_INSTRUCTION = (
-    " The FIRST images are style references ONLY: copy nothing from them except the "
-    "drawing style (outline thickness, flatness, palette size). You MUST ignore "
-    "their subjects/objects entirely. The LAST image is the only one to redraw — "
-    "keep its exact subject and composition."
+    " The FIRST image(s) are STYLE REFERENCES — examples of our shop's finished "
+    "paint-by-numbers artwork. Learn ONLY their drawing style from them: outline "
+    "thickness, how skin/hair are flattened into a few tones, region size and "
+    "palette feel. You MUST NOT copy their faces, people, identity, pose, clothing "
+    "or background. Redraw ONLY the LAST image (the customer's photo), keeping the "
+    "EXACT same person, face, identity, pose and composition as that last image."
 )
 
 
 def enhance_image(input_path, output_path, prompt=None, reference_paths=None,
-                  color_limit=0):
+                  color_limit=0, use_refs=None):
     """
     Gọi Google Gemini Image để tăng cường ảnh.
 
@@ -187,10 +191,13 @@ def enhance_image(input_path, output_path, prompt=None, reference_paths=None,
     prompt          : ghi đè prompt mặc định (tùy chọn).
     reference_paths : danh sách ảnh mẫu phong cách gửi kèm (few-shot, tối đa ~3-4).
     color_limit     : số màu tối đa AI được dùng (0 = không giới hạn).
+    use_refs        : có gửi ảnh mẫu kèm không (None = theo AI_USE_STYLE_REFS).
 
     Trả về output_path khi thành công. Ném AIEnhanceError nếu lỗi.
     """
     key = _get_api_key()
+    if use_refs is None:
+        use_refs = AI_USE_STYLE_REFS
 
     try:
         from google import genai  # noqa: WPS433 (import trong hàm: chỉ nạp khi cần)
@@ -207,9 +214,9 @@ def enhance_image(input_path, output_path, prompt=None, reference_paths=None,
     except Exception as e:
         raise AIEnhanceError(f"Không mở được ảnh gốc: {e}") from e
 
-    # Chỉ nạp ảnh mẫu khi bật AI_USE_STYLE_REFS (mặc định tắt để không lẫn chủ thể).
+    # Nạp ảnh mẫu chỉ khi preset cho phép (use_refs).
     refs = []
-    if AI_USE_STYLE_REFS:
+    if use_refs:
         for rp in (reference_paths or []):
             try:
                 ref = Image.open(rp)
