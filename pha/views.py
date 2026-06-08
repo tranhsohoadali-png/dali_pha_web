@@ -721,11 +721,15 @@ def xu_ly_anh(request):
     from pha.ai_enhance import is_configured as ai_configured
     from pha import style_library
 
+    from pha.ai_enhance import presets_for_ui, DEFAULT_PRESET
+
     def build_ctx():
         last = ImageResult.objects.all().order_by('-created_time')[:RESULT_CACHE_KEEP]
         return {'last_query': [{'name': _fmt_name(q.name), 'url': q.name} for q in last],
                 'ai_available': ai_configured(),
-                'style_categories': style_library.categories()}
+                'style_categories': style_library.categories(),
+                'presets_json': json.dumps(presets_for_ui()),
+                'default_preset': DEFAULT_PRESET}
 
     if request.method == 'POST' and request.FILES.get('image'):
         upload = request.FILES['image']
@@ -749,12 +753,17 @@ def xu_ly_anh(request):
         except ValueError:
             smooth = 0
         smooth = max(0, min(smooth, 3))  # 0=không, 1=nhẹ, 2=vừa, 3=mạnh
+        from pha.ai_enhance import get_preset
+        preset_key = (request.POST.get('preset') or 'anime').strip()
+        preset = get_preset(preset_key)
+        ai_prompt = preset.get('prompt')        # prompt riêng theo loại tranh
         rec = ImageResult.objects.create(
             name=name, status=ImageResult.STATUS_PROCESSING, user=request.user.username,
             params={'enhance': enhance, 'color_limit': color_limit, 'min_area': min_area,
-                    'smooth': smooth, 'style_category': style_category or ''})
+                    'smooth': smooth, 'style_category': style_category or '',
+                    'preset': preset_key})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
-                             color_limit, min_area, smooth)
+                             color_limit, min_area, smooth, ai_prompt)
         _prune_image_results()                 # giữ 10 kết quả gần nhất (bộ nhớ tạm)
         ctx = build_ctx()
         ctx['file_url'] = '/media/' + name

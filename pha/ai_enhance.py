@@ -69,6 +69,70 @@ DEFAULT_ENHANCE_PROMPT = config(
 AI_USE_STYLE_REFS = config("AI_USE_STYLE_REFS", default="0") == "1"
 
 
+# ===================== GÓI CẤU HÌNH THEO LOẠI TRANH (PRESETS) =====================
+# Mỗi preset đóng gói: prompt AI riêng + bộ thông số tách màu phù hợp.
+# Chọn preset trên giao diện -> tự điền thông số + dùng đúng prompt khi bật AI.
+_PROMPT_PHOTO = config("AI_PROMPT_PHOTO", default=(
+    "ROLE & GOAL. Convert this REAL PHOTOGRAPH into a simple PAINT-BY-NUMBERS "
+    "coloring template made of a few large, clean, FLAT color regions with bold "
+    "closed outlines — like a tidy cartoon/anime poster. The output feeds a program "
+    "that traces flat areas and numbers them, so detail and texture are harmful.\n"
+    "TASK. Keep the SAME people/subject, pose, identity and composition. Do not add "
+    "or remove anyone. Re-draw, do not just filter.\n"
+    "RULES: (1) Bold, smooth, fully-closed dark outlines. (2) FLAT solid colors only "
+    "— smooth skin, hair and clothes into a few even tones; NO photographic gradients, "
+    "shadows, pores, noise or texture. (3) Simplify hair into a few big locks, skin "
+    "into 2-3 flat tones, and DECLUTTER the background heavily into a few large flat "
+    "shapes. (4) Big paintable regions, merge tiny details. (5) Limited, clean palette. "
+    "Result must look hand-drawn and printable, NOT photographic. Same aspect ratio, "
+    "output only the redrawn image."
+))
+_PROMPT_DESIGN = config("AI_PROMPT_DESIGN", default=(
+    "ROLE & GOAL. This is already a clean flat/vector-style DESIGN. Standardize it "
+    "into a tidy PAINT-BY-NUMBERS coloring template without changing the artwork.\n"
+    "TASK. Keep the EXACT same subject, shapes, layout and colors. Minimal change.\n"
+    "RULES: (1) Make all outlines bold, smooth and fully closed (vector-like). "
+    "(2) Force every fill to ONE flat solid color (remove any gradient/soft edge). "
+    "(3) Merge only the tiniest specks into neighbours; keep the intended shapes. "
+    "(4) Keep the palette clean and limited. Same aspect ratio, output only the image."
+))
+
+PRESETS = {
+    'anime': {
+        'label': 'Anime / tranh nhỏ (dưới 12 màu)',
+        'desc': 'Tranh anime/chibi, nét sạch, ít màu. Số nhỏ gọn, nét mượt.',
+        'color_limit': 12, 'smooth': 1, 'min_area': 60, 'enhance': False,
+        'prompt': DEFAULT_ENHANCE_PROMPT,
+    },
+    'photo': {
+        'label': 'Ảnh thật khách hàng (đang phát triển)',
+        'desc': 'Ảnh chụp người/cảnh thật -> đơn giản hoá mạnh thành tranh tô màu.',
+        'color_limit': 18, 'smooth': 3, 'min_area': 150, 'enhance': True,
+        'prompt': _PROMPT_PHOTO,
+    },
+    'design': {
+        'label': 'Tranh thiết kế (đang phát triển)',
+        'desc': 'Ảnh thiết kế phẳng/vector sẵn -> chuẩn hoá nét + màu phẳng.',
+        'color_limit': 16, 'smooth': 0, 'min_area': 40, 'enhance': False,
+        'prompt': _PROMPT_DESIGN,
+    },
+}
+DEFAULT_PRESET = 'anime'
+
+
+def get_preset(key):
+    """Trả về gói cấu hình của preset (mặc định 'anime' nếu key lạ)."""
+    return PRESETS.get(key, PRESETS[DEFAULT_PRESET])
+
+
+def presets_for_ui():
+    """Danh sách preset gọn cho giao diện (JSON-able)."""
+    return {k: {'label': v['label'], 'desc': v['desc'],
+                'color_limit': v['color_limit'], 'smooth': v['smooth'],
+                'min_area': v['min_area'], 'enhance': v['enhance']}
+            for k, v in PRESETS.items()}
+
+
 class AIEnhanceError(Exception):
     """Lỗi trong quá trình tăng cường ảnh bằng AI."""
     pass
