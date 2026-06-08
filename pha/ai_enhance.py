@@ -85,7 +85,8 @@ STYLE_REF_INSTRUCTION = (
 )
 
 
-def enhance_image(input_path, output_path, prompt=None, reference_paths=None):
+def enhance_image(input_path, output_path, prompt=None, reference_paths=None,
+                  color_limit=0):
     """
     Gọi Google Gemini Image để tăng cường ảnh.
 
@@ -93,6 +94,7 @@ def enhance_image(input_path, output_path, prompt=None, reference_paths=None):
     output_path     : nơi ghi ảnh đã tăng cường (PNG).
     prompt          : ghi đè prompt mặc định (tùy chọn).
     reference_paths : danh sách ảnh mẫu phong cách gửi kèm (few-shot, tối đa ~3-4).
+    color_limit     : số màu tối đa AI được dùng (0 = không giới hạn).
 
     Trả về output_path khi thành công. Ném AIEnhanceError nếu lỗi.
     """
@@ -125,6 +127,15 @@ def enhance_image(input_path, output_path, prompt=None, reference_paths=None):
                 continue  # bỏ qua mẫu lỗi, không làm hỏng cả lần chạy
 
     text = prompt or DEFAULT_ENHANCE_PROMPT
+    try:
+        cl = int(color_limit or 0)
+    except (TypeError, ValueError):
+        cl = 0
+    if cl > 0:
+        text += (
+            f" Use at most {cl} distinct flat colors in total for the whole image; "
+            f"merge similar shades so the final artwork has no more than {cl} colors."
+        )
     if refs:
         text += STYLE_REF_INSTRUCTION
     # Ảnh mẫu (nếu có) đặt TRƯỚC, ảnh khách đặt CUỐI = ảnh cần vẽ lại.

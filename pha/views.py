@@ -711,9 +711,14 @@ def xu_ly_anh(request):
         fss.save(name, upload)
         enhance = request.POST.get('enhance') in ('1', 'on', 'true')
         style_category = (request.POST.get('style_category') or '').strip() or None
+        try:
+            color_limit = int(request.POST.get('color_limit') or 0)
+        except ValueError:
+            color_limit = 0
+        color_limit = max(0, min(color_limit, 60))  # 0 = không giới hạn
         rec = ImageResult.objects.create(name=name, status=ImageResult.STATUS_PROCESSING,
                                          user=request.user.username)
-        _img_executor.submit(process_image, rec.id, name, enhance, style_category)
+        _img_executor.submit(process_image, rec.id, name, enhance, style_category, color_limit)
         ctx['file_url'] = '/media/' + name
         return render(request, 'xu_ly_anh.html', ctx)
     return render(request, 'xu_ly_anh.html', ctx)
