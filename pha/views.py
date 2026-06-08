@@ -721,12 +721,17 @@ def xu_ly_anh(request):
         except ValueError:
             min_area = 0
         min_area = max(0, min(min_area, 100000))  # 0 = không lọc mảng nhỏ
+        try:
+            smooth = int(request.POST.get('smooth') or 0)
+        except ValueError:
+            smooth = 0
+        smooth = max(0, min(smooth, 3))  # 0=không, 1=nhẹ, 2=vừa, 3=mạnh
         rec = ImageResult.objects.create(
             name=name, status=ImageResult.STATUS_PROCESSING, user=request.user.username,
             params={'enhance': enhance, 'color_limit': color_limit, 'min_area': min_area,
-                    'style_category': style_category or ''})
+                    'smooth': smooth, 'style_category': style_category or ''})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
-                             color_limit, min_area)
+                             color_limit, min_area, smooth)
         ctx['file_url'] = '/media/' + name
         return render(request, 'xu_ly_anh.html', ctx)
     return render(request, 'xu_ly_anh.html', ctx)

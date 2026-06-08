@@ -290,12 +290,27 @@ def _remove_small_components(mask, min_area):
     return out
 
 
-def _quantize_file(path, n):
+def _quantize_file(path, n, smooth=0):
     """Gom ảnh về tối đa n màu (median-cut) rồi lưu file tạm. Trả (đường_dẫn_tạm).
-    Mục đích: biến các sắc gần nhau (ảnh mượt/AI) thành mảng màu đặc, sạch."""
+    smooth (0..3): làm phẳng vùng bằng mean-shift trước khi gom màu — biến ảnh
+    màu nước/ảnh chụp (chuyển sắc mượt, nhiều chi tiết) thành các MẢNG ĐẶC sạch,
+    giống tranh tô màu. Càng cao càng gộp mạnh (ít chi tiết hơn)."""
     import os
     import tempfile
     im = Image.open(path).convert('RGB')
+    if smooth and int(smooth) > 0:
+        # sp = bán kính không gian, sr = bán kính màu. sr lớn -> gộp nhiều màu hơn.
+        sp, sr = {1: (9, 18), 2: (16, 32), 3: (26, 50)}.get(int(smooth), (16, 32))
+        arr = np.array(im)[:, :, ::-1].copy()              # RGB -> BGR cho cv2
+        h, w = arr.shape[:2]
+        scale = 1.0
+        if max(h, w) > 1200:                               # hạ cỡ để mean-shift nhanh
+            scale = 1200.0 / max(h, w)
+            arr = cv2.resize(arr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        arr = cv2.pyrMeanShiftFiltering(arr, sp, sr)
+        if scale != 1.0:
+            arr = cv2.resize(arr, (w, h), interpolation=cv2.INTER_NEAREST)
+        im = Image.fromarray(arr[:, :, ::-1])              # BGR -> RGB
     q = im.quantize(colors=max(2, n), method=Image.MEDIANCUT, dither=Image.Dither.NONE)
     q = q.convert('RGB')
     fd, out = tempfile.mkstemp(suffix='.png', prefix='quant_')
@@ -304,12 +319,13 @@ def _quantize_file(path, n):
     return out
 
 
-def index_color(path, debug=False, num_colors=0, min_area=0):
+def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0):
     """num_colors > 0: gom ảnh về tối đa N màu (để trống = DEFAULT_NUM_COLORS).
-    min_area > 0: bỏ các mảng màu nhỏ hơn N pixel (đỡ lấm tấm)."""
+    min_area > 0: bỏ các mảng màu nhỏ hơn N pixel (đỡ lấm tấm).
+    smooth (0..3): làm phẳng vùng (mean-shift) trước khi gom — dọn ảnh màu nước/chụp."""
     import os
     effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
-    work_path = _quantize_file(path, effective_n)
+    work_path = _quantize_file(path, effective_n, smooth=smooth)
     colors, pixel_count = extract_colors(work_path)
     colors = list(colors)
 

@@ -53,7 +53,7 @@ def create_image_color(color_mapping, hex_list, percentages=None):
 
 
 def process_image(rec_id, name, enhance=False, style_category=None, color_limit=0,
-                  min_area=0):
+                  min_area=0, smooth=0):
     """Chạy nền: (tùy chọn) tăng cường ảnh bằng AI, rồi xử lý + cập nhật ImageResult.
 
     enhance=True: gọi Google AI làm sạch/nâng cấp ảnh khách trước khi đánh số.
@@ -76,7 +76,7 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
             obj.save(update_fields=['enhanced_name'])
             path = enhanced_path  # số hoá trên ảnh đã tăng cường
         edge_img, color_mapping, percentages = index_color(
-            path, debug=False, num_colors=color_limit, min_area=min_area)
+            path, debug=False, num_colors=color_limit, min_area=min_area, smooth=smooth)
         dpi = Image.open(path).info.get('dpi', (72, 72))
         name_output = save_img(edge_img, dpi)
         colors = create_image_color(color_mapping, convert_to_hex(color_mapping), percentages)
