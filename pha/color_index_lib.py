@@ -311,12 +311,60 @@ def _quantize_file(path, n, smooth=0):
         if scale != 1.0:
             arr = cv2.resize(arr, (w, h), interpolation=cv2.INTER_NEAREST)
         im = Image.fromarray(arr[:, :, ::-1])              # BGR -> RGB
-    q = im.quantize(colors=max(2, n), method=Image.MEDIANCUT, dither=Image.Dither.NONE)
-    q = q.convert('RGB')
+    target = max(2, n)
+    # Gom DƯ nhiều màu trước (chia-đôi hay đẻ ra nhiều sắc gần giống của tông nền),
+    # rồi HỢP NHẤT các màu cùng tông theo cảm nhận mắt (LAB) xuống đúng `target`.
+    k_work = min(64, max(target * 4, 40))
+    q = im.quantize(colors=k_work, method=Image.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
+    arr = np.array(q)
+    arr = _reduce_palette_perceptual(arr, target)
     fd, out = tempfile.mkstemp(suffix='.png', prefix='quant_')
     os.close(fd)
-    q.save(out)
+    Image.fromarray(arr).save(out)
     return out
+
+
+def _reduce_palette_perceptual(img_rgb, target_n):
+    """Hợp nhất bảng màu xuống target_n bằng cách GỘP DẦN 2 màu GIỐNG NHAU NHẤT
+    (khoảng cách trong không gian LAB), không phụ thuộc diện tích. Nhờ vậy nhiều
+    sắc cùng tông (vd hàng loạt xanh lá nền) dồn lại, nhường suất cho các tông
+    khác biệt (hồng, cam, xanh dương) -> tranh đặc sắc + đỡ 'dăm'."""
+    flat = img_rgb.reshape(-1, 3)
+    colors, counts = np.unique(flat, axis=0, return_counts=True)
+    K = len(colors)
+    if K <= target_n:
+        return img_rgb
+    lab = cv2.cvtColor(colors.reshape(-1, 1, 3).astype('uint8'),
+                       cv2.COLOR_RGB2LAB).reshape(-1, 3).astype(float)
+    clusters = {i: {'lab': lab[i].copy(), 'cnt': float(counts[i]), 'members': [i]}
+                for i in range(K)}
+    while len(clusters) > target_n:
+        ids = list(clusters.keys())
+        best, pair = None, None
+        for a in range(len(ids)):
+            la = clusters[ids[a]]['lab']
+            for b in range(a + 1, len(ids)):
+                d = float(((la - clusters[ids[b]]['lab']) ** 2).sum())
+                if best is None or d < best:
+                    best, pair = d, (ids[a], ids[b])
+        i, j = pair
+        ci, cj = clusters[i], clusters[j]
+        tot = ci['cnt'] + cj['cnt']
+        ci['lab'] = (ci['lab'] * ci['cnt'] + cj['lab'] * cj['cnt']) / tot
+        ci['cnt'] = tot
+        ci['members'] += cj['members']
+        del clusters[j]
+    # Đại diện mỗi nhóm = màu có nhiều pixel nhất (giữ màu thật, không bị xỉn).
+    rep_of = np.zeros((K, 3), dtype=np.uint8)
+    for cl in clusters.values():
+        best_m = max(cl['members'], key=lambda m: counts[m])
+        rep = colors[best_m]
+        for m in cl['members']:
+            rep_of[m] = rep
+    out = np.zeros_like(flat)
+    for k, c in enumerate(colors):
+        out[np.all(flat == c, axis=1)] = rep_of[k]
+    return out.reshape(img_rgb.shape)
 
 
 def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_out=None):
