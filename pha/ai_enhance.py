@@ -23,16 +23,28 @@ AI_ENHANCE_MODEL = config("AI_ENHANCE_MODEL", default="gemini-2.5-flash-image")
 DEFAULT_ENHANCE_PROMPT = config(
     "AI_ENHANCE_PROMPT",
     default=(
-        "Redraw the EXACT same picture as a clean, simple paint-by-numbers "
-        "coloring illustration. Keep the identical subject, characters, animals, "
-        "objects, pose, layout, colors and composition as the input image. This "
-        "is critical: do NOT replace, add, remove or reinvent anything; if the "
-        "input shows a duck, the output must be the same duck (never another "
-        "animal). Simplify the shading into flat, evenly filled color regions "
-        "with a limited, clean palette, add consistent dark outlines around each "
-        "region, and remove noise, gradients, glare and background clutter. The "
-        "result must be clearly recognizable as the SAME image, just simplified "
-        "for painting by numbers. Output only the redrawn image, same aspect ratio."
+        "Redraw the EXACT same picture as a clean ANIME-STYLE coloring template "
+        "for paint-by-numbers, like tidy cel-shaded line art. Keep the identical "
+        "main subject, character, pose and overall composition as the input. This "
+        "is critical: do NOT replace, add or reinvent the subject; if the input "
+        "shows a duck, the output must be the same duck (never another animal). "
+        "Apply these style rules strictly: "
+        "(1) Outlines: bold, smooth, CLEAN solid black outlines of uniform "
+        "thickness around every shape, fully closed loops, like vector line art "
+        "(no sketchy, broken, doubled or textured lines). "
+        "(2) Colors: FLAT solid fills only (cel shading) — absolutely no "
+        "gradients, no watercolor wash, no soft fades, no grain or texture; each "
+        "region one even color. "
+        "(3) Background: DRAMATICALLY SIMPLIFY and declutter it — merge busy areas "
+        "(scattered small flowers, leaves, grass, dots, sparkles) into a few large "
+        "flat shapes, delete tiny specks and fine details, keep only a handful of "
+        "big simple decorative elements. "
+        "(4) Regions: merge small adjacent details into bigger regions so every "
+        "area is large enough to paint by hand; avoid tiny fragmented spots. "
+        "Use a limited palette of clean, well-separated colors. The output must "
+        "look like a NEAT printable coloring page with large flat regions and "
+        "clean lines — NOT a detailed or painterly illustration. Same aspect "
+        "ratio, output only the redrawn image."
     ),
 )
 
