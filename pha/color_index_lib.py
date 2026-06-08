@@ -20,9 +20,14 @@ except ImportError:
 
 EDGE_COLOR = (0, 0, 0)
 MAX_CIRCLE_RADIUS = config("MAX_CIRCLE_RADIUS", default=10, cast=int)
-MIN_TEXT_SIZE = config("MIN_TEXT_SIZE", default=4, cast=int)
-MEAN_TEXT_SIZE = config("MEAN_TEXT_SIZE", default=22, cast=int)
-MAX_TEXT_SIZE = config("MAX_TEXT_SIZE", default=40, cast=int)
+# Cỡ số (px) trên ảnh làm việc. Số nhỏ gọn, tỉ lệ theo vùng:
+#  - MIN: vùng nhỏ hơn mức này thì BỎ số (tránh số tí hon tràn/lệch).
+#  - MEAN: trần cỡ số cho vùng to (không để số phình quá).
+#  - NUMBER_FILL: số chiếm ~bao nhiêu phần đường kính vùng.
+MIN_TEXT_SIZE = config("MIN_TEXT_SIZE", default=7, cast=int)
+MEAN_TEXT_SIZE = config("MEAN_TEXT_SIZE", default=14, cast=int)
+MAX_TEXT_SIZE = config("MAX_TEXT_SIZE", default=24, cast=int)
+NUMBER_FILL = config("NUMBER_FILL", default=0.5, cast=float)
 GREEN = (0, 255, 0)
 BLUE = (255, 0, 0)
 PADDING_CIRCLE = config("PADDING_CIRCLE", default=1, cast=int)
@@ -111,21 +116,28 @@ def get_text_size(text: str, scale: float = 1, thickness=1, font=cv2.FONT_HERSHE
 
 
 def get_number_size(text: str, max_size: float) -> Tuple[Tuple, float, float]:
+    """Cỡ số TỈ LỆ theo vùng: nhắm chiều lớn của số ~ NUMBER_FILL * đường kính vùng,
+    kẹp trong [MIN_TEXT_SIZE, MEAN_TEXT_SIZE] (trần MAX_TEXT_SIZE) và luôn lọt vùng.
+    Vùng quá nhỏ (số không đạt MIN) -> trả None để BỎ số (đỡ số tí hon tràn/lệch).
     """
-    :param text:
-    :param max_size:
-    :return: text size, scale and thickness
-    """
-    text_size = (0, 0)
-    scale = 0.05
+    # cỡ mong muốn (theo chiều lớn của chữ)
+    target = max_size * NUMBER_FILL
+    if target > MEAN_TEXT_SIZE:
+        target = MEAN_TEXT_SIZE
+    scale = 0.1
     thickness = 1
-    while min(text_size) < MEAN_TEXT_SIZE and max(text_size) < MAX_TEXT_SIZE and max(
-            text_size) + PADDING_CIRCLE < max_size:
-        text_size = get_text_size(text, scale, thickness)
-        scale += 0.05
-    if min(text_size) < MIN_TEXT_SIZE:
+    text_size = get_text_size(text, scale, thickness)
+    while True:
+        nxt = get_text_size(text, scale + 0.1, thickness)
+        if (max(nxt) > target or max(nxt) > MAX_TEXT_SIZE
+                or max(nxt) + PADDING_CIRCLE >= max_size):
+            break
+        scale += 0.1
+        text_size = nxt
+    if min(text_size) < MIN_TEXT_SIZE or max(text_size) + PADDING_CIRCLE >= max_size:
         return None, None, None
-
+    # số to thì nét dày hơn chút cho rõ
+    thickness = 2 if max(text_size) >= 16 else 1
     return text_size, scale, thickness
 
 
