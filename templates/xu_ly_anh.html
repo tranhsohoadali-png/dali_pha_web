@@ -101,7 +101,7 @@
           <div class="row g-2 mb-2">
             <div class="col"><div class="small text-secondary mb-1">Ảnh gốc (đầu vào)</div><img id="imgOrigin" src="{{ file_url }}" class="result-img"></div>
             <div class="col" id="enhancedWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-stars text-warning"></i> Ảnh đã tăng cường (AI)</div><img id="imgEnhanced" src="#" class="result-img"></div>
-            <div class="col" id="designWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-palette-fill text-success"></i> Ảnh thiết kế (bản màu)</div><img id="imgDesign" src="#" class="result-img"></div>
+            <div class="col" id="designWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-palette-fill text-success"></i> Ảnh thiết kế (bản màu) <span class="text-secondary">· sửa HEX bên phải để đổi màu</span></div><canvas id="imgDesign" class="result-img"></canvas></div>
             <div class="col"><div class="small text-secondary mb-1">Bản đồ đánh số</div><img id="imgResult" src="#" class="result-img" hidden></div>
           </div>
           <div id="paramInfo" class="small text-secondary mb-3 d-none"></div>
@@ -161,19 +161,62 @@
     document.getElementById('empty').style.display='none';
     document.getElementById('cnt').hidden=false; document.getElementById('cnt').textContent=rows.length+' màu';
     rows.forEach(function(r){ var stt=r[0],hex=r[1],dali=r[2]||'',pct=(r[3]!=null?r[3]:'');
+      var h6=String(hex).replace('#','').toUpperCase();
       el.insertAdjacentHTML('beforeend','<div class="col-6 col-md-4 col-xl-6"><div class="color-card">'+
-        '<div class="swatch mb-1" style="background:'+hex+'"></div>'+
+        '<div class="swatch mb-1" data-stt="'+stt+'" style="background:#'+h6+'"></div>'+
         '<div class="d-flex justify-content-between align-items-center">'+
           '<span class="badge text-bg-secondary">'+stt+'</span>'+
           '<div class="input-group input-group-sm" style="max-width:150px">'+
-            '<input class="form-control form-control-sm dali-input" value="'+dali+'" data-hex="'+hex+'" data-stt="'+stt+'" title="Sửa mã DALI rồi bấm lưu">'+
+            '<input class="form-control form-control-sm dali-input" value="'+dali+'" data-hex="#'+h6+'" data-stt="'+stt+'" title="Sửa mã DALI rồi bấm lưu">'+
             '<button class="btn btn-outline-success save-color-btn" title="Lưu màu này vào bảng DALI"><i class="bi bi-save"></i></button>'+
           '</div>'+
         '</div>'+
-        '<div class="d-flex justify-content-between mt-1"><span class="small" style="font-family:monospace">'+hex+'</span>'+(pct!==''?'<span class="small text-secondary">'+pct+'%</span>':'')+'</div>'+
+        '<div class="d-flex justify-content-between align-items-center mt-1 gap-1">'+
+          '<div class="input-group input-group-sm" style="max-width:140px">'+
+            '<input type="color" class="form-control form-control-color form-control-sm hexpick" value="#'+h6+'" data-stt="'+stt+'" title="Chọn màu">'+
+            '<input type="text" class="form-control form-control-sm hex-input" value="#'+h6+'" data-stt="'+stt+'" data-cur="#'+h6+'" maxlength="7" title="Sửa mã HEX -> ảnh thiết kế đổi ngay">'+
+          '</div>'+
+          (pct!==''?'<span class="small text-secondary">'+pct+'%</span>':'')+
+        '</div>'+
         '</div></div>');
     });
   }
+
+  // ====== Ảnh thiết kế: tô lại trực tiếp khi đổi HEX ======
+  var DCAN=document.getElementById('imgDesign'), DCTX=DCAN.getContext('2d',{willReadFrequently:true}), DIMGDATA=null;
+  function loadDesign(url){
+    DIMGDATA=null;
+    if(!url){ document.getElementById('designWrap').hidden=true; return; }
+    var im=new Image(); im.crossOrigin='anonymous';
+    im.onload=function(){ DCAN.width=im.naturalWidth; DCAN.height=im.naturalHeight;
+      DCTX.drawImage(im,0,0);
+      try{ DIMGDATA=DCTX.getImageData(0,0,DCAN.width,DCAN.height); }catch(e){ DIMGDATA=null; } };
+    im.src=url;
+  }
+  function hx2rgb(h){ h=h.replace('#',''); return {r:parseInt(h.substr(0,2),16),g:parseInt(h.substr(2,2),16),b:parseInt(h.substr(4,2),16)}; }
+  function recolorDesign(oldHex,newHex){
+    if(!DIMGDATA) return;
+    var o=hx2rgb(oldHex), n=hx2rgb(newHex), d=DIMGDATA.data;
+    if(isNaN(n.r)||isNaN(n.g)||isNaN(n.b)) return;
+    for(var i=0;i<d.length;i+=4){ if(d[i]===o.r&&d[i+1]===o.g&&d[i+2]===o.b){ d[i]=n.r; d[i+1]=n.g; d[i+2]=n.b; } }
+    DCTX.putImageData(DIMGDATA,0,0);
+  }
+  function normHex(v){ v=(v||'').trim().replace(/^#?/,'#'); if(/^#[0-9A-Fa-f]{6}$/.test(v)) return v.toUpperCase(); return null; }
+  // Bộ chọn màu -> cập nhật ô text + tô lại
+  $('#palette').on('input','.hexpick',function(){
+    var stt=this.dataset.stt, nh=this.value.toUpperCase();
+    var t=$('#palette .hex-input[data-stt="'+stt+'"]');
+    recolorDesign(t.attr('data-cur'), nh); t.val(nh).attr('data-cur',nh);
+    $('#palette .swatch[data-stt="'+stt+'"]').css('background',nh);
+  });
+  // Gõ HEX -> tô lại ngay khi hợp lệ
+  $('#palette').on('input','.hex-input',function(){
+    var nh=normHex(this.value); if(!nh) return;
+    var stt=this.dataset.stt;
+    recolorDesign(this.getAttribute('data-cur'), nh); this.setAttribute('data-cur',nh);
+    $('#palette .hexpick[data-stt="'+stt+'"]').val(nh);
+    $('#palette .swatch[data-stt="'+stt+'"]').css('background',nh);
+  });
 
   function getResult(url, onDone, onWait){
     curUrl=url;
@@ -191,8 +234,8 @@
       else { ew.hidden=true; }
       // Ảnh thiết kế (bản màu phẳng) - luôn hiện, kể cả khi không dùng AI
       var dw=document.getElementById('designWrap');
-      if(res.design){ document.getElementById('imgDesign').src=res.design; dw.hidden=false; }
-      else { dw.hidden=true; }
+      if(res.design){ dw.hidden=false; loadDesign(res.design); }
+      else { dw.hidden=true; loadDesign(''); }
       // Dòng thông số đã dùng (để kiểm tra)
       var p=res.params||{}; var pi=document.getElementById('paramInfo');
       var sm=['Không','Nhẹ','Vừa','Mạnh'][p.smooth||0]||'Không';
