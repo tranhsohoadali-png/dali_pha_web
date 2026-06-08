@@ -916,6 +916,19 @@ def anh_save_color(request):
 
 @csrf_exempt
 @staff_required
+def anh_nearest_dali(request):
+    """Trả mã DALI gần nhất cho 1 mã HEX (dùng khi đổi màu trực tiếp ở bảng màu)."""
+    from pha import dali_match
+    h = (request.GET.get('hex') or '').strip().lstrip('#')
+    try:
+        rgb = (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+    except (ValueError, IndexError):
+        return JsonResponse({'dali': ''})
+    return JsonResponse({'dali': dali_match.nearest_dali(rgb)})
+
+
+@csrf_exempt
+@staff_required
 def anh_export_colors(request):
     res = _get_img(request)
     if not res:

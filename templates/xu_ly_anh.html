@@ -173,8 +173,8 @@
         '</div>'+
         '<div class="d-flex justify-content-between align-items-center mt-1 gap-1">'+
           '<div class="input-group input-group-sm" style="max-width:140px">'+
-            '<input type="color" class="form-control form-control-color form-control-sm hexpick" value="#'+h6+'" data-stt="'+stt+'" title="Chọn màu">'+
-            '<input type="text" class="form-control form-control-sm hex-input" value="#'+h6+'" data-stt="'+stt+'" data-cur="#'+h6+'" maxlength="7" title="Sửa mã HEX -> ảnh thiết kế đổi ngay">'+
+            '<input type="color" class="form-control form-control-color form-control-sm hexpick" value="#'+h6+'" data-stt="'+stt+'" title="Bấm để chọn màu">'+
+            '<input type="text" class="form-control form-control-sm hex-input" value="#'+h6+'" data-stt="'+stt+'" data-cur="#'+h6+'" readonly style="cursor:pointer;background:#fff" title="Bấm để mở bảng chọn màu">'+
           '</div>'+
           (pct!==''?'<span class="small text-secondary">'+pct+'%</span>':'')+
         '</div>'+
@@ -202,21 +202,33 @@
     DCTX.putImageData(DIMGDATA,0,0);
   }
   function normHex(v){ v=(v||'').trim().replace(/^#?/,'#'); if(/^#[0-9A-Fa-f]{6}$/.test(v)) return v.toUpperCase(); return null; }
-  // Bộ chọn màu -> cập nhật ô text + tô lại
-  $('#palette').on('input','.hexpick',function(){
-    var stt=this.dataset.stt, nh=this.value.toUpperCase();
+  // Khớp mã DALI gần nhất cho màu mới (debounce để không gọi dồn khi kéo chọn màu)
+  var _daliTimers={};
+  function updateDaliFor(stt,hex){
+    clearTimeout(_daliTimers[stt]);
+    _daliTimers[stt]=setTimeout(function(){
+      $.get('/anh-nearest-dali',{hex:hex},function(res){
+        if(res && res.dali!=null){
+          var di=$('#palette .dali-input[data-stt="'+stt+'"]');
+          di.val(res.dali).attr('data-hex',hex);
+        }
+      });
+    },220);
+  }
+  function applyColor(stt,nh){
     var t=$('#palette .hex-input[data-stt="'+stt+'"]');
-    recolorDesign(t.attr('data-cur'), nh); t.val(nh).attr('data-cur',nh);
-    $('#palette .swatch[data-stt="'+stt+'"]').css('background',nh);
-  });
-  // Gõ HEX -> tô lại ngay khi hợp lệ
-  $('#palette').on('input','.hex-input',function(){
-    var nh=normHex(this.value); if(!nh) return;
-    var stt=this.dataset.stt;
-    recolorDesign(this.getAttribute('data-cur'), nh); this.setAttribute('data-cur',nh);
+    recolorDesign(t.attr('data-cur'), nh);
+    t.val(nh).attr('data-cur',nh);
     $('#palette .hexpick[data-stt="'+stt+'"]').val(nh);
     $('#palette .swatch[data-stt="'+stt+'"]').css('background',nh);
+    updateDaliFor(stt,nh);
+  }
+  // Bấm ô HEX -> mở bảng chọn màu
+  $('#palette').on('click','.hex-input',function(){
+    var pk=$('#palette .hexpick[data-stt="'+this.dataset.stt+'"]').get(0); if(pk) pk.click();
   });
+  // Kéo/chọn màu trong bảng -> đổi HEX + mã DALI + ảnh thiết kế ngay
+  $('#palette').on('input','.hexpick',function(){ applyColor(this.dataset.stt, this.value.toUpperCase()); });
 
   function getResult(url, onDone, onWait){
     curUrl=url;

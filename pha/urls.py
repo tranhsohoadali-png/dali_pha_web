@@ -32,6 +32,7 @@ urlpatterns = [
     path('xu-ly-anh', views.xu_ly_anh, name='xu_ly_anh'),
     path('anh-result', views.anh_result, name='anh_result'),
     path('anh-save-color', views.anh_save_color, name='anh_save_color'),
+    path('anh-nearest-dali', views.anh_nearest_dali, name='anh_nearest_dali'),
     path('anh-export-colors', views.anh_export_colors, name='anh_export_colors'),
     path('anh-export-xlsx', views.anh_export_xlsx, name='anh_export_xlsx'),
     path('anh-legend', views.anh_legend, name='anh_legend'),

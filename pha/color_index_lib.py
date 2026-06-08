@@ -302,6 +302,19 @@ def _remove_small_components(mask, min_area):
     return out
 
 
+def _smooth_boundaries(img_rgb, ksize=5):
+    """Làm mượt biên giữa các vùng màu: median trên ẢNH NHÃN (mỗi màu = 1 nhãn).
+    Median chọn nhãn ĐA SỐ trong cửa sổ -> cắt răng cưa, bỏ lồi lõm 1–2px, không
+    tạo màu lạ (luôn là 1 trong các màu đang có)."""
+    flat = img_rgb.reshape(-1, 3)
+    colors, inv = np.unique(flat, axis=0, return_inverse=True)
+    if len(colors) > 256:
+        return img_rgb
+    lbl = inv.reshape(img_rgb.shape[:2]).astype(np.uint8)
+    lbl = cv2.medianBlur(lbl, ksize)
+    return colors[lbl.reshape(-1)].reshape(img_rgb.shape)
+
+
 def _merge_small_regions(img_rgb, min_area=0, min_radius=5.5, max_pass=6):
     """GỘP các vùng KHÔNG ĐÁNH ĐƯỢC SỐ vào màu hàng xóm (để tranh hết 'dăm').
     Một vùng bị gộp nếu: diện tích < min_area, HOẶC bán kính nội tiếp < min_radius
@@ -374,6 +387,9 @@ def _quantize_file(path, n, smooth=0, min_area=0):
     # GỘP các vùng không đánh được số vào hàng xóm -> hết 'dăm', mọi ô đều numberable.
     min_radius = (MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0
     arr = _merge_small_regions(arr, min_area=min_area, min_radius=min_radius)
+    # LÀM MƯỢT biên vùng (median trên nhãn màu) -> bỏ răng cưa/mảnh thừa do gộp.
+    arr = _smooth_boundaries(arr, ksize=5)
+    arr = _merge_small_regions(arr, min_area=0, min_radius=min_radius, max_pass=2)
     fd, out = tempfile.mkstemp(suffix='.png', prefix='quant_')
     os.close(fd)
     Image.fromarray(arr).save(out)
