@@ -34,6 +34,9 @@ CORRECT_EDGE = config("CORRECT_EDGE", default=True, cast=bool)
 
 LIMIT_NUM_COLOR = config("LIMIT_NUM_COLOR", default=250, cast=int)
 TOLERANCE = config("TOLERANCE", default=0, cast=int)
+# Số màu gom mặc định khi người dùng để TRỐNG ô "Số màu tối đa".
+# Ảnh mượt/AI có vô số sắc gần nhau -> phải gom lại nếu không bản đồ sẽ lấm tấm.
+DEFAULT_NUM_COLORS = config("DEFAULT_NUM_COLORS", default=24, cast=int)
 DEFAULT_TOLERANCE = config("DEFAULT_TOLERANCE", default=32, cast=int)
 THRESHOLD_PERCENT_COLOR = config("THRESHOLD_PERCENT_COLOR", default=0.0003, cast=float)
 
@@ -287,16 +290,30 @@ def _remove_small_components(mask, min_area):
     return out
 
 
-def index_color(path, debug=False, num_colors=0, min_area=0):
-    """num_colors > 0: chỉ giữ tối đa N màu nhiều pixel nhất.
-    min_area > 0: bỏ các mảng màu nhỏ hơn N pixel (đỡ lấm tấm)."""
-    colors, pixel_count = extract_colors(path)
-    colors = list(colors)
-    if num_colors and num_colors > 0:
-        # extcolors trả về đã sắp theo số pixel giảm dần -> lấy N màu lớn nhất.
-        colors = colors[:num_colors]
+def _quantize_file(path, n):
+    """Gom ảnh về tối đa n màu (median-cut) rồi lưu file tạm. Trả (đường_dẫn_tạm).
+    Mục đích: biến các sắc gần nhau (ảnh mượt/AI) thành mảng màu đặc, sạch."""
+    import os
+    import tempfile
+    im = Image.open(path).convert('RGB')
+    q = im.quantize(colors=max(2, n), method=Image.MEDIANCUT, dither=Image.Dither.NONE)
+    q = q.convert('RGB')
+    fd, out = tempfile.mkstemp(suffix='.png', prefix='quant_')
+    os.close(fd)
+    q.save(out)
+    return out
 
-    img = load_image(path, debug=debug)
+
+def index_color(path, debug=False, num_colors=0, min_area=0):
+    """num_colors > 0: gom ảnh về tối đa N màu (để trống = DEFAULT_NUM_COLORS).
+    min_area > 0: bỏ các mảng màu nhỏ hơn N pixel (đỡ lấm tấm)."""
+    import os
+    effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
+    work_path = _quantize_file(path, effective_n)
+    colors, pixel_count = extract_colors(work_path)
+    colors = list(colors)
+
+    img = load_image(work_path, debug=debug)
 
     # edge_img = get_edges(img)
     # edge_img = cv2.bitwise_not(edge_img)
@@ -354,6 +371,11 @@ def index_color(path, debug=False, num_colors=0, min_area=0):
         percentages = [0 for _ in color_counts]
     if debug:
         show_img(img_white, "output")
+
+    try:
+        os.remove(work_path)   # dọn file tạm đã gom màu
+    except OSError:
+        pass
 
     print("Done indexing colors")
     return img_white, color_mapping, percentages
