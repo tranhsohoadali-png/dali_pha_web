@@ -13,6 +13,10 @@ urlpatterns = [
     path('quan-ly', views.quan_ly, name='quan_ly'),
     path('quan-ly-nhap', views.quan_ly_nhap, name='quan_ly_nhap'),
     path('manifest-ql.webmanifest', views.manifest_ql, name='manifest_ql'),
+
+    # API cho phần mềm kế toán (ketoan.tranhdali.vn)
+    path('api/ketoan', views.api_ketoan, name='api_ketoan'),
+
     path('', views.cong_thuc_mau, name='home'),
     path('cong-thuc-mau', views.cong_thuc_mau, name='cong_thuc_mau'),
     path('app', views.mobile, name='mobile'),

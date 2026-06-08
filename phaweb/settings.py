@@ -23,6 +23,12 @@ ALLOWED_HOSTS = [h.strip() for h in env('DJANGO_ALLOWED_HOSTS', '*').split(',') 
 # Cho phép subdomain HTTPS gửi form (CSRF). Đặt theo domain thật.
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in env('DJANGO_CSRF_TRUSTED', '').split(',') if o.strip()]
 
+# ===== Liên kết phần mềm KẾ TOÁN (ketoan.tranhdali.vn) =====
+# Khoá để trang kế toán lấy dữ liệu (đổi trên VPS bằng biến KETOAN_API_KEY).
+KETOAN_API_KEY = env('KETOAN_API_KEY', 'dali-ketoan-2026')
+# Origin được phép gọi API (đặt KETOAN_ALLOW_ORIGIN trên VPS; '*' = mọi nơi).
+KETOAN_ALLOW_ORIGIN = env('KETOAN_ALLOW_ORIGIN', '*')
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',

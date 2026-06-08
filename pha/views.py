@@ -183,6 +183,75 @@ def dashboard(request):
 
 
 @csrf_exempt
+def api_ketoan(request):
+    """API đọc dữ liệu cho phần mềm KẾ TOÁN (ketoan.tranhdali.vn).
+    Trả JSON: chi phí sơn theo tháng, tồn kho sơn, số mẻ pha.
+    Bảo vệ bằng khoá ?key= (KETOAN_API_KEY). Có CORS để subdomain gọi được.
+    """
+    origin = getattr(settings, 'KETOAN_ALLOW_ORIGIN', '*')
+
+    def _cors(resp):
+        resp['Access-Control-Allow-Origin'] = origin
+        resp['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        resp['Access-Control-Allow-Headers'] = 'Content-Type'
+        resp['Cache-Control'] = 'no-store'
+        return resp
+
+    if request.method == 'OPTIONS':
+        return _cors(HttpResponse(status=204))
+
+    key = request.GET.get('key', '')
+    if key != getattr(settings, 'KETOAN_API_KEY', ''):
+        return _cors(JsonResponse({'ok': False, 'error': 'Sai khoá API'}, status=401))
+
+    now = _now()
+    this_month = now.strftime('%Y-%m')
+
+    # 12 tháng gần nhất: chi phí sơn + số mẻ
+    months, y, m = [], now.year, now.month
+    for _ in range(12):
+        months.append(f'{y:04d}-{m:02d}')
+        m -= 1
+        if m == 0:
+            m = 12; y -= 1
+    months = months[::-1]
+    cost_map = dict(ProductionLog.objects.values_list('month').annotate(c=Sum('cost')))
+    cnt_map = dict(ProductionLog.objects.values_list('month').annotate(n=Count('id')))
+    monthly = [{
+        'month': mm, 'label': _fmt_month(mm),
+        'paint_cost': round(cost_map.get(mm, 0) or 0),
+        'batches': cnt_map.get(mm, 0) or 0,
+    } for mm in months]
+
+    # Tồn kho sơn hiện tại
+    inventory, total_value = [], 0.0
+    for b in mixing.get_bases():
+        ps, _ = PaintStock.objects.get_or_create(name=b['name'])
+        value = ps.stock / 1000.0 * (ps.price_per_kg or 0)
+        total_value += value
+        inventory.append({
+            'name': b['name'], 'stock_g': round(ps.stock, 1),
+            'price_per_kg': round(ps.price_per_kg or 0), 'value': round(value),
+        })
+
+    data = {
+        'ok': True,
+        'source': 'mau.tranhdali.vn',
+        'generated_at': now.strftime('%Y-%m-%d %H:%M'),
+        'current_month': this_month,
+        'summary': {
+            'month_paint_cost': round(cost_map.get(this_month, 0) or 0),
+            'month_batches': cnt_map.get(this_month, 0) or 0,
+            'today_batches': ProductionLog.objects.filter(day=now.strftime('%Y-%m-%d')).count(),
+            'inventory_value': round(total_value),
+        },
+        'monthly': monthly,
+        'inventory': inventory,
+    }
+    return _cors(JsonResponse(data))
+
+
+@csrf_exempt
 @staff_required
 def kho_son(request):
     """Quản lý tồn kho màu sơn gốc (chỉ chủ)."""
