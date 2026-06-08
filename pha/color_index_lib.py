@@ -314,7 +314,7 @@ def _quantize_file(path, n, smooth=0):
     target = max(2, n)
     # Gom DƯ nhiều màu trước (chia-đôi hay đẻ ra nhiều sắc gần giống của tông nền),
     # rồi HỢP NHẤT các màu cùng tông theo cảm nhận mắt (LAB) xuống đúng `target`.
-    k_work = min(64, max(target * 4, 40))
+    k_work = min(96, max(target * 5, 48))
     q = im.quantize(colors=k_work, method=Image.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
     arr = np.array(q)
     arr = _reduce_palette_perceptual(arr, target)
@@ -338,6 +338,30 @@ def _reduce_palette_perceptual(img_rgb, target_n):
                        cv2.COLOR_RGB2LAB).reshape(-1, 3).astype(float)
     clusters = {i: {'lab': lab[i].copy(), 'cnt': float(counts[i]), 'members': [i]}
                 for i in range(K)}
+
+    def _merge_into(base, others):
+        for m in others:
+            if m == base or m not in clusters or base not in clusters:
+                continue
+            cb, cm = clusters[base], clusters[m]
+            tot = cb['cnt'] + cm['cnt']
+            cb['lab'] = (cb['lab'] * cb['cnt'] + cm['lab'] * cm['cnt']) / tot
+            cb['cnt'] = tot
+            cb['members'] += cm['members']
+            del clusters[m]
+
+    # LUẬT MẮT NGƯỜI: mọi sắc rất TỐI dồn thành 1 "đen", mọi sắc gần TRẮNG dồn
+    # thành 1 "trắng" — vì mắt không phân biệt được, đỡ phí suất cho tông khác.
+    # (cv2-LAB: L 0-255; chroma quanh 128.)
+    L = lab[:, 0]
+    darks = [i for i in range(K) if L[i] < 60]
+    whites = [i for i in range(K)
+              if L[i] > 235 and abs(lab[i, 1] - 128) < 12 and abs(lab[i, 2] - 128) < 12]
+    if len(darks) > 1:
+        _merge_into(max(darks, key=lambda m: counts[m]), darks)
+    if len(whites) > 1:
+        _merge_into(max(whites, key=lambda m: counts[m]), whites)
+
     while len(clusters) > target_n:
         ids = list(clusters.keys())
         best, pair = None, None
