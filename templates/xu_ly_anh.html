@@ -32,18 +32,31 @@
               <div class="small text-secondary">Kéo–thả hoặc bấm chọn ảnh</div>
               <input id="image" name="image" type="file" accept="image/*" class="d-none"></div>
             <img id="preview" class="img-fluid rounded mb-2" hidden>
+            <!-- Tinh chỉnh bản đồ màu (luôn hiện, áp cả khi không dùng AI) -->
+            <div class="border rounded p-2 mb-2">
+              <div class="small fw-semibold mb-1"><i class="bi bi-sliders text-success"></i> Tinh chỉnh bản đồ màu</div>
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label small mb-1">Số màu tối đa</label>
+                  <input type="number" name="color_limit" class="form-control form-control-sm" min="2" max="60" placeholder="trống = tự động">
+                </div>
+                <div class="col-6">
+                  <label class="form-label small mb-1">Bỏ mảng nhỏ hơn (px)</label>
+                  <input type="number" name="min_area" class="form-control form-control-sm" min="0" max="100000" placeholder="vd: 30">
+                </div>
+              </div>
+              <div class="form-text">Số màu tối đa = giới hạn số ô tô. Bỏ mảng nhỏ = xoá đốm li ti dưới N pixel cho bản đồ sạch (vd 30–100).</div>
+            </div>
+
             {% if ai_available %}
             <div class="form-check mb-2">
               <input class="form-check-input" type="checkbox" id="enhance" name="enhance" value="1" onchange="document.getElementById('styleWrap').classList.toggle('d-none',!this.checked)">
               <label class="form-check-label small" for="enhance">
                 <i class="bi bi-stars text-warning"></i> Tăng cường ảnh bằng AI (Google)
-                <span class="text-secondary d-block">Làm sạch / nâng nét ảnh khách trước khi số hoá. Chậm hơn vài giây.</span>
+                <span class="text-secondary d-block">Làm sạch / nâng nét ảnh khách trước khi số hoá. Số màu tối đa ở trên cũng áp cho AI. Chậm hơn vài giây.</span>
               </label>
             </div>
             <div id="styleWrap" class="mb-2 d-none">
-              <label class="form-label small mb-1">Số màu tối đa</label>
-              <input type="number" name="color_limit" class="form-control form-control-sm mb-1" min="2" max="60" placeholder="Để trống = không giới hạn (VD: 12, 16, 24)">
-              <div class="form-text mb-2">AI sẽ gộp các sắc gần nhau để tranh chỉ còn tối đa số màu này — bản tô đỡ rối, dễ pha. Khuyên 12–24.</div>
               <label class="form-label small mb-1">Phong cách tham chiếu (kho mẫu)</label>
               <select name="style_category" class="form-select form-select-sm">
                 <option value="">Tự động (mẫu giống nhất, mọi nhãn)</option>

@@ -272,8 +272,29 @@ def get_center_poly_from_contours(contours, hierarchy, range_img, img, debug=Fal
     return centers, dists
 
 
-def index_color(path, debug=False):
+def _remove_small_components(mask, min_area):
+    """Xoá các đốm (connected component) nhỏ hơn min_area pixel khỏi mask 0/255."""
+    if not min_area or min_area <= 0:
+        return mask
+    try:
+        num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    except cv2.error:
+        return mask
+    out = np.zeros_like(mask)
+    for i in range(1, num):
+        if stats[i, cv2.CC_STAT_AREA] >= min_area:
+            out[labels == i] = 255
+    return out
+
+
+def index_color(path, debug=False, num_colors=0, min_area=0):
+    """num_colors > 0: chỉ giữ tối đa N màu nhiều pixel nhất.
+    min_area > 0: bỏ các mảng màu nhỏ hơn N pixel (đỡ lấm tấm)."""
     colors, pixel_count = extract_colors(path)
+    colors = list(colors)
+    if num_colors and num_colors > 0:
+        # extcolors trả về đã sắp theo số pixel giảm dần -> lấy N màu lớn nhất.
+        colors = colors[:num_colors]
 
     img = load_image(path, debug=debug)
 
@@ -291,8 +312,13 @@ def index_color(path, debug=False):
     for color, count in colors:
         # print(f"Processing color {color_idx}: {color} with count: {count}")
         range_img = get_color_areas(img_rgb, color, color, color_idx, debug=debug)
+        range_img = _remove_small_components(range_img, min_area)
 
         contours, hierarchy = cv2.findContours(range_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        # Sau khi lọc mảng nhỏ, màu này có thể không còn vùng nào -> bỏ qua.
+        if hierarchy is None or not contours:
+            color_idx += 1
+            continue
         cv2.drawContours(img_white, contours, -1, (0, 0, 0), 1)
 
         centers, dists = get_center_poly_from_contours(contours, hierarchy, range_img, np.array(img), debug=debug)

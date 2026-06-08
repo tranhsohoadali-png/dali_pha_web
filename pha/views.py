@@ -716,9 +716,15 @@ def xu_ly_anh(request):
         except ValueError:
             color_limit = 0
         color_limit = max(0, min(color_limit, 60))  # 0 = không giới hạn
+        try:
+            min_area = int(request.POST.get('min_area') or 0)
+        except ValueError:
+            min_area = 0
+        min_area = max(0, min(min_area, 100000))  # 0 = không lọc mảng nhỏ
         rec = ImageResult.objects.create(name=name, status=ImageResult.STATUS_PROCESSING,
                                          user=request.user.username)
-        _img_executor.submit(process_image, rec.id, name, enhance, style_category, color_limit)
+        _img_executor.submit(process_image, rec.id, name, enhance, style_category,
+                             color_limit, min_area)
         ctx['file_url'] = '/media/' + name
         return render(request, 'xu_ly_anh.html', ctx)
     return render(request, 'xu_ly_anh.html', ctx)
