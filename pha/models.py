@@ -1,6 +1,26 @@
 from django.db import models
 
 
+class AppSetting(models.Model):
+    """Cấu hình ứng dụng dạng key/value (vd: GOOGLE_API_KEY) — chỉnh được qua UI,
+    lưu DB nên giữ nguyên sau khi khởi động lại máy chủ."""
+    key = models.CharField(max_length=100, unique=True)
+    value = models.TextField(blank=True, default='')
+    updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.key
+
+    @classmethod
+    def get(cls, key, default=''):
+        obj = cls.objects.filter(key=key).first()
+        return obj.value if obj else default
+
+    @classmethod
+    def set(cls, key, value):
+        cls.objects.update_or_create(key=key, defaults={'value': value})
+
+
 class Recipe(models.Model):
     """Công thức pha (lưu trong DB để an toàn khi nhiều người sửa cùng lúc)."""
     dali = models.CharField(max_length=100, unique=True)

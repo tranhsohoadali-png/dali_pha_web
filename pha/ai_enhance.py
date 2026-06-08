@@ -38,16 +38,32 @@ class AIEnhanceError(Exception):
     pass
 
 
+def get_api_key():
+    """Trả về khoá API đang dùng, hoặc '' nếu chưa có.
+
+    Ưu tiên khoá lưu trong DB (nhập qua trang Cài đặt AI), sau đó mới tới biến
+    môi trường GOOGLE_API_KEY / GEMINI_API_KEY.
+    """
+    try:
+        from pha.models import AppSetting
+        v = (AppSetting.get("GOOGLE_API_KEY") or "").strip()
+        if v:
+            return v
+    except Exception:
+        pass
+    return os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or ""
+
+
 def is_configured():
     """True nếu đã có khoá API để dùng tính năng AI."""
-    return bool(os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"))
+    return bool(get_api_key())
 
 
 def _get_api_key():
-    key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    key = get_api_key()
     if not key:
         raise AIEnhanceError(
-            "Chưa cấu hình GOOGLE_API_KEY trên máy chủ — không thể tăng cường ảnh bằng AI."
+            "Chưa cấu hình Google API key — vào trang Cài đặt AI để nhập khoá."
         )
     return key
 

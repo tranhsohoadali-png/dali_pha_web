@@ -697,6 +697,64 @@ def kho_mau(request):
     })
 
 
+def _mask_key(k):
+    k = (k or '').strip()
+    if not k:
+        return ''
+    if len(k) <= 8:
+        return '••••'
+    return k[:4] + '••••••' + k[-4:]
+
+
+def _test_google_key():
+    """Gọi nhẹ Google API để xác thực khoá (models.list — không tốn phí tạo ảnh)."""
+    from pha.ai_enhance import get_api_key
+    key = get_api_key()
+    if not key:
+        return False, 'Chưa có API key.'
+    try:
+        from google import genai
+    except ImportError:
+        return False, 'Máy chủ chưa cài thư viện google-genai (pip install google-genai).'
+    try:
+        client = genai.Client(api_key=key)
+        next(iter(client.models.list()), None)
+        return True, 'Kết nối Google AI thành công.'
+    except Exception as e:
+        return False, f'Khoá không dùng được: {e}'
+
+
+@csrf_exempt
+@staff_required
+def cai_dat_ai(request):
+    """Nhập / lưu / kiểm tra Google API key cho tính năng tăng cường ảnh."""
+    from pha.models import AppSetting
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'save':
+            key = (request.POST.get('api_key') or '').strip()
+            if not key:
+                return JsonResponse({'ok': False, 'msg': 'Chưa nhập API key.'})
+            AppSetting.set('GOOGLE_API_KEY', key)
+            return JsonResponse({'ok': True, 'msg': 'Đã lưu thành công.', 'masked': _mask_key(key)})
+        if action == 'clear':
+            AppSetting.objects.filter(key='GOOGLE_API_KEY').delete()
+            return JsonResponse({'ok': True, 'msg': 'Đã xoá khoá đã lưu.'})
+        if action == 'test':
+            ok, msg = _test_google_key()
+            return JsonResponse({'ok': ok, 'msg': msg})
+        return JsonResponse({'ok': False, 'msg': 'Hành động không hợp lệ.'})
+
+    db_key = (AppSetting.get('GOOGLE_API_KEY') or '').strip()
+    env_key = os.environ.get('GOOGLE_API_KEY') or os.environ.get('GEMINI_API_KEY') or ''
+    cur = db_key or env_key
+    return render(request, 'cai_dat_ai.html', {
+        'has_key': bool(cur),
+        'masked': _mask_key(cur),
+        'from_env': bool(not db_key and env_key),
+    })
+
+
 @csrf_exempt
 @staff_required
 def anh_result(request):
