@@ -44,6 +44,7 @@ class ImageResult(models.Model):
     created_time = models.DateTimeField(auto_now_add=True)
     name = models.TextField()                 # tên file ảnh gốc (có timestamp)
     enhanced_name = models.TextField(blank=True, default='')  # file ảnh đã tăng cường bằng AI (nếu có)
+    design_name = models.TextField(blank=True, default='')   # file ảnh thiết kế (bản màu phẳng đã đơn giản hoá)
     name_output = models.TextField(blank=True, default='')   # file kết quả png
     colors = models.JSONField(default=list, blank=True)      # [[stt,hex,dali,percent],...]
     params = models.JSONField(default=dict, blank=True)      # thông số đầu vào: {enhance,color_limit,min_area}

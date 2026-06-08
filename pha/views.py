@@ -856,6 +856,7 @@ def anh_result(request):
     return JsonResponse({'status': 'done', 'img_output': '/media/' + res.name_output,
                          'original': '/media/' + res.name,
                          'enhanced': ('/media/' + res.enhanced_name) if res.enhanced_name else '',
+                         'design': ('/media/' + res.design_name) if res.design_name else '',
                          'params': res.params or {},
                          'colors': split_list(10, res.colors)})
 

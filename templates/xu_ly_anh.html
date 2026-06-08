@@ -101,6 +101,7 @@
           <div class="row g-2 mb-2">
             <div class="col"><div class="small text-secondary mb-1">Ảnh gốc (đầu vào)</div><img id="imgOrigin" src="{{ file_url }}" class="result-img"></div>
             <div class="col" id="enhancedWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-stars text-warning"></i> Ảnh đã tăng cường (AI)</div><img id="imgEnhanced" src="#" class="result-img"></div>
+            <div class="col" id="designWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-palette-fill text-success"></i> Ảnh thiết kế (bản màu)</div><img id="imgDesign" src="#" class="result-img"></div>
             <div class="col"><div class="small text-secondary mb-1">Bản đồ đánh số</div><img id="imgResult" src="#" class="result-img" hidden></div>
           </div>
           <div id="paramInfo" class="small text-secondary mb-3 d-none"></div>
@@ -188,6 +189,10 @@
       var ew=document.getElementById('enhancedWrap');
       if(res.enhanced){ document.getElementById('imgEnhanced').src=res.enhanced; ew.hidden=false; }
       else { ew.hidden=true; }
+      // Ảnh thiết kế (bản màu phẳng) - luôn hiện, kể cả khi không dùng AI
+      var dw=document.getElementById('designWrap');
+      if(res.design){ document.getElementById('imgDesign').src=res.design; dw.hidden=false; }
+      else { dw.hidden=true; }
       // Dòng thông số đã dùng (để kiểm tra)
       var p=res.params||{}; var pi=document.getElementById('paramInfo');
       var sm=['Không','Nhẹ','Vừa','Mạnh'][p.smooth||0]||'Không';
@@ -219,7 +224,10 @@
       [res.origin_result,res.file_paint,res.file_a3].forEach(dl);
     });
   };
-  document.getElementById('imgResult').onclick=function(){ if(this.src&&this.src!=='#')window.open(this.src); };
+  ['imgResult','imgDesign','imgEnhanced','imgOrigin'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el) el.onclick=function(){ if(this.src&&this.src!=='#')window.open(this.src); };
+  });
 
   // Chống bộ gõ tiếng Việt (X->ngã...) cho ô mã DALI
   function normCode(s){

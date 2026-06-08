@@ -75,12 +75,16 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
             obj.enhanced_name = enhanced_name
             obj.save(update_fields=['enhanced_name'])
             path = enhanced_path  # số hoá trên ảnh đã tăng cường
+        design_name = f'{os.path.splitext(name)[0]}_design.png'
+        design_path = os.path.join(settings.MEDIA_ROOT, design_name)
         edge_img, color_mapping, percentages = index_color(
-            path, debug=False, num_colors=color_limit, min_area=min_area, smooth=smooth)
+            path, debug=False, num_colors=color_limit, min_area=min_area, smooth=smooth,
+            design_out=design_path)
         dpi = Image.open(path).info.get('dpi', (72, 72))
         name_output = save_img(edge_img, dpi)
         colors = create_image_color(color_mapping, convert_to_hex(color_mapping), percentages)
         obj.name_output = name_output
+        obj.design_name = design_name if os.path.exists(design_path) else ''
         obj.colors = colors
         obj.status = ImageResult.STATUS_DONE
         obj.save()

@@ -319,13 +319,20 @@ def _quantize_file(path, n, smooth=0):
     return out
 
 
-def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0):
+def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_out=None):
     """num_colors > 0: gom ảnh về tối đa N màu (để trống = DEFAULT_NUM_COLORS).
     min_area > 0: bỏ các mảng màu nhỏ hơn N pixel (đỡ lấm tấm).
-    smooth (0..3): làm phẳng vùng (mean-shift) trước khi gom — dọn ảnh màu nước/chụp."""
+    smooth (0..3): làm phẳng vùng (mean-shift) trước khi gom — dọn ảnh màu nước/chụp.
+    design_out: nếu có, lưu ảnh THIẾT KẾ (bản màu phẳng đã gom) ra đường dẫn này."""
     import os
+    import shutil
     effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
     work_path = _quantize_file(path, effective_n, smooth=smooth)
+    if design_out:
+        try:
+            shutil.copyfile(work_path, design_out)   # bản màu phẳng để xem trước
+        except OSError:
+            pass
     colors, pixel_count = extract_colors(work_path)
     colors = list(colors)
 
