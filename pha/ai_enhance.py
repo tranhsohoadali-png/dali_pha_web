@@ -18,19 +18,27 @@ from decouple import config
 # Model sinh/sửa ảnh của Google ("Nano Banana"). Có thể đổi qua env.
 AI_ENHANCE_MODEL = config("AI_ENHANCE_MODEL", default="gemini-2.5-flash-image")
 
-# Prompt mặc định: làm sạch ảnh chụp tranh để chuyển sang tranh số hoá.
-# Giữ nguyên bố cục/chủ thể, chỉ tăng độ nét và làm sạch màu.
+# Prompt mặc định: ĐƠN GIẢN HOÁ ảnh khách thành tranh tô màu (paint-by-numbers),
+# nhưng GIỮ NGUYÊN tuyệt đối chủ thể/bố cục (không được vẽ sang con/vật khác).
 DEFAULT_ENHANCE_PROMPT = config(
     "AI_ENHANCE_PROMPT",
     default=(
-        "Enhance this photo of a painting so it can be converted into a "
-        "paint-by-numbers artwork. Keep the exact same composition, subject "
-        "and colors. Remove glare, shadows and background clutter, fix "
-        "perspective so the canvas is flat and front-facing, sharpen details "
-        "and make color regions clean and well separated. Do not add or remove "
-        "any objects. Output a clean, high-quality image of the artwork only."
+        "Redraw the EXACT same picture as a clean, simple paint-by-numbers "
+        "coloring illustration. Keep the identical subject, characters, animals, "
+        "objects, pose, layout, colors and composition as the input image. This "
+        "is critical: do NOT replace, add, remove or reinvent anything; if the "
+        "input shows a duck, the output must be the same duck (never another "
+        "animal). Simplify the shading into flat, evenly filled color regions "
+        "with a limited, clean palette, add consistent dark outlines around each "
+        "region, and remove noise, gradients, glare and background clutter. The "
+        "result must be clearly recognizable as the SAME image, just simplified "
+        "for painting by numbers. Output only the redrawn image, same aspect ratio."
     ),
 )
+
+# Mặc định KHÔNG gửi ảnh mẫu kèm theo: model sinh ảnh hay 'copy' luôn chủ thể từ
+# ảnh mẫu (vd vịt -> mèo). Bật lại bằng env AI_USE_STYLE_REFS=1 nếu thật sự cần.
+AI_USE_STYLE_REFS = config("AI_USE_STYLE_REFS", default="0") == "1"
 
 
 class AIEnhanceError(Exception):
@@ -68,12 +76,12 @@ def _get_api_key():
     return key
 
 
-# Hướng dẫn thêm khi có ảnh mẫu tham chiếu (few-shot style).
+# Hướng dẫn thêm khi có ảnh mẫu tham chiếu (chỉ dùng nếu bật AI_USE_STYLE_REFS).
 STYLE_REF_INSTRUCTION = (
-    " The additional images provided are reference paint-by-numbers artworks made "
-    "in our shop's style. Match that artistic style — color simplification level, "
-    "region size and clean flat color areas — while keeping the original photo's "
-    "exact composition and subject."
+    " The FIRST images are style references ONLY: copy nothing from them except the "
+    "drawing style (outline thickness, flatness, palette size). You MUST ignore "
+    "their subjects/objects entirely. The LAST image is the only one to redraw — "
+    "keep its exact subject and composition."
 )
 
 
@@ -105,19 +113,21 @@ def enhance_image(input_path, output_path, prompt=None, reference_paths=None):
     except Exception as e:
         raise AIEnhanceError(f"Không mở được ảnh gốc: {e}") from e
 
+    # Chỉ nạp ảnh mẫu khi bật AI_USE_STYLE_REFS (mặc định tắt để không lẫn chủ thể).
     refs = []
-    for rp in (reference_paths or []):
-        try:
-            ref = Image.open(rp)
-            ref.load()
-            refs.append(ref)
-        except Exception:
-            continue  # bỏ qua mẫu lỗi, không làm hỏng cả lần chạy
+    if AI_USE_STYLE_REFS:
+        for rp in (reference_paths or []):
+            try:
+                ref = Image.open(rp)
+                ref.load()
+                refs.append(ref)
+            except Exception:
+                continue  # bỏ qua mẫu lỗi, không làm hỏng cả lần chạy
 
     text = prompt or DEFAULT_ENHANCE_PROMPT
     if refs:
         text += STYLE_REF_INSTRUCTION
-    # Đưa ảnh gốc cuối cùng để model hiểu đây là ảnh cần xử lý.
+    # Ảnh mẫu (nếu có) đặt TRƯỚC, ảnh khách đặt CUỐI = ảnh cần vẽ lại.
     contents = [text] + refs + [src]
 
     try:
