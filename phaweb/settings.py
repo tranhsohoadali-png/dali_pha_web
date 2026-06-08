@@ -23,6 +23,9 @@ ALLOWED_HOSTS = [h.strip() for h in env('DJANGO_ALLOWED_HOSTS', '*').split(',') 
 # Cho phép subdomain HTTPS gửi form (CSRF). Đặt theo domain thật.
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in env('DJANGO_CSRF_TRUSTED', '').split(',') if o.strip()]
 
+# Cho phép tải nhiều ảnh/lần vào Kho mẫu (mặc định Django chỉ 100 file).
+DATA_UPLOAD_MAX_NUMBER_FILES = int(env('DJANGO_MAX_FILES', '2000'))
+
 # ===== Liên kết phần mềm KẾ TOÁN (ketoan.tranhdali.vn) =====
 # Khoá để trang kế toán lấy dữ liệu (đổi trên VPS bằng biến KETOAN_API_KEY).
 KETOAN_API_KEY = env('KETOAN_API_KEY', 'dali-ketoan-2026')

@@ -32,6 +32,23 @@
               <div class="small text-secondary">Kéo–thả hoặc bấm chọn ảnh</div>
               <input id="image" name="image" type="file" accept="image/*" class="d-none"></div>
             <img id="preview" class="img-fluid rounded mb-2" hidden>
+            {% if ai_available %}
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="enhance" name="enhance" value="1" onchange="document.getElementById('styleWrap').classList.toggle('d-none',!this.checked)">
+              <label class="form-check-label small" for="enhance">
+                <i class="bi bi-stars text-warning"></i> Tăng cường ảnh bằng AI (Google)
+                <span class="text-secondary d-block">Làm sạch / nâng nét ảnh khách trước khi số hoá. Chậm hơn vài giây.</span>
+              </label>
+            </div>
+            <div id="styleWrap" class="mb-2 d-none">
+              <label class="form-label small mb-1">Phong cách tham chiếu (kho mẫu)</label>
+              <select name="style_category" class="form-select form-select-sm">
+                <option value="">Tự động (mẫu giống nhất, mọi nhãn)</option>
+                {% for c, n in style_categories %}<option value="{{ c }}">{{ c }} ({{ n }} mẫu)</option>{% endfor %}
+              </select>
+              <div class="form-text">AI sẽ bắt chước phong cách các mẫu cùng nhãn trong <a href="/kho-mau" target="_blank">Kho mẫu</a>.</div>
+            </div>
+            {% endif %}
             <button id="sub" class="btn btn-success w-100" disabled><i class="bi bi-magic"></i> Xử lý ảnh</button>
           </form>
         </div>
@@ -57,7 +74,7 @@
         <div class="card-body">
           <div id="err" class="alert alert-danger d-none"></div>
           <div class="row g-2 mb-3">
-            <div class="col-6"><div class="small text-secondary mb-1">Ảnh gốc</div><img id="imgOrigin" src="{{ file_url }}" class="result-img"></div>
+            <div class="col-6"><div id="lblOrigin" class="small text-secondary mb-1">Ảnh gốc</div><img id="imgOrigin" src="{{ file_url }}" class="result-img"></div>
             <div class="col-6"><div class="small text-secondary mb-1">Bản đồ đánh số</div><img id="imgResult" src="#" class="result-img" hidden></div>
           </div>
           <div class="border-top pt-3">
@@ -139,6 +156,9 @@
       spin(false);
       if(res.status==='error'){ document.getElementById('err').textContent=res.error||'Lỗi xử lý ảnh'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); return; }
       document.getElementById('imgResult').src=res.img_output; document.getElementById('imgResult').hidden=false;
+      var lbl=document.getElementById('lblOrigin');
+      if(res.enhanced){ document.getElementById('imgOrigin').src=res.enhanced; lbl.innerHTML='<i class="bi bi-stars text-warning"></i> Ảnh đã tăng cường (AI)'; }
+      else { lbl.textContent='Ảnh gốc'; }
       ['btnPrint','dXlsx','dLegend','dCsv'].forEach(id=>document.getElementById(id).hidden=false);
       showPalette(res.colors||[]); if(onDone)onDone();
     }).fail(function(){ spin(false); document.getElementById('err').textContent='Không kết nối được máy chủ.'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); });

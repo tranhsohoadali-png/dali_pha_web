@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cài đặt AI · DALI</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+</head>
+<body class="bg-body-tertiary">
+{% include '_nav.html' %}
+<div class="container py-3" style="max-width:680px">
+  <div class="card shadow-sm">
+    <div class="card-header fw-semibold"><i class="bi bi-key"></i> Google API key (tăng cường ảnh bằng AI)</div>
+    <div class="card-body">
+      {% csrf_token %}
+
+      <div id="state" class="alert {% if has_key %}alert-success{% else %}alert-secondary{% endif %} py-2 d-flex align-items-center">
+        <i class="bi {% if has_key %}bi-check-circle-fill{% else %}bi-exclamation-circle{% endif %} me-2"></i>
+        <span id="stateText">
+          {% if has_key %}Đã có khoá: <code id="maskedKey">{{ masked }}</code>{% if from_env %} <span class="badge text-bg-secondary">từ biến môi trường</span>{% endif %}
+          {% else %}Chưa có khoá — nhập bên dưới để bật tính năng AI.{% endif %}
+        </span>
+      </div>
+
+      <label class="form-label small mb-1">Dán API key vào đây</label>
+      <div class="input-group mb-2">
+        <input type="password" id="apiKey" class="form-control" placeholder="AIza… hoặc khoá Gemini" autocomplete="off">
+        <button class="btn btn-outline-secondary" type="button" id="toggle" title="Hiện/ẩn"><i class="bi bi-eye"></i></button>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        <button id="save" class="btn btn-success"><i class="bi bi-save"></i> Lưu</button>
+        <button id="test" class="btn btn-outline-primary"><i class="bi bi-plug"></i> Kiểm tra kết nối</button>
+        {% if has_key %}<button id="clear" class="btn btn-outline-danger ms-auto"><i class="bi bi-trash"></i> Xoá khoá</button>{% endif %}
+      </div>
+
+      <div id="msg" class="mt-3"></div>
+
+      <hr>
+      <div class="small text-secondary">
+        <i class="bi bi-info-circle"></i> Lấy khoá miễn phí tại <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>.
+        Khoá được lưu trong cơ sở dữ liệu của bạn và ưu tiên hơn biến môi trường. Sau khi lưu, mục
+        <a href="/xu-ly-anh">Tạo bản đồ màu</a> sẽ hiện tuỳ chọn “Tăng cường ảnh bằng AI”.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  var CSRF = $('input[name=csrfmiddlewaretoken]').val();
+  $('#toggle').on('click', function(){
+    var i = document.getElementById('apiKey');
+    i.type = i.type === 'password' ? 'text' : 'password';
+    $(this).find('i').toggleClass('bi-eye bi-eye-slash');
+  });
+  function flash(html, ok){
+    $('#msg').html('<div class="alert '+(ok?'alert-success':'alert-danger')+' py-2 mb-0">'+html+'</div>');
+  }
+  function post(action, extra, cb){
+    $.post('/cai-dat-ai', Object.assign({action:action, csrfmiddlewaretoken:CSRF}, extra||{}), cb);
+  }
+
+  $('#save').on('click', function(){
+    var key = ($('#apiKey').val()||'').trim();
+    if(!key){ flash('Chưa nhập API key.', false); return; }
+    var btn = $(this), orig = btn.html();
+    btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Đang lưu…');
+    post('save', {api_key:key}, function(res){
+      if(res.ok){
+        // hiện nút "Đã lưu thành công"
+        btn.removeClass('btn-success').addClass('btn-success').html('<i class="bi bi-check-circle-fill"></i> Đã lưu thành công');
+        $('#apiKey').val('');
+        $('#state').removeClass('alert-secondary').addClass('alert-success');
+        $('#stateText').html('Đã có khoá: <code id="maskedKey">'+res.masked+'</code>');
+        $('#state').find('i').removeClass('bi-exclamation-circle').addClass('bi-check-circle-fill');
+        flash('<i class="bi bi-check-circle"></i> '+res.msg, true);
+        setTimeout(function(){ btn.prop('disabled', false).html(orig); }, 2500);
+      } else {
+        flash(res.msg || 'Lưu thất bại.', false);
+        btn.prop('disabled', false).html(orig);
+      }
+    }).fail(function(){ flash('Không kết nối được máy chủ.', false); btn.prop('disabled', false).html(orig); });
+  });
+
+  $('#test').on('click', function(){
+    var btn = $(this), orig = btn.html();
+    btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Đang kiểm tra…');
+    // nếu vừa nhập khoá mới mà chưa lưu, lưu trước rồi kiểm tra
+    var key = ($('#apiKey').val()||'').trim();
+    var run = function(){ post('test', {}, function(res){ flash((res.ok?'<i class="bi bi-check-circle"></i> ':'<i class="bi bi-x-circle"></i> ')+res.msg, res.ok); btn.prop('disabled', false).html(orig); })
+                              .fail(function(){ flash('Không kết nối được máy chủ.', false); btn.prop('disabled', false).html(orig); }); };
+    if(key){ post('save', {api_key:key}, function(){ $('#apiKey').val(''); run(); }); } else { run(); }
+  });
+
+  $('#clear').on('click', function(){
+    if(!confirm('Xoá khoá đã lưu?')) return;
+    post('clear', {}, function(res){ flash(res.msg, res.ok); if(res.ok) setTimeout(function(){location.reload();}, 800); });
+  });
+</script>
+</body>
+</html>
