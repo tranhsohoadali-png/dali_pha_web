@@ -73,19 +73,29 @@ AI_USE_STYLE_REFS = config("AI_USE_STYLE_REFS", default="0") == "1"
 # Mỗi preset đóng gói: prompt AI riêng + bộ thông số tách màu phù hợp.
 # Chọn preset trên giao diện -> tự điền thông số + dùng đúng prompt khi bật AI.
 _PROMPT_PHOTO = config("AI_PROMPT_PHOTO", default=(
-    "ROLE & GOAL. Convert this REAL PHOTOGRAPH into a simple PAINT-BY-NUMBERS "
-    "coloring template made of a few large, clean, FLAT color regions with bold "
-    "closed outlines — like a tidy cartoon/anime poster. The output feeds a program "
-    "that traces flat areas and numbers them, so detail and texture are harmful.\n"
-    "TASK. Keep the SAME people/subject, pose, identity and composition. Do not add "
-    "or remove anyone. Re-draw, do not just filter.\n"
-    "RULES: (1) Bold, smooth, fully-closed dark outlines. (2) FLAT solid colors only "
-    "— smooth skin, hair and clothes into a few even tones; NO photographic gradients, "
-    "shadows, pores, noise or texture. (3) Simplify hair into a few big locks, skin "
-    "into 2-3 flat tones, and DECLUTTER the background heavily into a few large flat "
-    "shapes. (4) Big paintable regions, merge tiny details. (5) Limited, clean palette. "
-    "Result must look hand-drawn and printable, NOT photographic. Same aspect ratio, "
-    "output only the redrawn image."
+    "ROLE & GOAL. Redraw this REAL PHOTOGRAPH into a beautiful PORTRAIT coloring "
+    "template for paint-by-numbers: clean, flat color regions with bold closed "
+    "outlines, in a polished semi-anime / soft cartoon portrait style. The output "
+    "feeds a program that traces flat areas and numbers them, so photographic "
+    "texture/noise is harmful — but the FACE must stay detailed and lifelike.\n"
+    "KEEP IDENTITY. Keep the SAME person(s), face shape, pose, hairstyle, clothing "
+    "and composition. Preserve the likeness and the smiling expression — it must "
+    "clearly look like the same person. Re-draw, do not just filter.\n"
+    "FACE — MOST IMPORTANT. Render the facial features CLEARLY and attractively: "
+    "well-shaped EYES with visible iris, pupil, upper eyelid line, eyebrows and a "
+    "few lashes; a clean NOSE (soft bridge, tip, subtle nostrils); well-defined "
+    "smiling LIPS with a lip line. Use FRESH, healthy skin tones — warm and bright "
+    "with soft rosy cheeks and a light blush; NEVER dull, grey, muddy or sickly "
+    "skin. Eyes bright and clear. Keep facial outlines SOFT, thin and smooth (gentle "
+    "curves), much finer than the bold outlines used elsewhere; no harsh or broken "
+    "lines on the face. Shade the face with only a FEW clean flat tones (base skin, "
+    "a soft shadow tone, a highlight) so it stays smooth but three-dimensional.\n"
+    "EVERYTHING ELSE. Flatten hair into a few big smooth locks, clothes into a few "
+    "even tones, and DECLUTTER the background heavily into a few large flat shapes. "
+    "No gradients, pores, photo noise or tiny specks. Big paintable regions; merge "
+    "tiny scattered details. Use a clean, fresh, slightly vivid palette.\n"
+    "Result: a neat, printable, GOOD-LOOKING portrait coloring page — same aspect "
+    "ratio, output only the redrawn image."
 ))
 _PROMPT_DESIGN = config("AI_PROMPT_DESIGN", default=(
     "ROLE & GOAL. This is already a clean flat/vector-style DESIGN. Standardize it "
@@ -105,10 +115,10 @@ PRESETS = {
         'use_refs': False, 'prompt': DEFAULT_ENHANCE_PROMPT,
     },
     'photo': {
-        'label': 'Ảnh thật khách hàng (30–48 màu)',
-        'desc': 'Ảnh chụp người/cảnh thật -> tranh tô màu nhiều tông (30–48 màu), '
-                'học phong cách từ Kho mẫu (chân dung).',
-        'color_limit': 40, 'smooth': 3, 'min_area': 90, 'enhance': True,
+        'label': 'Ảnh thật khách hàng (chân dung, 30–48 màu)',
+        'desc': 'Ảnh chụp người -> tranh chân dung tô màu: rõ mắt/mũi/mồm, da tươi, '
+                'nét mặt mềm. BẬT AI + học phong cách từ Kho mẫu (chân dung).',
+        'color_limit': 40, 'smooth': 2, 'min_area': 60, 'enhance': True,
         'use_refs': True, 'prompt': _PROMPT_PHOTO,
     },
     'design': {
