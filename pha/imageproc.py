@@ -63,20 +63,25 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
     Khâu đánh số + khớp mã DALI luôn chạy như cũ trên ảnh (đã hoặc chưa tăng cường).
     """
     obj = ImageResult.objects.get(id=rec_id)
+    warn = ''
     try:
         path = os.path.join(settings.MEDIA_ROOT, name)
         if enhance:
-            from pha.ai_enhance import enhance_image
-            from pha import style_library
-            refs = (style_library.pick_references(path, category=style_category, n=3)
-                    if use_refs else [])
-            enhanced_name = f'{os.path.splitext(name)[0]}_ai.png'
-            enhanced_path = os.path.join(settings.MEDIA_ROOT, enhanced_name)
-            enhance_image(path, enhanced_path, prompt=ai_prompt, reference_paths=refs,
-                          color_limit=color_limit, use_refs=use_refs)
-            obj.enhanced_name = enhanced_name
-            obj.save(update_fields=['enhanced_name'])
-            path = enhanced_path  # số hoá trên ảnh đã tăng cường
+            # AI tách riêng: nếu lỗi/timeout -> BỎ QUA, xử lý ảnh gốc (không treo).
+            try:
+                from pha.ai_enhance import enhance_image
+                from pha import style_library
+                refs = (style_library.pick_references(path, category=style_category, n=3)
+                        if use_refs else [])
+                enhanced_name = f'{os.path.splitext(name)[0]}_ai.png'
+                enhanced_path = os.path.join(settings.MEDIA_ROOT, enhanced_name)
+                enhance_image(path, enhanced_path, prompt=ai_prompt, reference_paths=refs,
+                              color_limit=color_limit, use_refs=use_refs)
+                obj.enhanced_name = enhanced_name
+                obj.save(update_fields=['enhanced_name'])
+                path = enhanced_path  # số hoá trên ảnh đã tăng cường
+            except Exception as e:
+                warn = 'Bỏ qua tăng cường AI (' + str(e)[:140] + '). Đã xử lý ảnh gốc.'
         design_name = f'{os.path.splitext(name)[0]}_design.png'
         design_path = os.path.join(settings.MEDIA_ROOT, design_name)
         edge_img, color_mapping, percentages = index_color(
@@ -89,6 +94,7 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
         obj.design_name = design_name if os.path.exists(design_path) else ''
         obj.colors = colors
         obj.status = ImageResult.STATUS_DONE
+        obj.error_message = warn          # cảnh báo nhẹ nếu AI bị bỏ qua (vẫn có kết quả)
         obj.save()
     except Exception as e:
         obj.status = ImageResult.STATUS_ERROR

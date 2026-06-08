@@ -261,7 +261,7 @@
   function getResult(url, onDone, onWait){
     curUrl=url;
     if(!url.startsWith('/media/')&&!url.startsWith('data:')) document.getElementById('imgOrigin').src='/media/'+url;
-    document.getElementById('err').classList.add('d-none'); spin(true);
+    document.getElementById('err').className='alert alert-danger d-none'; spin(true);
     $.post('/anh-result',{file_url:url},function(res){
       if(res.status==='processing'){ if(onWait)onWait(); return; }
       spin(false);
@@ -284,6 +284,7 @@
             +' · Đơn giản: '+sm
             +' · AI: '+(p.enhance?'có':'không')+(p.enhance&&p.style_category?(' ('+p.style_category+')'):'');
       pi.innerHTML=t; pi.classList.remove('d-none');
+      if(res.warn){ var e=document.getElementById('err'); e.className='alert alert-warning'; e.textContent='⚠️ '+res.warn; }
       ['btnPrint','dXlsx','dLegend','dCsv'].forEach(id=>document.getElementById(id).hidden=false);
       showPalette(res.colors||[]); if(onDone)onDone();
     }).fail(function(){ spin(false); document.getElementById('err').textContent='Không kết nối được máy chủ.'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); });

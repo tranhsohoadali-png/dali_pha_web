@@ -17,6 +17,8 @@ from decouple import config
 
 # Model sinh/sửa ảnh của Google ("Nano Banana"). Có thể đổi qua env.
 AI_ENHANCE_MODEL = config("AI_ENHANCE_MODEL", default="gemini-2.5-flash-image")
+# Timeout (mili-giây) cho mỗi lần gọi Google AI -> tránh treo luồng xử lý.
+AI_TIMEOUT_MS = config("AI_TIMEOUT_MS", default=150000, cast=int)
 
 # Prompt mặc định: ĐƠN GIẢN HOÁ ảnh khách thành tranh tô màu (paint-by-numbers),
 # nhưng GIỮ NGUYÊN tuyệt đối chủ thể/bố cục (không được vẽ sang con/vật khác).
@@ -73,32 +75,34 @@ AI_USE_STYLE_REFS = config("AI_USE_STYLE_REFS", default="0") == "1"
 # Mỗi preset đóng gói: prompt AI riêng + bộ thông số tách màu phù hợp.
 # Chọn preset trên giao diện -> tự điền thông số + dùng đúng prompt khi bật AI.
 _PROMPT_PHOTO = config("AI_PROMPT_PHOTO", default=(
-    "ROLE. Turn this REAL PHOTOGRAPH into a paint-by-numbers template by SIMPLIFYING "
-    "it, while keeping it look like the SAME REAL PHOTO. Think of it as a high-quality "
-    "POSTERIZE / cut-out of the real photograph — NOT an artistic re-imagination.\n"
-    "ABSOLUTE RULES (do not break):\n"
-    "- This is REALISTIC, not stylised. Do NOT turn it into anime, manga, cartoon, "
-    "comic, 3D render, oil painting or any illustration style. Do NOT beautify, "
-    "reshape or 'AI-generate' a new face. The result must look like the real person "
-    "in the real photo, just simplified.\n"
-    "- Keep the EXACT same person, real face, real proportions, real expression, "
-    "pose, hair, clothing, objects and background layout. Keep the REAL colours and "
-    "REAL skin tone of the photo — only flatten them; never invent a new palette.\n"
-    "WHAT TO DO (only this):\n"
-    "1) POSTERIZE: merge near-identical neighbouring shades into ONE flat colour, so "
-    "smooth gradients become a few clean flat bands of the SAME real colours.\n"
-    "2) REMOVE photographic noise, grain, fine texture, skin pores and stray wisps so "
-    "every area becomes a clean solid shape (this is the only 'cleaning' allowed).\n"
-    "3) FACE: keep the real eyes, eyebrows, nose, lips and the real smile exactly "
-    "where they are and shaped as they really are — just rendered with a few flat, "
-    "natural skin/feature tones. Skin stays natural and realistic (you may keep its "
-    "healthy warm tone), NEVER grey/muddy, but do NOT cartoonify the features.\n"
-    "4) Use THIN, subtle boundaries where colours meet. Do NOT draw thick black "
-    "cartoon outlines around everything; only soft edges between flat regions.\n"
-    "5) Keep enough flat tones to stay recognisable and three-dimensional "
-    "(realistic posterise), not a flat 2-tone cartoon.\n"
-    "Keep the same framing and aspect ratio. Output ONLY the simplified realistic "
-    "image."
+    "ROLE. Convert this REAL PHOTOGRAPH into a high-fidelity, REALISTIC vectorised "
+    "portrait — exactly like Adobe Illustrator 'Image Trace (High Fidelity Photo)' "
+    "or a smooth posterise of the real photo. The result is a paint-by-numbers design "
+    "that must still look like the SAME REAL PERSON in a realistic style.\n"
+    "ABSOLUTE RULES (never break):\n"
+    "- REALISTIC, not stylised. Do NOT make it anime, manga, cartoon, comic, 3D, "
+    "oil painting or any illustration look. Do NOT beautify, slim, reshape or "
+    "AI-generate a new face. Keep the EXACT same person, real face shape, real "
+    "features, real proportions, real expression/smile, pose, hair and clothing — "
+    "it must be instantly recognisable as the same person.\n"
+    "- Keep the REAL colours and REAL skin tone of the photo. Only flatten/clean "
+    "them; never invent a new palette or change the mood.\n"
+    "HOW TO RENDER (match the realistic vector-trace look):\n"
+    "1) Re-render every area as SMOOTH FLAT COLOUR BANDS that follow the real light "
+    "and shadow: split smooth gradients into several adjacent flat tones (e.g. skin "
+    "= highlight, mid, soft shadow; hair = a few flat strands of light/dark brown). "
+    "Use a GENEROUS number of flat tones (around 30-48) so skin and hair look smooth, "
+    "soft and three-dimensional — NOT a harsh 2-3 colour poster.\n"
+    "2) FACE in fine detail: clearly keep the real eyes (iris, pupil, eyelid, lashes), "
+    "eyebrows, nose and smiling lips, exactly where and how they really are, rendered "
+    "with clean flat tones. Soft natural blush on cheeks. Skin warm and healthy, "
+    "NEVER grey/muddy.\n"
+    "3) NO outlines: do NOT draw black ink/cartoon outlines. Shapes are defined ONLY "
+    "by the boundaries between flat colour areas (soft, clean edges), like the photo.\n"
+    "4) Remove photographic noise, grain, pores and stray hair wisps so each area is a "
+    "clean solid shape. Simplify the background into smooth, calm flat shapes, keeping "
+    "its real (muted) colours so the person stands out.\n"
+    "Keep the same framing and aspect ratio. Output ONLY the rendered realistic image."
 ))
 _PROMPT_DESIGN = config("AI_PROMPT_DESIGN", default=(
     "ROLE & GOAL. This is already a clean flat/vector-style DESIGN. Standardize it "
@@ -255,7 +259,15 @@ def enhance_image(input_path, output_path, prompt=None, reference_paths=None,
     contents = [text] + refs + [src]
 
     try:
-        client = genai.Client(api_key=key)
+        # Timeout để KHÔNG treo luồng xử lý nếu Google chậm/không phản hồi.
+        try:
+            from google.genai import types as _gtypes
+            client = genai.Client(
+                api_key=key,
+                http_options=_gtypes.HttpOptions(timeout=AI_TIMEOUT_MS),
+            )
+        except Exception:
+            client = genai.Client(api_key=key)   # SDK cũ không có HttpOptions
         resp = client.models.generate_content(
             model=AI_ENHANCE_MODEL,
             contents=contents,

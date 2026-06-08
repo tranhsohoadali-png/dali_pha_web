@@ -893,7 +893,7 @@ def anh_result(request):
                          'original': '/media/' + res.name,
                          'enhanced': ('/media/' + res.enhanced_name) if res.enhanced_name else '',
                          'design': ('/media/' + res.design_name) if res.design_name else '',
-                         'params': res.params or {},
+                         'params': res.params or {}, 'warn': res.error_message or '',
                          'colors': split_list(10, res.colors)})
 
 
