@@ -350,17 +350,18 @@ def _reduce_palette_perceptual(img_rgb, target_n):
             cb['members'] += cm['members']
             del clusters[m]
 
-    # LUẬT MẮT NGƯỜI: mọi sắc rất TỐI dồn thành 1 "đen", mọi sắc gần TRẮNG dồn
-    # thành 1 "trắng" — vì mắt không phân biệt được, đỡ phí suất cho tông khác.
+    # LUẬT MẮT NGƯỜI: mọi sắc rất TỐI dồn thành 1 "đen", các sắc gần-TRẮNG TRUNG
+    # TÍNH dồn thành 1 "trắng". Ngưỡng TRẮNG siết chặt (L>240) để KHÔNG nuốt các
+    # tông sáng có màu (trời/vùng sáng hơi xanh) -> tránh nhuộm vịt sang tông lạnh.
     # (cv2-LAB: L 0-255; chroma quanh 128.)
     L = lab[:, 0]
-    darks = [i for i in range(K) if L[i] < 60]
-    whites = [i for i in range(K)
-              if L[i] > 235 and abs(lab[i, 1] - 128) < 12 and abs(lab[i, 2] - 128) < 12]
+    chroma = np.abs(lab[:, 1] - 128) + np.abs(lab[:, 2] - 128)
+    darks = [i for i in range(K) if L[i] < 55 and chroma[i] < 36]
+    whites = [i for i in range(K) if L[i] > 240 and chroma[i] < 24]
     if len(darks) > 1:
-        _merge_into(max(darks, key=lambda m: counts[m]), darks)
+        _merge_into(min(darks, key=lambda m: L[m]), darks)        # gốc = tối nhất
     if len(whites) > 1:
-        _merge_into(max(whites, key=lambda m: counts[m]), whites)
+        _merge_into(max(whites, key=lambda m: L[m]), whites)      # gốc = sáng nhất
 
     while len(clusters) > target_n:
         ids = list(clusters.keys())
@@ -378,12 +379,23 @@ def _reduce_palette_perceptual(img_rgb, target_n):
         ci['cnt'] = tot
         ci['members'] += cj['members']
         del clusters[j]
-    # Đại diện mỗi nhóm = màu có nhiều pixel nhất (giữ màu thật, không bị xỉn).
+    # Đại diện mỗi nhóm:
+    #  - nhóm sáng & trung tính -> lấy màu TRẮNG NHẤT (tránh ám xanh do vùng lạnh
+    #    lớn lấn át, vd vịt trắng);
+    #  - nhóm tối & trung tính -> lấy màu ĐEN NHẤT;
+    #  - còn lại -> màu nhiều pixel nhất (giữ tông thật).
     rep_of = np.zeros((K, 3), dtype=np.uint8)
     for cl in clusters.values():
-        best_m = max(cl['members'], key=lambda m: counts[m])
+        mem = cl['members']
+        cL, cC = cl['lab'][0], abs(cl['lab'][1] - 128) + abs(cl['lab'][2] - 128)
+        if cL > 225 and cC < 22:
+            best_m = max(mem, key=lambda m: L[m] - chroma[m])      # trắng & trung tính nhất
+        elif cL < 65 and cC < 30:
+            best_m = min(mem, key=lambda m: L[m] + chroma[m])      # đen & trung tính nhất
+        else:
+            best_m = max(mem, key=lambda m: counts[m])
         rep = colors[best_m]
-        for m in cl['members']:
+        for m in mem:
             rep_of[m] = rep
     out = np.zeros_like(flat)
     for k, c in enumerate(colors):
