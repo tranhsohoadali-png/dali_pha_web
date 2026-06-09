@@ -168,28 +168,39 @@
     }catch(e){}
   }
   function askNotif(){ try{ if('Notification' in window){ if(Notification.permission==='granted'){ setupPush(); } else if(Notification.permission==='default'){ Notification.requestPermission().then(function(p){ if(p==='granted') setupPush(); }); } } }catch(e){} }
-  function loadReq(){
+  var reqKept={};       // id -> row đã xác nhận rót (GIỮ LẠI để còn xem ảnh khi rót)
+  var lastReqRows=[];
+  function reqCard(r, done){
+    return '<div class="rc p-2"'+(done?' style="border:2px solid #198754"':'')+'>'+
+      '<div class="d-flex align-items-center gap-2 mb-1">'+
+        '<h2 class="flex-grow-1">'+esc(r.painting)+' <span class="text-secondary" style="font-size:.9rem">×'+r.qty+'</span></h2>'+
+        (done
+          ? '<span class="badge text-bg-success" style="font-size:1rem;padding:.5rem .7rem"><i class="bi bi-check-lg"></i> Đã rót</span>'
+          : '<button class="btn btn-success rot-btn rot-req" data-id="'+r.id+'"><i class="bi bi-check-lg"></i> Đã rót</button>')+
+      '</div>'+
+      (r.assignee ? '<div class="small mb-1"><span class="badge text-bg-info">'+esc(r.assignee)+'</span></div>' : '')+
+      '<div class="mb-1"><span class="badge text-bg-primary" style="font-size:.95rem">'+(r.count||0)+' màu</span>'+
+        (done?' <span class="text-success small fw-bold"><i class="bi bi-hand-index-thumb"></i> bấm ảnh để xem khi rót</span>':'')+'</div>'+
+      (r.image ? '<img src="'+r.image+'" class="img-fluid rounded border mb-1 zoom-img" style="max-height:200px;cursor:zoom-in">' : '')+
+      (r.note ? '<div class="small text-secondary"><i class="bi bi-sticky"></i> '+esc(r.note)+'</div>' : '')+
+      '<div class="small text-secondary"><i class="bi bi-person"></i> '+esc(r.by||'')+' · '+r.dt+'</div>'+
+    '</div>';
+  }
+  function renderReqList(){
     var box=document.getElementById('reqList');
+    var pend=lastReqRows.filter(function(r){ return !reqKept[r.id]; });
+    setBadge(pend.length);
+    var kept=Object.keys(reqKept).map(function(k){return reqKept[k];});
+    if(!pend.length && !kept.length){ box.innerHTML='<p class="text-secondary text-center py-4"><i class="bi bi-emoji-smile"></i> Không có việc cần rót.</p>'; return; }
+    box.innerHTML = pend.map(function(r){return reqCard(r,false);}).join('') + kept.map(function(r){return reqCard(r,true);}).join('');
+  }
+  function loadReq(){
     fetch('/rot-yeu-cau').then(function(r){return r.json();}).then(function(res){
-      setBadge(res.count||0);
       var prev=rotGetSeen(), rows0=res.rows||[];
       if(prev!==null){ var ps={}; prev.forEach(function(id){ps[id]=1;}); var fresh=rows0.filter(function(r){return !ps[r.id];}); if(fresh.length){ rotBeep(); rotSysNotify(fresh); toast('🔔 Có '+fresh.length+' mã tranh cần rót'); } }
       rotSaveSeen(rows0.map(function(r){return r.id;}));
-      if(!res.rows || !res.rows.length){ box.innerHTML='<p class="text-secondary text-center py-4"><i class="bi bi-emoji-smile"></i> Không có việc cần rót.</p>'; return; }
-      box.innerHTML = res.rows.map(function(r){
-        return '<div class="rc p-2">'+
-          '<div class="d-flex align-items-center gap-2 mb-1">'+
-            '<h2 class="flex-grow-1">'+esc(r.painting)+' <span class="text-secondary" style="font-size:.9rem">×'+r.qty+'</span></h2>'+
-            '<button class="btn btn-success rot-btn rot-req" data-id="'+r.id+'" data-painting="'+esc(r.painting)+'" data-qty="'+r.qty+'"><i class="bi bi-check-lg"></i> Đã rót</button>'+
-          '</div>'+
-          (r.assignee ? '<div class="small mb-1"><span class="badge text-bg-info">'+esc(r.assignee)+'</span></div>' : '')+
-          '<div class="mb-1"><span class="badge text-bg-primary" style="font-size:.95rem">'+(r.count||0)+' màu</span></div>'+
-          (r.image ? '<img src="'+r.image+'" class="img-fluid rounded border mb-1 zoom-img" style="max-height:180px;cursor:zoom-in">' : '')+
-          (r.note ? '<div class="small text-secondary"><i class="bi bi-sticky"></i> '+esc(r.note)+'</div>' : '')+
-          '<div class="small text-secondary"><i class="bi bi-person"></i> '+esc(r.by||'')+' · '+r.dt+'</div>'+
-        '</div>';
-      }).join('');
-    }).catch(function(){ box.innerHTML='<p class="text-danger text-center py-4">Lỗi tải dữ liệu.</p>'; });
+      lastReqRows=rows0; renderReqList();
+    }).catch(function(){ if(!Object.keys(reqKept).length){ document.getElementById('reqList').innerHTML='<p class="text-danger text-center py-4">Lỗi tải dữ liệu.</p>'; } });
   }
   document.getElementById('reqReload').addEventListener('click', loadReq);
 
@@ -259,7 +270,8 @@
 
   document.addEventListener('click', function(e){
     var rq=e.target.closest('.rot-req');
-    if(rq){ openConfirm({request_id:rq.dataset.id, painting:rq.dataset.painting, qty:rq.dataset.qty}); return; }
+    if(rq){ var row=lastReqRows.filter(function(r){return String(r.id)===String(rq.dataset.id);})[0];
+      openConfirm({request_id:rq.dataset.id, painting:(row?row.painting:''), qty:(row?row.qty:1), _row:row}); return; }
     var rc=e.target.closest('.rot-cat');
     if(rc){
       var card=rc.closest('.cat-card'); var qty=card.querySelector('.catqty');
@@ -274,9 +286,11 @@
     var fd=new FormData();
     fd.append('painting', pending.painting); fd.append('qty', pending.qty);
     if(pending.request_id) fd.append('request_id', pending.request_id);
+    var keepRow = pending.request_id ? pending._row : null;
+    var keepId = pending.request_id;
     fetch('/rot',{method:'POST',body:fd,headers:{'X-CSRFToken':csrf()}}).then(function(r){return r.json();}).then(function(res){
       toast(res.ok?('✓ '+res.msg):(res.msg||'Lỗi'));
-      if(res.ok){ loadReq(); }
+      if(res.ok && keepId && keepRow){ reqKept[keepId]=keepRow; renderReqList(); }   // giữ card lại để xem ảnh
     }).catch(function(){ toast('Lỗi kết nối'); }).then(function(){
       busy=false; yes.disabled=false; yes.innerHTML='<i class="bi bi-check-lg"></i> Đồng ý, đã rót'; closeConfirm();
     });

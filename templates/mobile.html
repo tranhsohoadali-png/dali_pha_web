@@ -211,23 +211,34 @@
   function escR(s){ return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function setRotBadge(n){ var b=document.getElementById('rotBadge'); if(n>0){ b.textContent=n; b.style.display=''; } else b.style.display='none'; }
   var rotBusy=false;
-  function loadRot(){
+  var rotKept={};        // id -> row đã xác nhận rót (GIỮ LẠI để còn xem ảnh khi rót)
+  var lastPending=[];
+  function rotCard(r, done){
+    return '<div class="rc p-2"'+(done?' style="border:2px solid #198754"':'')+'>'+
+      '<div class="d-flex align-items-center gap-2 mb-1">'+
+        '<h2 class="flex-grow-1">'+escR(r.painting)+' <span class="text-secondary" style="font-size:.9rem">×'+r.qty+'</span></h2>'+
+        (done
+          ? '<span class="badge text-bg-success" style="font-size:1rem;padding:.5rem .7rem"><i class="bi bi-check-lg"></i> Đã rót</span>'
+          : '<button class="btn btn-success pha-btn rotdone" data-id="'+r.id+'"><i class="bi bi-check-lg"></i> Đã rót</button>')+
+      '</div>'+
+      '<div class="mb-1"><span class="badge text-bg-primary" style="font-size:.95rem">'+(r.count||0)+' màu</span>'+
+        (done?' <span class="text-success small fw-bold"><i class="bi bi-hand-index-thumb"></i> bấm ảnh để xem khi rót</span>':'')+'</div>'+
+      (r.image?'<img src="'+r.image+'" class="img-fluid rounded border mb-1 rotzoom" style="max-height:200px;cursor:zoom-in">':'')+
+      (r.note?'<div class="small text-secondary"><i class="bi bi-sticky"></i> '+escR(r.note)+'</div>':'')+
+    '</div>';
+  }
+  function renderRotList(){
     var box=document.getElementById('rotList');
+    var pend=lastPending.filter(function(r){ return !rotKept[r.id]; });
+    setRotBadge(pend.length);
+    var kept=Object.keys(rotKept).map(function(k){ return rotKept[k]; });
+    if(!pend.length && !kept.length){ box.innerHTML='<p class="text-secondary text-center py-4"><i class="bi bi-emoji-smile"></i> Không có mã tranh cần rót.</p>'; return; }
+    box.innerHTML = pend.map(function(r){return rotCard(r,false);}).join('') + kept.map(function(r){return rotCard(r,true);}).join('');
+  }
+  function loadRot(){
     fetch('/rot-yeu-cau').then(function(r){return r.json();}).then(function(res){
-      setRotBadge(res.count||0);
-      if(!res.rows||!res.rows.length){ box.innerHTML='<p class="text-secondary text-center py-4"><i class="bi bi-emoji-smile"></i> Không có mã tranh cần rót.</p>'; return; }
-      box.innerHTML=res.rows.map(function(r){
-        return '<div class="rc p-2">'+
-          '<div class="d-flex align-items-center gap-2 mb-1">'+
-            '<h2 class="flex-grow-1">'+escR(r.painting)+' <span class="text-secondary" style="font-size:.9rem">×'+r.qty+'</span></h2>'+
-            '<button class="btn btn-success pha-btn rotdone" data-id="'+r.id+'"><i class="bi bi-check-lg"></i> Đã rót</button>'+
-          '</div>'+
-          '<div class="mb-1"><span class="badge text-bg-primary" style="font-size:.95rem">'+(r.count||0)+' màu</span></div>'+
-          (r.image?'<img src="'+r.image+'" class="img-fluid rounded border mb-1 rotzoom" style="max-height:200px;cursor:zoom-in">':'')+
-          (r.note?'<div class="small text-secondary"><i class="bi bi-sticky"></i> '+escR(r.note)+'</div>':'')+
-        '</div>';
-      }).join('');
-    }).catch(function(){ box.innerHTML='<p class="text-danger text-center py-4">Lỗi tải.</p>'; });
+      lastPending=res.rows||[]; renderRotList();
+    }).catch(function(){ if(!Object.keys(rotKept).length){ document.getElementById('rotList').innerHTML='<p class="text-danger text-center py-4">Lỗi tải.</p>'; } });
   }
   document.getElementById('rotReload').addEventListener('click', loadRot);
 
@@ -237,11 +248,16 @@
     var z=e.target.closest('.rotzoom');
     if(z){ document.getElementById('lightboxImg').src=z.getAttribute('src'); lbx.style.display='flex'; return; }
     var d=e.target.closest('.rotdone'); if(!d) return;
+    var id=d.dataset.id;
+    var row=lastPending.filter(function(r){return String(r.id)===String(id);})[0];
+    if(!confirm('Xác nhận ĐÃ RÓT XONG mã tranh '+(row?row.painting:'')+'?')) return;
     if(rotBusy) return; rotBusy=true; d.disabled=true; d.innerHTML='Đang ghi…';
-    var fd=new FormData(); fd.append('request_id', d.dataset.id);
+    var fd=new FormData(); fd.append('request_id', id);
     fetch('/rot',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(res){
-      toast(res.ok?('✓ '+res.msg):(res.msg||'Lỗi')); rotBusy=false; loadRot();
-    }).catch(function(){ rotBusy=false; toast('Lỗi kết nối'); });
+      rotBusy=false;
+      if(res.ok){ if(row) rotKept[id]=row; toast('✓ '+res.msg); renderRotList(); }
+      else { toast(res.msg||'Lỗi'); d.disabled=false; d.innerHTML='<i class="bi bi-check-lg"></i> Đã rót'; }
+    }).catch(function(){ rotBusy=false; toast('Lỗi kết nối'); d.disabled=false; d.innerHTML='<i class="bi bi-check-lg"></i> Đã rót'; });
   });
 
   // ===== THÔNG BÁO việc rót mới: chuông + thông báo hệ thống ngoài màn hình =====
