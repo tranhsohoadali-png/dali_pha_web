@@ -70,7 +70,7 @@
                 <tr>
                   <td class="fw-semibold text-nowrap">{{ r.painting }}{% if r.image %} <button type="button" class="btn btn-sm btn-outline-info py-0 zoom-btn" title="Xem ảnh mẫu" data-image="{{ r.image }}"><i class="bi bi-image"></i></button>{% endif %}</td>
                   <td class="text-center">{% if r.size %}<span class="badge text-bg-dark">{{ r.size }}</span>{% else %}<span class="text-secondary">—</span>{% endif %}</td>
-                  <td class="text-center">{{ r.count }}</td>
+                  <td class="text-center text-nowrap"><span class="pcount" data-p="{{ r.painting }}">{{ r.count }}</span> <button type="button" class="btn btn-sm btn-outline-secondary py-0 recount-btn" data-code="{{ r.painting }}" title="Cập nhật số màu từ ảnh mẫu"><i class="bi bi-arrow-repeat"></i></button></td>
                   <td>{% if r.assignee %}<span class="badge text-bg-info">{{ r.assignee }}</span>{% else %}<span class="text-secondary">Mọi người</span>{% endif %}</td>
                   <td class="text-center">{{ r.qty }}</td>
                   <td class="small">{{ r.note }}</td>
@@ -216,6 +216,7 @@
                   <input id="paintSearch" class="form-control" placeholder="Tìm mã tranh…">
                 </div>
                 <button id="catToggle" type="button" class="btn btn-sm btn-outline-primary" style="display:none"></button>
+                <button id="recountZero" type="button" class="btn btn-sm btn-outline-info" title="Đọc lại số màu từ ảnh cho các mã đang để 0"><i class="bi bi-arrow-repeat"></i> Cập nhật số màu thiếu</button>
               </div>
               {% if not paintings %}
                 <p class="text-secondary text-center py-4">Chưa có mã tranh. Khai báo ở bên trái rồi bấm <b>Lưu mã tranh</b>.</p>
@@ -226,7 +227,8 @@
                   <div class="border rounded p-2 h-100 paint-card" data-search="{{ p.code|lower }}">
                     <div class="d-flex align-items-center gap-1 mb-1">
                       <span class="fw-semibold">{{ p.code }}</span>
-                      <span class="badge text-bg-primary ms-auto">{{ p.color_count }} màu</span>
+                      <span class="badge text-bg-primary ms-auto pcountb" data-p="{{ p.code }}">{{ p.color_count }} màu</span>
+                      {% if p.image %}<button type="button" class="btn btn-sm btn-outline-secondary py-0 recount-btn" data-code="{{ p.code }}" title="Cập nhật số màu từ ảnh"><i class="bi bi-arrow-repeat"></i></button>{% endif %}
                     </div>
                     {% if p.image %}<img src="/media/{{ p.image }}" class="rounded border w-100 zoom-img mb-1" style="max-height:120px; object-fit:contain; cursor:zoom-in" title="Bấm xem to">{% else %}<div class="text-secondary small text-center py-3 bg-body-secondary rounded mb-1">Chưa có ảnh</div>{% endif %}
                     <div class="d-flex gap-1">
@@ -460,6 +462,34 @@
     var fd = new FormData(); fd.append('all', '1');
     fetch('/xoa-lich-su-rot', {method:'POST', body:fd, headers:{'X-CSRFToken':csrf()}})
       .then(function(r){ return r.json(); }).then(function(res){ toast(res.msg||''); loadHistory(); loadStats(); });
+  });
+
+  // ---- Cập nhật SỐ MÀU tự động từ ảnh mẫu (đọc bằng AI) ----
+  document.addEventListener('click', function(e){
+    var rb = e.target.closest('.recount-btn'); if(!rb) return;
+    var code = rb.dataset.code;
+    rb.disabled = true;
+    var fd = new FormData(); fd.append('action','one'); fd.append('code', code);
+    fetch('/ma-tranh-cap-nhat-so-mau', {method:'POST', body:fd, headers:{'X-CSRFToken':csrf()}})
+      .then(function(r){ return r.json(); }).then(function(res){
+        rb.disabled = false;
+        if(res.ok){
+          document.querySelectorAll('.pcount[data-p="'+code+'"]').forEach(function(el){ el.textContent = res.count; });
+          document.querySelectorAll('.pcountb[data-p="'+code+'"]').forEach(function(el){ el.textContent = res.count + ' màu'; });
+          toast('✓ ' + code + ': ' + res.count + ' màu');
+        } else toast(res.msg || 'Lỗi');
+      }).catch(function(){ rb.disabled = false; toast('Lỗi kết nối'); });
+  });
+  var recZero = document.getElementById('recountZero');
+  if (recZero) recZero.addEventListener('click', function(){
+    if(!confirm('Đọc lại số màu từ ảnh cho các mã đang để 0? (có thể mất chút thời gian)')) return;
+    recZero.disabled = true; var old = recZero.innerHTML; recZero.innerHTML = 'Đang cập nhật…';
+    var fd = new FormData(); fd.append('action','all_zero');
+    fetch('/ma-tranh-cap-nhat-so-mau', {method:'POST', body:fd, headers:{'X-CSRFToken':csrf()}})
+      .then(function(r){ return r.json(); }).then(function(res){
+        recZero.disabled = false; recZero.innerHTML = old; toast(res.msg || 'Xong');
+        if(res.ok && res.updated) setTimeout(function(){ location.reload(); }, 800);
+      }).catch(function(){ recZero.disabled = false; recZero.innerHTML = old; toast('Lỗi kết nối'); });
   });
   loadHistory();
   loadStats();   // vẽ biểu đồ cột ngay khi mở trang

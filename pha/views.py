@@ -1002,6 +1002,42 @@ def rot(request):
 
 @csrf_exempt
 @staff_required
+def cap_nhat_so_mau(request):
+    """Tính lại SỐ MÀU tự động từ ẢNH MẪU (AI đọc bảng chú giải, fallback pixel) và
+    cập nhật vào mã tranh. action=one (1 mã) hoặc all_zero (các mã đang để 0/thiếu)."""
+    if request.method != 'POST':
+        return HttpResponseNotFound('POST only')
+    from pha.models import Painting
+    action = request.POST.get('action') or 'one'
+    if action == 'one':
+        code = (request.POST.get('code') or '').strip()
+        p = Painting.objects.filter(code__iexact=code).first()
+        if not p:
+            return JsonResponse({'ok': False, 'msg': 'Không tìm thấy mã tranh.'})
+        if not p.image:
+            return JsonResponse({'ok': False, 'msg': f'{p.code} chưa có ảnh mẫu để đếm.'})
+        n = _detect_color_count(os.path.join(settings.MEDIA_ROOT, p.image))
+        if n:
+            p.color_count = n
+            p.save(update_fields=['color_count'])
+            return JsonResponse({'ok': True, 'code': p.code, 'count': n})
+        return JsonResponse({'ok': False, 'msg': 'Không đọc được số màu từ ảnh.'})
+    if action == 'all_zero':
+        updated, checked = 0, 0
+        for p in Painting.objects.exclude(image='').filter(color_count=0):
+            checked += 1
+            n = _detect_color_count(os.path.join(settings.MEDIA_ROOT, p.image))
+            if n:
+                p.color_count = n
+                p.save(update_fields=['color_count'])
+                updated += 1
+        return JsonResponse({'ok': True, 'updated': updated,
+                             'msg': f'Đã cập nhật {updated}/{checked} mã tranh thiếu số màu.'})
+    return JsonResponse({'ok': False, 'msg': 'Hành động không hợp lệ.'})
+
+
+@csrf_exempt
+@staff_required
 def doc_so_mau(request):
     """AJAX: nhận 1 ảnh, trả số màu ước lượng (cho form khai báo mã tranh)."""
     if request.method != 'POST':
