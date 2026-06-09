@@ -146,6 +146,8 @@
                 <select id="orient" class="form-select form-select-sm"><option value="auto">Tự động</option><option value="portrait">Dọc</option><option value="landscape">Ngang</option></select></div>
             </div>
             <button id="btnPrint" class="btn btn-success btn-sm mt-3" hidden><i class="bi bi-download"></i> Tải bản in + A3</button>
+            <button id="btnLearn" class="btn btn-outline-primary btn-sm mt-3 ms-1" hidden title="Lưu ca này (ảnh gốc + thông số + thiết kế) vào kho học để hệ thống học dần"><i class="bi bi-mortarboard"></i> Lưu vào kho học</button>
+            <a href="/kho-hoc" class="btn btn-link btn-sm mt-3" title="Xem kho học">Kho học »</a>
           </div>
         </div>
       </div>
@@ -371,7 +373,8 @@
             +' · AI: '+(p.enhance?'có':'không')+(p.enhance&&p.style_category?(' ('+p.style_category+')'):'');
       pi.innerHTML=t; pi.classList.remove('d-none');
       if(res.warn){ var e=document.getElementById('err'); e.className='alert alert-warning'; e.textContent='⚠️ '+res.warn; }
-      ['btnPrint','dXlsx','dLegend','dCsv'].forEach(id=>document.getElementById(id).hidden=false);
+      ['btnPrint','dXlsx','dLegend','dCsv','btnLearn'].forEach(id=>document.getElementById(id).hidden=false);
+      var bl=document.getElementById('btnLearn'); bl.disabled=false; bl.classList.add('btn-outline-primary'); bl.classList.remove('btn-primary'); bl.innerHTML='<i class="bi bi-mortarboard"></i> Lưu vào kho học';
       showPalette(res.colors||[]); if(onDone)onDone();
     }).fail(function(){ spin(false); document.getElementById('err').textContent='Không kết nối được máy chủ.'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); });
   }
@@ -387,6 +390,16 @@
   document.getElementById('dCsv').onclick=function(){ if(curUrl)dl('/anh-export-colors?file_url='+encodeURIComponent(curUrl)+'&edits='+curEdits()); };
   document.getElementById('dXlsx').onclick=function(){ if(curUrl)dl('/anh-export-xlsx?file_url='+encodeURIComponent(curUrl)+'&edits='+curEdits()); };
   document.getElementById('dLegend').onclick=function(){ if(curUrl)dl('/anh-legend?file_url='+encodeURIComponent(curUrl)+'&title='+encodeURIComponent(document.getElementById('imgName').value||'')+'&edits='+curEdits()); };
+  document.getElementById('btnLearn').onclick=function(){
+    if(!curUrl) return;
+    var b=this; b.disabled=true;
+    var fd=new FormData(); fd.append('file_url', curUrl);
+    fetch('/anh-luu-kho-hoc',{method:'POST',body:fd}).then(r=>r.json()).then(function(res){
+      b.disabled=false; alert(res.msg||(res.ok?'Đã lưu':'Lỗi'));
+      if(res.ok){ b.classList.remove('btn-outline-primary'); b.classList.add('btn-primary');
+        b.innerHTML='<i class="bi bi-check2"></i> '+(res.dup?'Đã có trong kho':'Đã lưu kho học'); }
+    }).catch(function(){ b.disabled=false; alert('Lỗi kết nối'); });
+  };
   document.getElementById('btnPrint').onclick=function(){
     var ru=decodeURIComponent(document.getElementById('imgResult').src);
     $.get('/anh-download',{result_url:ru,image_name:(document.getElementById('imgName').value||'result'),scale_option:document.getElementById('scale').value,orientation_option:document.getElementById('orient').value},function(res){

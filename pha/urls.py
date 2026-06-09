@@ -4,6 +4,7 @@ from django.views.static import serve as static_serve
 
 from pha import views
 from pha import face_api
+from pha import learn_lib
 
 urlpatterns = [
     path('login', views.login_view, name='login'),
@@ -60,6 +61,11 @@ urlpatterns = [
     path('anh-export-xlsx', views.anh_export_xlsx, name='anh_export_xlsx'),
     path('anh-legend', views.anh_legend, name='anh_legend'),
     path('anh-download', views.anh_download_result, name='anh_download'),
+
+    # Kho học (Giai đoạn A): lưu ca xử lý đẹp để hệ thống học dần
+    path('anh-luu-kho-hoc', learn_lib.save_sample, name='anh_luu_kho_hoc'),
+    path('kho-hoc', learn_lib.kho_hoc, name='kho_hoc'),
+    path('kho-hoc-xoa', learn_lib.delete_sample, name='kho_hoc_xoa'),
 
     path('manifest.webmanifest', views.manifest, name='manifest'),
     path('sw.js', views.service_worker, name='sw'),

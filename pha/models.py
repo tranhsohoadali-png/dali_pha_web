@@ -85,6 +85,30 @@ class StyleSample(models.Model):
         return f'{self.id}-{self.category}-{self.name}'
 
 
+class TrainingSample(models.Model):
+    """KHO HỌC (Giai đoạn A): lưu lại các ca xử lý ảnh ĐÃ DUYỆT (đẹp) để hệ thống
+    học dần — ảnh gốc + thông số đã dùng + bản thiết kế duyệt + bảng mã màu, kèm
+    'sig' (chữ ký 8x8 RGB của ẢNH GỐC) để về sau tìm các ca CŨ giống ảnh mới mà
+    gợi lại thông số/ảnh mẫu (Giai đoạn B). KHÔNG bị prune như ImageResult.
+    File lưu trong MEDIA_ROOT/training_data/."""
+    created_time = models.DateTimeField(auto_now_add=True)
+    source_name = models.TextField()                          # ảnh gốc (training_data/...)
+    enhanced_name = models.TextField(blank=True, default='')  # ảnh AI (nếu có)
+    design_name = models.TextField(blank=True, default='')    # bản thiết kế đã duyệt
+    result_name = models.TextField(blank=True, default='')    # bản đồ số
+    params = models.JSONField(default=dict, blank=True)       # thông số đã dùng (preset, color_limit, smooth...)
+    colors = models.JSONField(default=list, blank=True)       # bảng mã màu [[stt,hex,dali,percent],...]
+    sig = models.JSONField(default=list, blank=True)          # chữ ký 8x8 RGB của ẢNH GỐC (so độ giống)
+    note = models.CharField(max_length=200, blank=True, default='')
+    user = models.CharField(max_length=80, blank=True, default='')
+
+    class Meta:
+        ordering = ['-created_time', '-id']
+
+    def __str__(self):
+        return f'{self.id}-{self.source_name}'
+
+
 class ProductionLog(models.Model):
     """Nhật ký pha màu (thống kê lượng màu gốc dùng theo ngày/tháng)."""
     created_time = models.DateTimeField(auto_now_add=True)
