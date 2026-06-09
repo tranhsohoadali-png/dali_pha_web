@@ -751,7 +751,7 @@ def _paint_sizes():
         out = [s.strip() for s in raw.split(',') if s.strip()]
         if out:
             return out
-    return ['20x20', '30x30', '30x40', '40x40', '40x50', '50x65', '60x90']
+    return ['20x20', '30x30', '30x37.5']
 
 
 def _norm_size(s):
