@@ -125,14 +125,8 @@
             <div class="col-4"><div class="border rounded text-center py-2"><div class="text-secondary small">Tổng số tranh</div><div class="fs-4 fw-bold text-success" id="statPaintings">{{ stat_agg.paintings }}</div></div></div>
             <div class="col-4"><div class="border rounded text-center py-2"><div class="text-secondary small">Tổng số màu đã rót</div><div class="fs-4 fw-bold text-warning" id="statColors">{{ stat_agg.colors_total }}</div></div></div>
           </div>
-          <div style="height:260px" class="mb-3"><canvas id="statChart"></canvas></div>
-          <table class="table table-sm">
-            <thead class="table-light"><tr><th>Mã tranh</th><th class="text-center">Số lượt</th><th class="text-center">Tổng tranh</th><th class="text-center">Số màu/tranh</th><th class="text-end">Tổng màu</th></tr></thead>
-            <tbody id="statBody">
-              {% for u in stat_agg.rows %}<tr><td class="fw-semibold">{{ u.painting }}</td><td class="text-center">{{ u.pours }}</td><td class="text-center">{{ u.qty }}</td><td class="text-center">{{ u.cc }}</td><td class="text-end">{{ u.colors }}</td></tr>
-              {% empty %}<tr><td colspan="5" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>{% endfor %}
-            </tbody>
-          </table>
+          <div class="small text-secondary mb-1">Biểu đồ theo ngày trong khoảng đang chọn:</div>
+          <div style="height:300px"><canvas id="statChart"></canvas></div>
         </div>
       </div>
     </div>
@@ -352,18 +346,18 @@
   var curRange = 'today';
   var statMonth = document.getElementById('statMonth');
   var statChart = null;
-  function drawStatChart(rows){
+  function drawStatChart(daily){
     var cv = document.getElementById('statChart');
     if (!cv || typeof Chart === 'undefined') return;
-    var labels = rows.map(function(u){ return u.painting; });
-    var dTranh = rows.map(function(u){ return u.qty; });
-    var dMau   = rows.map(function(u){ return u.colors; });
+    var labels = daily.map(function(d){ return d.label; });
+    var dTranh = daily.map(function(d){ return d.paintings; });
+    var dMau   = daily.map(function(d){ return d.colors; });
     if (statChart){ statChart.data.labels=labels; statChart.data.datasets[0].data=dTranh; statChart.data.datasets[1].data=dMau; statChart.update(); return; }
     statChart = new Chart(cv, {
       type:'bar',
       data:{ labels:labels, datasets:[
-        {label:'Tổng số tranh', data:dTranh, backgroundColor:'#0d6efd', borderRadius:4},
-        {label:'Tổng số màu',   data:dMau,   backgroundColor:'#fd7e14', borderRadius:4, yAxisID:'y1'} ]},
+        {label:'Số tranh', data:dTranh, backgroundColor:'#0d6efd', borderRadius:4},
+        {label:'Số màu',   data:dMau,   backgroundColor:'#fd7e14', borderRadius:4, yAxisID:'y1'} ]},
       options:{ responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ position:'bottom' } },
         scales:{
@@ -379,13 +373,7 @@
       document.getElementById('statPours').textContent = res.pours;
       document.getElementById('statPaintings').textContent = res.paintings;
       document.getElementById('statColors').textContent = res.colors_total;
-      var rows = res.rows || [];
-      var tb = document.getElementById('statBody');
-      if (!rows.length){ tb.innerHTML = '<tr><td colspan="5" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>'; }
-      else tb.innerHTML = rows.map(function(u){
-        return '<tr><td class="fw-semibold">'+esc(u.painting)+'</td><td class="text-center">'+u.pours+'</td><td class="text-center">'+u.qty+'</td><td class="text-center">'+u.cc+'</td><td class="text-end">'+u.colors+'</td></tr>';
-      }).join('');
-      drawStatChart(rows);
+      drawStatChart(res.daily || []);
     });
   }
   document.querySelectorAll('.stat-range').forEach(function(b){

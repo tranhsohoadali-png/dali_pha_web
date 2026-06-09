@@ -780,11 +780,13 @@ def _pour_stats_qs(range_, month_param):
 
 
 def _pour_aggregate(qs):
-    """Tổng hợp: số lượt rót, tổng số tranh, tổng số màu đã rót, và chi tiết theo mã tranh."""
+    """Tổng hợp: số lượt rót, tổng số tranh, tổng số màu đã rót; chi tiết theo mã tranh
+    (cho Excel) và theo NGÀY (cho biểu đồ cột)."""
     pours = 0
     paintings = 0
     colors_total = 0
     acc = {}      # code -> {'painting','pours','qty','cc','colors'}
+    dayacc = {}   # YYYY-MM-DD -> {'paintings','colors','pours'}
     for log in qs:
         pours += 1
         q = max(1, int(log.qty or 1))
@@ -797,8 +799,22 @@ def _pour_aggregate(qs):
         row['qty'] += q
         row['colors'] += cc * q
         row['cc'] = cc
+        d = dayacc.setdefault(log.day, {'paintings': 0, 'colors': 0, 'pours': 0})
+        d['paintings'] += q
+        d['colors'] += cc * q
+        d['pours'] += 1
     rows = sorted(acc.values(), key=lambda x: -x['qty'])
-    return {'pours': pours, 'paintings': paintings, 'colors_total': colors_total, 'rows': rows}
+    daily = []
+    for k in sorted(dayacc.keys()):
+        dd = dayacc[k]
+        try:
+            lbl = datetime.strptime(k, '%Y-%m-%d').strftime('%d/%m')
+        except ValueError:
+            lbl = k
+        daily.append({'label': lbl, 'paintings': dd['paintings'],
+                      'colors': dd['colors'], 'pours': dd['pours']})
+    return {'pours': pours, 'paintings': paintings, 'colors_total': colors_total,
+            'rows': rows, 'daily': daily}
 
 
 def _staff_users():
@@ -1101,7 +1117,8 @@ def thong_ke_rot(request):
     label, agg = _pour_stats(request.GET.get('range', 'today'), request.GET.get('month'))
     return JsonResponse({'label': label, 'pours': agg['pours'],
                          'paintings': agg['paintings'],
-                         'colors_total': agg['colors_total'], 'rows': agg['rows']})
+                         'colors_total': agg['colors_total'],
+                         'rows': agg['rows'], 'daily': agg['daily']})
 
 
 @csrf_exempt

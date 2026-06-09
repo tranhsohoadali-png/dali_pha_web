@@ -49,10 +49,11 @@
     <span class="text-white small me-1"><i class="bi bi-person-circle"></i> {{ user.username }}</span>
     <a href="/logout" class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-right"></i></a>
   </div>
-  <div class="d-flex gap-2 mb-2">
-    <button id="tabRecipes" class="btn btn-light flex-fill fw-bold" style="height:44px">Công thức</button>
-    <button id="tabRot" class="btn btn-outline-light flex-fill fw-bold position-relative" style="height:44px"><i class="bi bi-paint-bucket"></i> Cần rót <span id="rotBadge" class="badge text-bg-danger" style="display:none">0</span></button>
-    <button id="tabHistory" class="btn btn-outline-light flex-fill fw-bold" style="height:44px"><i class="bi bi-clock-history"></i> Lịch sử</button>
+  <div class="d-flex gap-1 mb-2">
+    <button id="tabRecipes" class="btn btn-light flex-fill fw-bold px-1" style="height:44px;font-size:.85rem">Công thức</button>
+    <button id="tabRot" class="btn btn-outline-light flex-fill fw-bold position-relative px-1" style="height:44px;font-size:.85rem">Cần rót <span id="rotBadge" class="badge text-bg-danger" style="display:none">0</span></button>
+    <button id="tabRotDone" class="btn btn-outline-light flex-fill fw-bold px-1" style="height:44px;font-size:.85rem">Đã rót</button>
+    <button id="tabHistory" class="btn btn-outline-light flex-fill fw-bold px-1" style="height:44px;font-size:.85rem">Lịch sử</button>
   </div>
   <div id="recipeControls">
     <input id="q" class="form-control search-lg mb-2" placeholder="🔍 Tìm mã DALI…">
@@ -92,10 +93,17 @@
 
 <!-- Mã tranh CẦN RÓT (quản lý giao) -->
 <div class="p-2" id="rotView" style="display:none">
-  <div class="d-flex justify-content-end mb-1">
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <span class="text-secondary small">Việc quản lý giao — rót xong bấm "Đã rót".</span>
     <button id="rotReload" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i> Tải lại</button>
   </div>
   <div id="rotList"><p class="text-secondary text-center py-4">Đang tải…</p></div>
+</div>
+
+<!-- ĐÃ RÓT trong phiên (giữ ảnh để xem khi rót) -->
+<div class="p-2" id="rotDoneView" style="display:none">
+  <div class="text-secondary small mb-1">Mã tranh bạn đã bấm rót — bấm ảnh để xem khi rót.</div>
+  <div id="rotDoneList"><p class="text-secondary text-center py-4">Chưa rót mã tranh nào trong phiên này.</p></div>
 </div>
 
 <!-- Lịch sử pha (bật bằng nút "Lịch sử pha" ở trên) -->
@@ -190,36 +198,39 @@
     loadHistory();
   }); });
 
-  // ----- Chuyển tab: Công thức / Cần rót / Lịch sử -----
-  var tabR=document.getElementById('tabRecipes'), tabRotB=document.getElementById('tabRot'), tabH=document.getElementById('tabHistory');
-  function setBtn(b, on, extra){ b.className='btn flex-fill fw-bold '+(extra?extra+' ':'')+(on?'btn-light':'btn-outline-light'); b.style.height='44px'; }
-  function showTab(mode){   // 'recipes' | 'rot' | 'history'
+  // ----- Chuyển tab: Công thức / Cần rót / Đã rót / Lịch sử -----
+  var tabR=document.getElementById('tabRecipes'), tabRotB=document.getElementById('tabRot'),
+      tabDone=document.getElementById('tabRotDone'), tabH=document.getElementById('tabHistory');
+  function setBtn(b, on, extra){ if(!b) return; b.className='btn flex-fill fw-bold px-1 '+(extra?extra+' ':'')+(on?'btn-light':'btn-outline-light'); b.style.height='44px'; b.style.fontSize='.85rem'; }
+  function showTab(mode){   // 'recipes' | 'rot' | 'done' | 'history'
     document.getElementById('list').style.display = mode==='recipes'?'':'none';
     document.getElementById('recipeControls').style.display = mode==='recipes'?'':'none';
     document.getElementById('rotView').style.display = mode==='rot'?'':'none';
+    document.getElementById('rotDoneView').style.display = mode==='done'?'':'none';
     document.getElementById('historyView').style.display = mode==='history'?'':'none';
-    setBtn(tabR, mode==='recipes'); setBtn(tabRotB, mode==='rot', 'position-relative'); setBtn(tabH, mode==='history');
+    setBtn(tabR, mode==='recipes'); setBtn(tabRotB, mode==='rot', 'position-relative');
+    setBtn(tabDone, mode==='done'); setBtn(tabH, mode==='history');
     if(mode==='rot') loadRot();
+    if(mode==='done') renderDoneList();
     if(mode==='history') loadHistory();
     window.scrollTo(0,0);
   }
   tabR.addEventListener('click', function(){ showTab('recipes'); });
   tabRotB.addEventListener('click', function(){ showTab('rot'); });
+  tabDone.addEventListener('click', function(){ showTab('done'); });
   tabH.addEventListener('click', function(){ showTab('history'); });
 
-  // ----- Mã tranh CẦN RÓT (quản lý giao) -----
+  // ----- CẦN RÓT (việc giao) + ĐÃ RÓT (giữ ảnh để xem khi rót) -----
   function escR(s){ return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function setRotBadge(n){ var b=document.getElementById('rotBadge'); if(n>0){ b.textContent=n; b.style.display=''; } else b.style.display='none'; }
-  var rotBusy=false;
-  var rotKept={};        // id -> row đã xác nhận rót (GIỮ LẠI để còn xem ảnh khi rót)
-  var lastPending=[];
+  var rotBusy=false, rotKept={}, lastPending=[];
   function rotCard(r, done){
     return '<div class="rc p-2"'+(done?' style="border:2px solid #198754"':'')+'>'+
       '<div class="d-flex align-items-center gap-2 mb-1">'+
         '<h2 class="flex-grow-1">'+escR(r.painting)+' <span class="text-secondary" style="font-size:.9rem">×'+r.qty+'</span></h2>'+
         (done
           ? '<span class="badge text-bg-success" style="font-size:1rem;padding:.5rem .7rem"><i class="bi bi-check-lg"></i> Đã rót</span>'
-          : '<button class="btn btn-success pha-btn rotdone" data-id="'+r.id+'"><i class="bi bi-check-lg"></i> Đã rót</button>')+
+          : '<button class="btn btn-success rotdone" data-id="'+r.id+'" style="height:46px;font-weight:700;border-radius:10px;padding:0 1rem"><i class="bi bi-check-lg"></i> Đã rót</button>')+
       '</div>'+
       '<div class="mb-1"><span class="badge text-bg-primary" style="font-size:.95rem">'+(r.count||0)+' màu</span>'+
         (done?' <span class="text-success small fw-bold"><i class="bi bi-hand-index-thumb"></i> bấm ảnh để xem khi rót</span>':'')+'</div>'+
@@ -227,18 +238,23 @@
       (r.note?'<div class="small text-secondary"><i class="bi bi-sticky"></i> '+escR(r.note)+'</div>':'')+
     '</div>';
   }
-  function renderRotList(){
-    var box=document.getElementById('rotList');
+  function renderRotList(){    // CẦN RÓT = chỉ việc CHƯA rót
     var pend=lastPending.filter(function(r){ return !rotKept[r.id]; });
     setRotBadge(pend.length);
+    document.getElementById('rotList').innerHTML = pend.length
+      ? pend.map(function(r){return rotCard(r,false);}).join('')
+      : '<p class="text-secondary text-center py-4"><i class="bi bi-emoji-smile"></i> Không có mã tranh cần rót.</p>';
+  }
+  function renderDoneList(){   // ĐÃ RÓT (phiên này)
     var kept=Object.keys(rotKept).map(function(k){ return rotKept[k]; });
-    if(!pend.length && !kept.length){ box.innerHTML='<p class="text-secondary text-center py-4"><i class="bi bi-emoji-smile"></i> Không có mã tranh cần rót.</p>'; return; }
-    box.innerHTML = pend.map(function(r){return rotCard(r,false);}).join('') + kept.map(function(r){return rotCard(r,true);}).join('');
+    document.getElementById('rotDoneList').innerHTML = kept.length
+      ? kept.map(function(r){return rotCard(r,true);}).join('')
+      : '<p class="text-secondary text-center py-4">Chưa rót mã tranh nào trong phiên này.</p>';
   }
   function loadRot(){
     fetch('/rot-yeu-cau').then(function(r){return r.json();}).then(function(res){
       lastPending=res.rows||[]; renderRotList();
-    }).catch(function(){ if(!Object.keys(rotKept).length){ document.getElementById('rotList').innerHTML='<p class="text-danger text-center py-4">Lỗi tải.</p>'; } });
+    }).catch(function(){ document.getElementById('rotList').innerHTML='<p class="text-danger text-center py-4">Lỗi tải.</p>'; });
   }
   document.getElementById('rotReload').addEventListener('click', loadRot);
 
@@ -255,7 +271,7 @@
     var fd=new FormData(); fd.append('request_id', id);
     fetch('/rot',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(res){
       rotBusy=false;
-      if(res.ok){ if(row) rotKept[id]=row; toast('✓ '+res.msg); renderRotList(); }
+      if(res.ok){ if(row) rotKept[id]=row; toast('✓ Đã rót — xem ở tab "Đã rót"'); renderRotList(); renderDoneList(); }
       else { toast(res.msg||'Lỗi'); d.disabled=false; d.innerHTML='<i class="bi bi-check-lg"></i> Đã rót'; }
     }).catch(function(){ rotBusy=false; toast('Lỗi kết nối'); d.disabled=false; d.innerHTML='<i class="bi bi-check-lg"></i> Đã rót'; });
   });
