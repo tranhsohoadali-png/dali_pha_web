@@ -1037,10 +1037,27 @@ def lich_su_rot(request):
         except Exception:
             pass
         rows.append({
-            'dt': t.strftime('%d/%m %H:%M'), 'painting': log.painting,
+            'id': log.id, 'dt': t.strftime('%d/%m %H:%M'), 'painting': log.painting,
             'qty': log.qty, 'colors': log.color_count, 'user': log.user or '',
         })
     return JsonResponse({'rows': rows})
+
+
+@csrf_exempt
+@staff_required
+def xoa_lich_su_rot(request):
+    """Xoá 1 dòng lịch sử rót, hoặc xoá TẤT CẢ (chỉ quản lý). Lưu ý: xoá khỏi cả thống kê."""
+    if request.method != 'POST':
+        return HttpResponseNotFound('POST only')
+    from pha.models import PourLog
+    if request.POST.get('all') == '1':
+        PourLog.objects.all().delete()
+        return JsonResponse({'ok': True, 'msg': 'Đã xoá toàn bộ lịch sử rót.'})
+    pid = request.POST.get('id')
+    if pid:
+        n, _ = PourLog.objects.filter(id=pid).delete()
+        return JsonResponse({'ok': bool(n), 'msg': 'Đã xoá 1 dòng.' if n else 'Không tìm thấy.'})
+    return JsonResponse({'ok': False, 'msg': 'Thiếu tham số.'})
 
 
 @csrf_exempt

@@ -138,12 +138,15 @@
       <div class="card shadow-sm">
         <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
           <span><i class="bi bi-clock-history"></i> Lịch sử rót màu (mới nhất)</span>
-          <button id="historyReload" type="button" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i></button>
+          <span class="d-flex gap-1">
+            <button id="historyClear" type="button" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Xóa tất cả</button>
+            <button id="historyReload" type="button" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i></button>
+          </span>
         </div>
         <div class="card-body p-0">
-          <table class="table table-sm mb-0">
-            <thead class="table-light"><tr><th style="width:140px">Giờ</th><th>Mã tranh</th><th style="width:80px" class="text-center">SL</th><th style="width:90px" class="text-center">Số màu</th><th>Người rót</th></tr></thead>
-            <tbody id="historyBody"><tr><td colspan="5" class="text-secondary text-center py-3">Đang tải…</td></tr></tbody>
+          <table class="table table-sm mb-0 align-middle">
+            <thead class="table-light"><tr><th style="width:140px">Giờ</th><th>Mã tranh</th><th style="width:70px" class="text-center">SL</th><th style="width:80px" class="text-center">Số màu</th><th>Người rót</th><th style="width:46px"></th></tr></thead>
+            <tbody id="historyBody"><tr><td colspan="6" class="text-secondary text-center py-3">Đang tải…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -396,13 +399,27 @@
   function loadHistory(){
     var tb = document.getElementById('historyBody'); if(!tb) return;
     fetch('/lich-su-rot').then(function(r){ return r.json(); }).then(function(res){
-      if (!res.rows || !res.rows.length){ tb.innerHTML = '<tr><td colspan="5" class="text-secondary text-center py-3">Chưa có lượt rót nào.</td></tr>'; return; }
+      if (!res.rows || !res.rows.length){ tb.innerHTML = '<tr><td colspan="6" class="text-secondary text-center py-3">Chưa có lượt rót nào.</td></tr>'; return; }
       tb.innerHTML = res.rows.map(function(x){
-        return '<tr><td>'+x.dt+'</td><td class="fw-semibold">'+esc(x.painting)+'</td><td class="text-center">'+x.qty+'</td><td class="text-center">'+x.colors+'</td><td>'+esc(x.user||'')+'</td></tr>';
+        return '<tr><td>'+x.dt+'</td><td class="fw-semibold">'+esc(x.painting)+'</td><td class="text-center">'+x.qty+'</td><td class="text-center">'+x.colors+'</td><td>'+esc(x.user||'')+'</td>'+
+          '<td class="text-center"><button class="btn btn-sm btn-outline-danger py-0 histdel" data-id="'+x.id+'" title="Xoá dòng này"><i class="bi bi-x-lg"></i></button></td></tr>';
       }).join('');
     }).catch(function(){});
   }
   document.getElementById('historyReload').addEventListener('click', loadHistory);
+  document.addEventListener('click', function(e){
+    var dl = e.target.closest('.histdel'); if(!dl) return;
+    if(!confirm('Xoá dòng lịch sử này? (sẽ trừ khỏi thống kê)')) return;
+    var fd = new FormData(); fd.append('id', dl.dataset.id);
+    fetch('/xoa-lich-su-rot', {method:'POST', body:fd, headers:{'X-CSRFToken':csrf()}})
+      .then(function(r){ return r.json(); }).then(function(res){ toast(res.msg||''); loadHistory(); loadStats(); });
+  });
+  document.getElementById('historyClear').addEventListener('click', function(){
+    if(!confirm('XÓA TOÀN BỘ lịch sử rót màu? Không thể hoàn tác và sẽ xoá khỏi thống kê.')) return;
+    var fd = new FormData(); fd.append('all', '1');
+    fetch('/xoa-lich-su-rot', {method:'POST', body:fd, headers:{'X-CSRFToken':csrf()}})
+      .then(function(r){ return r.json(); }).then(function(res){ toast(res.msg||''); loadHistory(); loadStats(); });
+  });
   loadHistory();
   loadStats();   // vẽ biểu đồ cột ngay khi mở trang
 </script>

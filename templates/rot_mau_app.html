@@ -211,12 +211,16 @@
       ? kept.map(function(r){return reqCard(r,true);}).join('')
       : '<p class="text-secondary text-center py-4">Chưa rót mã tranh nào trong phiên này.</p>';
   }
-  function loadReq(){
+  var lastReqSig='';
+  function loadReq(force){
     fetch('/rot-yeu-cau').then(function(r){return r.json();}).then(function(res){
       var prev=rotGetSeen(), rows0=res.rows||[];
       if(prev!==null){ var ps={}; prev.forEach(function(id){ps[id]=1;}); var fresh=rows0.filter(function(r){return !ps[r.id];}); if(fresh.length){ rotBeep(); rotSysNotify(fresh); toast('🔔 Có '+fresh.length+' mã tranh cần rót'); } }
       rotSaveSeen(rows0.map(function(r){return r.id;}));
-      lastReqRows=rows0; renderReqList();
+      lastReqRows=rows0;
+      var sig=JSON.stringify(rows0.map(function(r){return [r.id,r.qty];}));
+      if(force || sig!==lastReqSig){ lastReqSig=sig; renderReqList(); }   // chỉ vẽ lại khi đổi -> không giật
+      else { setBadge(rows0.filter(function(r){return !reqKept[r.id];}).length); }
     }).catch(function(){ if(!Object.keys(reqKept).length){ document.getElementById('reqList').innerHTML='<p class="text-danger text-center py-4">Lỗi tải dữ liệu.</p>'; } });
   }
   document.getElementById('reqReload').addEventListener('click', loadReq);

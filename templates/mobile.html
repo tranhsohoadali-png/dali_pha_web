@@ -223,7 +223,7 @@
   // ----- CẦN RÓT (việc giao) + ĐÃ RÓT (giữ ảnh để xem khi rót) -----
   function escR(s){ return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function setRotBadge(n){ var b=document.getElementById('rotBadge'); if(n>0){ b.textContent=n; b.style.display=''; } else b.style.display='none'; }
-  var rotBusy=false, rotKept={}, lastPending=[];
+  var rotBusy=false, rotKept={}, lastPending=[], lastRotSig='';
   function rotCard(r, done){
     return '<div class="rc p-2"'+(done?' style="border:2px solid #198754"':'')+'>'+
       '<div class="d-flex align-items-center gap-2 mb-1">'+
@@ -253,7 +253,9 @@
   }
   function loadRot(){
     fetch('/rot-yeu-cau').then(function(r){return r.json();}).then(function(res){
-      lastPending=res.rows||[]; renderRotList();
+      lastPending=res.rows||[];
+      lastRotSig=JSON.stringify(lastPending.map(function(r){return [r.id,r.qty];}));
+      renderRotList();
     }).catch(function(){ document.getElementById('rotList').innerHTML='<p class="text-danger text-center py-4">Lỗi tải.</p>'; });
   }
   document.getElementById('rotReload').addEventListener('click', loadRot);
@@ -307,15 +309,20 @@
   }
   function pollRot(){
     fetch('/rot-yeu-cau').then(function(r){return r.json();}).then(function(res){
-      setRotBadge(res.count||0);
       var prev=rotGetSeen(), rows=res.rows||[];
-      var cur=rows.map(function(r){return r.id;});
       if(prev!==null){
         var ps={}; prev.forEach(function(id){ps[id]=1;});
         var fresh=rows.filter(function(r){ return !ps[r.id]; });
         if(fresh.length){ rotBeep(); rotSysNotify(fresh); toast('🔔 Có '+fresh.length+' mã tranh cần rót'); }
       }
-      rotSaveSeen(cur);
+      rotSaveSeen(rows.map(function(r){return r.id;}));
+      lastPending=rows;
+      // Đang ở tab Cần rót & có thay đổi -> tự cập nhật danh sách (không giật khi không đổi)
+      if(document.getElementById('rotView').style.display!=='none'){
+        var sig=JSON.stringify(rows.map(function(r){return [r.id,r.qty];}));
+        if(sig!==lastRotSig){ lastRotSig=sig; renderRotList(); return; }
+      }
+      setRotBadge(rows.filter(function(r){return !rotKept[r.id];}).length);
     }).catch(function(){});
   }
   // ----- Đăng ký Web Push (thông báo cả khi đã tắt app) -----
