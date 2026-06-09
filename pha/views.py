@@ -657,8 +657,21 @@ def dali_colors(request):
 
 # ===================== RÓT MÀU (theo mã tranh) =====================
 def _detect_color_count(path):
-    """Ước lượng SỐ MÀU trong ảnh mẫu (bản đồ màu tô số). Đếm các mảng màu phẳng
-    chiếm diện tích đáng kể, gộp các màu gần giống nhau. Là số GỢI Ý — sửa được."""
+    """Lấy SỐ MÀU của ảnh mẫu. Ưu tiên nhờ AI đọc bảng chú giải (chính xác); nếu
+    chưa có khoá AI / lỗi thì ước lượng bằng pixel (gần đúng). Số GỢI Ý — sửa được."""
+    try:
+        from pha.ai_enhance import ai_count_colors, is_configured
+        if is_configured():
+            n = ai_count_colors(path)
+            if n:
+                return n
+    except Exception:
+        pass
+    return _detect_color_count_pixel(path)
+
+
+def _detect_color_count_pixel(path):
+    """Ước lượng số màu bằng pixel: đếm các mảng màu phẳng lớn, gộp màu gần giống."""
     try:
         from PIL import Image
         import numpy as np

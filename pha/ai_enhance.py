@@ -293,6 +293,59 @@ def enhance_image(input_path, output_path, prompt=None, reference_paths=None,
     return output_path
 
 
+# Model đọc/hiểu ảnh (vision) để ĐẾM SỐ MÀU từ bảng chú giải. Rẻ & nhanh hơn model ảnh.
+AI_COUNT_MODEL = config("AI_COUNT_MODEL", default="gemini-2.5-flash")
+
+
+def ai_count_colors(image_path):
+    """Dùng Gemini đọc BẢNG CHÚ GIẢI (legend) trong ảnh tô màu số để lấy SỐ MÀU.
+
+    Trả về int (>=1) nếu đọc được, None nếu không có khoá / lỗi / không chắc.
+    Ảnh loại này có cột đánh số 1,2,3,... mỗi dòng = 1 màu -> số lớn nhất = số màu.
+    """
+    key = get_api_key()
+    if not key:
+        return None
+    try:
+        from google import genai
+    except ImportError:
+        return None
+    from PIL import Image
+    try:
+        img = Image.open(image_path)
+        img.load()
+    except Exception:
+        return None
+
+    prompt = (
+        "This is a PAINT-BY-NUMBERS template. Somewhere in the image (usually a "
+        "column on the right or bottom) there is a COLOR LEGEND: a numbered list "
+        "1, 2, 3, ... where each row is one paint color (a number, a color swatch "
+        "and a color code such as BCA.10, BLA.4, 'Den', 'Trang'). "
+        "Count how many colors the legend lists (i.e. the largest number in that "
+        "list). Answer with ONLY that single integer, no words, no punctuation."
+    )
+    try:
+        try:
+            from google.genai import types as _gtypes
+            client = genai.Client(api_key=key,
+                                  http_options=_gtypes.HttpOptions(timeout=30000))
+        except Exception:
+            client = genai.Client(api_key=key)
+        resp = client.models.generate_content(model=AI_COUNT_MODEL,
+                                              contents=[prompt, img])
+    except Exception:
+        return None
+
+    import re
+    txt = (getattr(resp, "text", "") or "").strip()
+    m = re.search(r"\d+", txt)
+    if not m:
+        return None
+    n = int(m.group())
+    return n if 1 <= n <= 200 else None
+
+
 def _extract_image_bytes(resp):
     """Lấy bytes ảnh đầu tiên từ phản hồi generate_content."""
     candidates = getattr(resp, "candidates", None) or []
