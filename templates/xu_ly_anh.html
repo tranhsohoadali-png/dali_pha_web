@@ -381,7 +381,7 @@
 
   // tự poll sau khi upload
   var fu=decodeURIComponent("{{ file_url|default:'' }}");
-  if(fu){ var waited=0,poll=setInterval(function(){ getResult(fu,function(){clearInterval(poll)},function(){ waited+=2000; if(waited>180000){clearInterval(poll);spin(false);} }); },2000); }
+  if(fu){ var waited=0,poll=setInterval(function(){ getResult(fu,function(){clearInterval(poll)},function(){ waited+=2000; if(waited>300000){clearInterval(poll);spin(false);} }); },2000); }
 
   function dl(u){ var a=document.createElement('a'); a.href=u; a.click(); }
   // Gom mã DALI đang hiển thị (kể cả mã vừa sửa tay) -> gửi kèm để file tải về dùng mã đó.

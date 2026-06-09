@@ -28,6 +28,10 @@ MAX_CIRCLE_RADIUS = config("MAX_CIRCLE_RADIUS", default=10, cast=int)
 MIN_TEXT_SIZE = config("MIN_TEXT_SIZE", default=4, cast=int)
 MEAN_TEXT_SIZE = config("MEAN_TEXT_SIZE", default=22, cast=int)
 MAX_TEXT_SIZE = config("MAX_TEXT_SIZE", default=40, cast=int)
+# Thu nhỏ ảnh LÀM VIỆC để đánh số nhanh (polylabel rất chậm trên ảnh lớn -> ảnh
+# 2000px+ mất >2 phút, vượt thời gian chờ của trình duyệt -> "không ra kết quả").
+# 1400px thừa nét cho tranh tô màu; bản in được vẽ lại theo DPI khi tải. 0 = tắt.
+WORK_MAX_SIDE = config("WORK_MAX_SIDE", default=1400, cast=int)
 GREEN = (0, 255, 0)
 BLUE = (255, 0, 0)
 PADDING_CIRCLE = config("PADDING_CIRCLE", default=1, cast=int)
@@ -662,6 +666,10 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long
     import os
     import tempfile
     im = Image.open(path).convert('RGB')
+    # Thu nhỏ ảnh làm việc -> đánh số nhanh, tránh treo/quá thời gian chờ trên ảnh lớn.
+    if WORK_MAX_SIDE and max(im.size) > WORK_MAX_SIDE:
+        im = im.copy()
+        im.thumbnail((WORK_MAX_SIDE, WORK_MAX_SIDE), Resampling.LANCZOS)
     target = max(2, n)
 
     # ƯU TIÊN MẶT: phát hiện mặt + ngũ quan để (1) GIỮ NÉT ngũ quan khỏi mean-shift,
