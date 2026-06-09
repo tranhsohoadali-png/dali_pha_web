@@ -608,14 +608,30 @@ def manifest(request):
 
 def service_worker(request):
     js = (
-        "const CACHE='pha-v1';\n"
+        "const CACHE='pha-v2';\n"
         "self.addEventListener('install', function(e){ self.skipWaiting(); });\n"
         "self.addEventListener('activate', function(e){ e.waitUntil(self.clients.claim()); });\n"
         "self.addEventListener('fetch', function(e){\n"
+        "  if(e.request.method!=='GET') return;\n"
         "  e.respondWith(fetch(e.request).then(function(r){\n"
         "    try{ var c=r.clone(); caches.open(CACHE).then(function(ch){ ch.put(e.request, c); }); }catch(_){}\n"
         "    return r;\n"
         "  }).catch(function(){ return caches.match(e.request); }));\n"
+        "});\n"
+        "self.addEventListener('push', function(e){\n"
+        "  var d={}; try{ d=e.data.json(); }catch(_){ try{ d={body:e.data.text()}; }catch(__){ d={}; } }\n"
+        "  var title=d.title||'🎨 Mã màu cần rót';\n"
+        "  var opts={ body:d.body||'', icon:d.icon||'/media/icon-192.png', badge:'/media/icon-192.png',\n"
+        "    tag:d.tag||'rot', renotify:true, vibrate:[120,60,120], data:{url:d.url||'/app-rot'} };\n"
+        "  e.waitUntil(self.registration.showNotification(title, opts));\n"
+        "});\n"
+        "self.addEventListener('notificationclick', function(e){\n"
+        "  e.notification.close();\n"
+        "  var url=(e.notification.data&&e.notification.data.url)||'/app-rot';\n"
+        "  e.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(function(cl){\n"
+        "    for(var i=0;i<cl.length;i++){ var c=cl[i]; if('focus' in c){ try{ c.navigate&&c.navigate(url); }catch(_){}; return c.focus(); } }\n"
+        "    if(clients.openWindow) return clients.openWindow(url);\n"
+        "  }));\n"
         "});\n"
     )
     return HttpResponse(js, content_type='application/javascript')
@@ -850,12 +866,14 @@ def ma_tranh(request):
                     qty = max(1, int(request.POST.get('qty') or 1))
                 except ValueError:
                     qty = 1
-                PourRequest.objects.create(
+                req = PourRequest.objects.create(
                     painting=p.code, colors=[], qty=qty,
                     note=(request.POST.get('note') or '').strip(),
                     assignee=(request.POST.get('assignee') or '').strip(),
                     created_by=request.user.username,
                 )
+                from pha import push
+                push.notify_pour(req)
                 messages.info(request, f'Đã giao rót {p.code} ×{qty}.')
         elif action == 'delete_request':
             PourRequest.objects.filter(id=request.POST.get('id')).delete()
@@ -1026,12 +1044,14 @@ def quan_ly_giao_rot(request):
             qty = max(1, int(request.POST.get('qty') or 1))
         except ValueError:
             qty = 1
-        PourRequest.objects.create(
+        req = PourRequest.objects.create(
             painting=p.code, colors=[], qty=qty,
             note=(request.POST.get('note') or '').strip(),
             assignee=(request.POST.get('assignee') or '').strip(),
             created_by=request.user.username,
         )
+        from pha import push
+        push.notify_pour(req)
         return JsonResponse({'ok': True, 'msg': f'Đã giao rót {p.code} ×{qty}.'})
     if action == 'delete':
         PourRequest.objects.filter(id=request.POST.get('id')).delete()
@@ -1043,6 +1063,36 @@ def quan_ly_giao_rot(request):
             _record_pour(req.painting, req.qty, cc, request.user.username, req)
         return JsonResponse({'ok': True, 'msg': 'Đã đánh dấu rót xong.'})
     return JsonResponse({'ok': False, 'msg': 'Hành động không hợp lệ.'})
+
+
+@csrf_exempt
+@login_required(login_url='/login')
+def push_key(request):
+    """Khoá công khai VAPID cho trình duyệt đăng ký Web Push ('' nếu chưa bật)."""
+    from pha import push
+    return JsonResponse({'key': push.public_key()})
+
+
+@csrf_exempt
+@login_required(login_url='/login')
+def push_subscribe(request):
+    """Lưu đăng ký Web Push của trình duyệt nhân viên (gắn với tài khoản đang đăng nhập)."""
+    if request.method != 'POST':
+        return HttpResponseNotFound('POST only')
+    from pha.models import PushSubscription
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except (ValueError, TypeError, UnicodeDecodeError):
+        return JsonResponse({'ok': False})
+    endpoint = data.get('endpoint')
+    keys = data.get('keys') or {}
+    p256dh, auth = keys.get('p256dh'), keys.get('auth')
+    if not endpoint or not p256dh or not auth:
+        return JsonResponse({'ok': False})
+    PushSubscription.objects.update_or_create(
+        endpoint=endpoint,
+        defaults={'username': request.user.username, 'p256dh': p256dh, 'auth': auth})
+    return JsonResponse({'ok': True})
 
 
 @csrf_exempt

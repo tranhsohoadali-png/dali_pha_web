@@ -7,6 +7,7 @@ __pycache__/
 backups/
 staticfiles/
 *.bak
+vapid_private.pem
 # ảnh upload/kết quả (runtime) - chỉ giữ icon PWA
 media/*
 !media/icon-192.png

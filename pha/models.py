@@ -136,6 +136,18 @@ class PourLog(models.Model):
         return f'{self.day} {self.painting} ×{self.qty}'
 
 
+class PushSubscription(models.Model):
+    """Đăng ký Web Push của trình duyệt nhân viên (để đẩy thông báo cả khi tắt app)."""
+    username = models.CharField(max_length=80, db_index=True)
+    endpoint = models.TextField(unique=True)
+    p256dh = models.CharField(max_length=200)
+    auth = models.CharField(max_length=100)
+    created = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.username} · {self.endpoint[:40]}'
+
+
 class PourRequest(models.Model):
     """Yêu cầu rót màu do QUẢN LÝ giao cho nhân viên (một chiều). Nhân viên nhận
     và đánh dấu 'đã rót' để tắt yêu cầu."""
