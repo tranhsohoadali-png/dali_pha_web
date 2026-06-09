@@ -32,6 +32,7 @@ urlpatterns = [
     path('rot', views.rot, name='rot'),
     path('rot-yeu-cau', views.rot_yeu_cau_list, name='rot_yeu_cau_list'),
     path('lich-su-rot', views.lich_su_rot, name='lich_su_rot'),
+    path('quan-ly-giao-rot', views.quan_ly_giao_rot, name='quan_ly_giao_rot'),
     path('thong-ke-rot', views.thong_ke_rot, name='thong_ke_rot'),
     path('thong-ke-rot-excel', views.export_thong_ke_rot_excel, name='thong_ke_rot_excel'),
 

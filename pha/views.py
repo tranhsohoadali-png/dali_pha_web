@@ -546,10 +546,13 @@ def quan_ly(request):
         suggest = max(0, round(usage30.get(b['name'], 0) - ps.stock))
         if suggest > 0:
             need_buy.append({'name': b['name'], 'suggest': suggest})
+    from pha.models import Painting
     return render(request, 'quan_ly.html', {
         'items': items, 'today_n': today_n, 'month_n': month_n, 'month_cost': round(month_cost),
         'low_stock': _low_stock_names(), 'need_buy': need_buy, 'today_label': now.strftime('%d/%m/%Y'),
         'total_value': f'{round(total_value):,.0f}'.replace(',', '.'),
+        'paintings_json': json.dumps([_painting_dict(p) for p in Painting.objects.all()]),
+        'staff_users': _staff_users(),
     })
 
 
@@ -1004,6 +1007,42 @@ def lich_su_rot(request):
             'qty': log.qty, 'colors': log.color_count, 'user': log.user or '',
         })
     return JsonResponse({'rows': rows})
+
+
+@csrf_exempt
+@staff_required
+def quan_ly_giao_rot(request):
+    """AJAX cho APP QUẢN LÝ (điện thoại): giao việc rót / xoá / đánh dấu đã rót."""
+    if request.method != 'POST':
+        return HttpResponseNotFound('POST only')
+    from pha.models import Painting, PourRequest
+    action = request.POST.get('action')
+    if action == 'add':
+        code = (request.POST.get('painting') or '').strip()
+        p = Painting.objects.filter(code__iexact=code).first()
+        if not p:
+            return JsonResponse({'ok': False, 'msg': f'Mã tranh "{code}" chưa có trong danh mục.'})
+        try:
+            qty = max(1, int(request.POST.get('qty') or 1))
+        except ValueError:
+            qty = 1
+        PourRequest.objects.create(
+            painting=p.code, colors=[], qty=qty,
+            note=(request.POST.get('note') or '').strip(),
+            assignee=(request.POST.get('assignee') or '').strip(),
+            created_by=request.user.username,
+        )
+        return JsonResponse({'ok': True, 'msg': f'Đã giao rót {p.code} ×{qty}.'})
+    if action == 'delete':
+        PourRequest.objects.filter(id=request.POST.get('id')).delete()
+        return JsonResponse({'ok': True, 'msg': 'Đã xoá yêu cầu.'})
+    if action == 'done':
+        req = PourRequest.objects.filter(id=request.POST.get('id')).first()
+        if req and req.status != PourRequest.STATUS_DONE:
+            cc, _ = _painting_count(req.painting)
+            _record_pour(req.painting, req.qty, cc, request.user.username, req)
+        return JsonResponse({'ok': True, 'msg': 'Đã đánh dấu rót xong.'})
+    return JsonResponse({'ok': False, 'msg': 'Hành động không hợp lệ.'})
 
 
 @csrf_exempt

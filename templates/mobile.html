@@ -51,7 +51,8 @@
   </div>
   <div class="d-flex gap-2 mb-2">
     <button id="tabRecipes" class="btn btn-light flex-fill fw-bold" style="height:44px">Công thức</button>
-    <button id="tabHistory" class="btn btn-outline-light flex-fill fw-bold" style="height:44px"><i class="bi bi-clock-history"></i> Lịch sử pha</button>
+    <button id="tabRot" class="btn btn-outline-light flex-fill fw-bold position-relative" style="height:44px"><i class="bi bi-paint-bucket"></i> Cần rót <span id="rotBadge" class="badge text-bg-danger" style="display:none">0</span></button>
+    <button id="tabHistory" class="btn btn-outline-light flex-fill fw-bold" style="height:44px"><i class="bi bi-clock-history"></i> Lịch sử</button>
   </div>
   <div id="recipeControls">
     <input id="q" class="form-control search-lg mb-2" placeholder="🔍 Tìm mã DALI…">
@@ -89,6 +90,14 @@
   <p id="noResult" class="text-secondary text-center py-4" style="display:none">Không tìm thấy công thức.</p>
 </div>
 
+<!-- Mã tranh CẦN RÓT (quản lý giao) -->
+<div class="p-2" id="rotView" style="display:none">
+  <div class="d-flex justify-content-end mb-1">
+    <button id="rotReload" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i> Tải lại</button>
+  </div>
+  <div id="rotList"><p class="text-secondary text-center py-4">Đang tải…</p></div>
+</div>
+
 <!-- Lịch sử pha (bật bằng nút "Lịch sử pha" ở trên) -->
 <div class="px-2" id="historyView" style="display:none">
   <div class="rc p-2">
@@ -113,6 +122,11 @@
     <button id="phaYes" class="btn btn-success w-100 mb-2"><i class="bi bi-check-lg"></i> Đồng ý, đã pha</button>
     <button id="phaNo" class="btn btn-outline-secondary w-100">Huỷ</button>
   </div>
+</div>
+
+<!-- Lightbox xem ảnh mẫu -->
+<div id="lightbox" style="position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:2000;display:none;align-items:center;justify-content:center;padding:10px;cursor:zoom-out">
+  <img id="lightboxImg" style="max-width:100%;max-height:100%;border-radius:8px">
 </div>
 
 <div id="toast" style="position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#212529;color:#fff;padding:12px 18px;border-radius:10px;z-index:1100;display:none;font-size:1.05rem"></div>
@@ -176,18 +190,62 @@
     loadHistory();
   }); });
 
-  // ----- Chuyển tab: Công thức / Lịch sử -----
-  var tabR=document.getElementById('tabRecipes'), tabH=document.getElementById('tabHistory');
-  function showTab(hist){
-    document.getElementById('historyView').style.display = hist?'':'none';
-    document.getElementById('list').style.display = hist?'none':'';
-    document.getElementById('recipeControls').style.display = hist?'none':'';
-    tabH.className='btn flex-fill fw-bold '+(hist?'btn-light':'btn-outline-light'); tabH.style.height='44px';
-    tabR.className='btn flex-fill fw-bold '+(hist?'btn-outline-light':'btn-light'); tabR.style.height='44px';
-    if(hist){ loadHistory(); window.scrollTo(0,0); }
+  // ----- Chuyển tab: Công thức / Cần rót / Lịch sử -----
+  var tabR=document.getElementById('tabRecipes'), tabRotB=document.getElementById('tabRot'), tabH=document.getElementById('tabHistory');
+  function setBtn(b, on, extra){ b.className='btn flex-fill fw-bold '+(extra?extra+' ':'')+(on?'btn-light':'btn-outline-light'); b.style.height='44px'; }
+  function showTab(mode){   // 'recipes' | 'rot' | 'history'
+    document.getElementById('list').style.display = mode==='recipes'?'':'none';
+    document.getElementById('recipeControls').style.display = mode==='recipes'?'':'none';
+    document.getElementById('rotView').style.display = mode==='rot'?'':'none';
+    document.getElementById('historyView').style.display = mode==='history'?'':'none';
+    setBtn(tabR, mode==='recipes'); setBtn(tabRotB, mode==='rot', 'position-relative'); setBtn(tabH, mode==='history');
+    if(mode==='rot') loadRot();
+    if(mode==='history') loadHistory();
+    window.scrollTo(0,0);
   }
-  tabR.addEventListener('click', function(){ showTab(false); });
-  tabH.addEventListener('click', function(){ showTab(true); });
+  tabR.addEventListener('click', function(){ showTab('recipes'); });
+  tabRotB.addEventListener('click', function(){ showTab('rot'); });
+  tabH.addEventListener('click', function(){ showTab('history'); });
+
+  // ----- Mã tranh CẦN RÓT (quản lý giao) -----
+  function escR(s){ return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function setRotBadge(n){ var b=document.getElementById('rotBadge'); if(n>0){ b.textContent=n; b.style.display=''; } else b.style.display='none'; }
+  var rotBusy=false;
+  function loadRot(){
+    var box=document.getElementById('rotList');
+    fetch('/rot-yeu-cau').then(function(r){return r.json();}).then(function(res){
+      setRotBadge(res.count||0);
+      if(!res.rows||!res.rows.length){ box.innerHTML='<p class="text-secondary text-center py-4"><i class="bi bi-emoji-smile"></i> Không có mã tranh cần rót.</p>'; return; }
+      box.innerHTML=res.rows.map(function(r){
+        return '<div class="rc p-2">'+
+          '<div class="d-flex align-items-center gap-2 mb-1">'+
+            '<h2 class="flex-grow-1">'+escR(r.painting)+' <span class="text-secondary" style="font-size:.9rem">×'+r.qty+'</span></h2>'+
+            '<button class="btn btn-success pha-btn rotdone" data-id="'+r.id+'"><i class="bi bi-check-lg"></i> Đã rót</button>'+
+          '</div>'+
+          '<div class="mb-1"><span class="badge text-bg-primary" style="font-size:.95rem">'+(r.count||0)+' màu</span></div>'+
+          (r.image?'<img src="'+r.image+'" class="img-fluid rounded border mb-1 rotzoom" style="max-height:200px;cursor:zoom-in">':'')+
+          (r.note?'<div class="small text-secondary"><i class="bi bi-sticky"></i> '+escR(r.note)+'</div>':'')+
+        '</div>';
+      }).join('');
+    }).catch(function(){ box.innerHTML='<p class="text-danger text-center py-4">Lỗi tải.</p>'; });
+  }
+  document.getElementById('rotReload').addEventListener('click', loadRot);
+
+  var lbx=document.getElementById('lightbox');
+  lbx.addEventListener('click', function(){ lbx.style.display='none'; });
+  document.addEventListener('click', function(e){
+    var z=e.target.closest('.rotzoom');
+    if(z){ document.getElementById('lightboxImg').src=z.getAttribute('src'); lbx.style.display='flex'; return; }
+    var d=e.target.closest('.rotdone'); if(!d) return;
+    if(rotBusy) return; rotBusy=true; d.disabled=true; d.innerHTML='Đang ghi…';
+    var fd=new FormData(); fd.append('request_id', d.dataset.id);
+    fetch('/rot',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(res){
+      toast(res.ok?('✓ '+res.msg):(res.msg||'Lỗi')); rotBusy=false; loadRot();
+    }).catch(function(){ rotBusy=false; toast('Lỗi kết nối'); });
+  });
+
+  // tải badge "cần rót" ngay khi mở app (kể cả đang ở tab Công thức)
+  fetch('/rot-yeu-cau').then(function(r){return r.json();}).then(function(res){ setRotBadge(res.count||0); }).catch(function(){});
 
   // ----- Pha: mở hộp xác nhận lớn -----
   var pendingDali = null, phaBusy = false;

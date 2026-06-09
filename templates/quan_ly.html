@@ -46,6 +46,29 @@
     <span class="fw-bold fs-5">{{ month_cost }} đ</span>
   </div>
 
+  <!-- Giao rót màu -->
+  <div class="rc" style="border-left:4px solid #6f42c1">
+    <div class="fw-bold mb-2" style="font-size:1.15rem"><i class="bi bi-paint-bucket"></i> Giao rót màu</div>
+    <input list="paintList" id="rPainting" class="form-control addinp mb-2" placeholder="Mã tranh (gõ/chọn)">
+    <div id="rPreview" class="small text-secondary mb-2">Chọn mã tranh để xem ảnh &amp; số màu.</div>
+    <div class="d-flex gap-2 mb-2">
+      <select id="rAssignee" class="form-select addinp">
+        <option value="">Mọi người</option>
+        {% for u in staff_users %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+      </select>
+      <input id="rQty" type="number" class="form-control addinp" style="max-width:90px" value="1" min="1" inputmode="numeric">
+    </div>
+    <input id="rNote" class="form-control addinp mb-2" placeholder="Ghi chú (vd: rót gấp)">
+    <button id="rGiao" class="btn btn-warning addbtn w-100"><i class="bi bi-send-check"></i> Giao việc</button>
+    <div class="mt-3">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <b>Đang chờ rót <span id="rPendN" class="badge text-bg-warning">0</span></b>
+        <button id="rReload" class="btn btn-sm btn-outline-secondary py-0"><i class="bi bi-arrow-clockwise"></i></button>
+      </div>
+      <div id="rPending"><div class="text-secondary small">Đang tải…</div></div>
+    </div>
+  </div>
+
   {% if need_buy %}
   <div class="rc" style="border-left:4px solid #dc3545">
     <div class="fw-bold text-danger mb-1"><i class="bi bi-cart-plus"></i> Nên mua thêm (đủ ~30 ngày)</div>
@@ -94,6 +117,13 @@
   <a href="/" class="btn btn-outline-secondary w-100">Mở trang quản lý (công thức)</a>
 </div>
 
+<datalist id="paintList"></datalist>
+
+<!-- Lightbox xem ảnh mẫu -->
+<div id="lightbox" style="position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:2000;display:none;align-items:center;justify-content:center;padding:10px;cursor:zoom-out">
+  <img id="lightboxImg" style="max-width:100%;max-height:100%;border-radius:8px">
+</div>
+
 <div id="toast" style="position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#212529;color:#fff;padding:12px 18px;border-radius:10px;z-index:1100;display:none;font-size:1.05rem"></div>
 
 <script>
@@ -133,6 +163,87 @@
       toast((act==='add'?'Đã nhập +':'Đã đặt tồn ')+(act==='add'?v+'g':res.stock+'g')+' · '+name);
     }).catch(function(){b.disabled=false;toast('Lỗi kết nối');});
   });
+
+  // ===================== GIAO RÓT MÀU =====================
+  var PAINTINGS = {{ paintings_json|safe }};
+  var PMAP = {}; PAINTINGS.forEach(function(p){ PMAP[(p.code||'').trim().toLowerCase()] = p; });
+  function escp(s){ return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+  // datalist mã tranh
+  (function(){ var dl=document.getElementById('paintList');
+    dl.innerHTML = PAINTINGS.map(function(p){ return '<option value="'+escp(p.code)+'">'; }).join(''); })();
+
+  // chống bộ gõ tiếng Việt cho ô mã tranh
+  (function(){ var el=document.getElementById('rPainting'); if(!el) return;
+    el.addEventListener('input', function(){
+      var TONE={'́':'s','̀':'f','̉':'r','̃':'x','̣':'j'};
+      var v=this.value.normalize('NFD').replace(/[̀-ͯ]/g,function(m){return TONE[m]||'';}).replace(/đ/g,'dd').replace(/Đ/g,'DD').toUpperCase();
+      if(v!==this.value) this.value=v; renderPreview();
+    });
+  })();
+
+  // lightbox
+  var lb=document.getElementById('lightbox');
+  lb.addEventListener('click',function(){ lb.style.display='none'; });
+  document.addEventListener('click',function(e){ var z=e.target.closest('.zoom-img'); if(z){ document.getElementById('lightboxImg').src=z.getAttribute('src'); lb.style.display='flex'; } });
+
+  var rPainting=document.getElementById('rPainting'), rPreview=document.getElementById('rPreview');
+  function renderPreview(){
+    var p=PMAP[(rPainting.value||'').trim().toLowerCase()];
+    if(!p){ rPreview.innerHTML='<span class="text-danger">Mã tranh chưa có trong danh mục.</span>'; return; }
+    var h='<span class="badge text-bg-primary">'+(p.count||0)+' màu</span>';
+    if(p.image) h+=' <img src="'+p.image+'" class="rounded border zoom-img ms-1" style="max-height:70px;cursor:zoom-in">';
+    rPreview.innerHTML=h;
+  }
+  rPainting.addEventListener('change', renderPreview);
+
+  document.getElementById('rGiao').addEventListener('click', function(){
+    var code=(rPainting.value||'').trim(); if(!code){ toast('Nhập mã tranh'); return; }
+    if(!PMAP[code.toLowerCase()]){ toast('Mã tranh chưa có trong danh mục'); return; }
+    var b=this; b.disabled=true;
+    var fd=new FormData(); fd.append('action','add'); fd.append('painting',code);
+    fd.append('assignee',document.getElementById('rAssignee').value);
+    fd.append('qty',document.getElementById('rQty').value||1);
+    fd.append('note',document.getElementById('rNote').value||'');
+    fetch('/quan-ly-giao-rot',{method:'POST',body:fd,headers:{'X-CSRFToken':csrf()}}).then(r=>r.json()).then(function(res){
+      b.disabled=false; toast(res.ok?('✓ '+res.msg):(res.msg||'Lỗi'));
+      if(res.ok){ rPainting.value=''; rNote.value=''; rPreview.textContent='Chọn mã tranh để xem ảnh & số màu.'; loadPending(); }
+    }).catch(function(){ b.disabled=false; toast('Lỗi kết nối'); });
+  });
+
+  function loadPending(){
+    var box=document.getElementById('rPending');
+    fetch('/rot-yeu-cau').then(r=>r.json()).then(function(res){
+      document.getElementById('rPendN').textContent=res.count||0;
+      if(!res.rows||!res.rows.length){ box.innerHTML='<div class="text-secondary small">Không có việc đang chờ.</div>'; return; }
+      box.innerHTML=res.rows.map(function(r){
+        return '<div class="border rounded p-2 mb-2">'+
+          '<div class="d-flex align-items-center gap-2">'+
+            '<b class="flex-grow-1">'+escp(r.painting)+' <span class="text-secondary">×'+r.qty+'</span> <span class="badge text-bg-primary">'+(r.count||0)+' màu</span></b>'+
+            (r.image?'<img src="'+r.image+'" class="rounded border zoom-img" style="height:38px;cursor:zoom-in">':'')+
+          '</div>'+
+          '<div class="small mt-1">'+(r.assignee?'<span class="badge text-bg-info">'+escp(r.assignee)+'</span>':'<span class="text-secondary">Mọi người</span>')+(r.note?' · '+escp(r.note):'')+'</div>'+
+          '<div class="d-flex gap-2 mt-2">'+
+            '<button class="btn btn-sm btn-success flex-fill rdone" data-id="'+r.id+'"><i class="bi bi-check-lg"></i> Đã rót</button>'+
+            '<button class="btn btn-sm btn-outline-danger rdel" data-id="'+r.id+'"><i class="bi bi-x-lg"></i></button>'+
+          '</div>'+
+        '</div>';
+      }).join('');
+    }).catch(function(){ box.innerHTML='<div class="text-danger small">Lỗi tải.</div>'; });
+  }
+  document.getElementById('rReload').addEventListener('click', loadPending);
+  document.addEventListener('click', function(e){
+    var d=e.target.closest('.rdone'), x=e.target.closest('.rdel');
+    if(!d && !x) return;
+    var id=(d||x).dataset.id, act=d?'done':'delete';
+    if(x && !confirm('Xoá yêu cầu này?')) return;
+    (d||x).disabled=true;
+    var fd=new FormData(); fd.append('action',act); fd.append('id',id);
+    fetch('/quan-ly-giao-rot',{method:'POST',body:fd,headers:{'X-CSRFToken':csrf()}}).then(r=>r.json()).then(function(res){
+      toast(res.ok?('✓ '+res.msg):(res.msg||'Lỗi')); loadPending();
+    }).catch(function(){ toast('Lỗi kết nối'); });
+  });
+  loadPending();
 </script>
 </body>
 </html>
