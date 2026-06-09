@@ -7,10 +7,6 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
-  <style>
-    .sw-sm { width: 20px; height: 20px; border-radius:.25rem; border:1px solid rgba(0,0,0,.2); display:inline-block; vertical-align:middle; }
-    .color-chip { display:inline-flex; align-items:center; gap:.3rem; border:1px solid var(--bs-border-color); border-radius:1rem; padding:.1rem .55rem .1rem .3rem; font-size:.85rem; margin:0 .25rem .25rem 0; background:var(--bs-body-bg); }
-  </style>
 </head>
 <body class="bg-body-tertiary">
 
@@ -20,7 +16,7 @@
   {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
 
   <div class="row g-3">
-    <!-- Nhập mã tranh -->
+    <!-- Khai báo mã tranh -->
     <div class="col-lg-5">
       <div class="card shadow-sm">
         <div class="card-header fw-semibold"><i class="bi bi-pencil-square"></i> Khai báo mã tranh</div>
@@ -28,28 +24,20 @@
           <form method="POST" action="/ma-tranh" id="paintForm" enctype="multipart/form-data">
             {% csrf_token %}
             <input type="hidden" name="action" value="save_painting">
-            <div class="row g-2">
-              <div class="col-7">
-                <label class="form-label small mb-1">Mã tranh</label>
-                <input type="text" name="code" id="fCode" class="form-control" placeholder="VD: T123" required>
-              </div>
-              <div class="col-5">
-                <label class="form-label small mb-1">Tên tranh (tuỳ chọn)</label>
-                <input type="text" name="name" id="fName" class="form-control" placeholder="VD: Phố cổ">
-              </div>
-            </div>
-            <label class="form-label small mb-1 mt-2">Các mã màu DALI cần rót</label>
-            <textarea name="colors_text" id="fColors" class="form-control" rows="5"
-                      placeholder="Mỗi dòng 1 mã màu (hoặc cách nhau dấu phẩy). VD:&#10;BXA.1&#10;DC.3&#10;XL.2"></textarea>
-            <div class="form-text">HEX sẽ tự tra từ Bảng màu DALI nếu có.</div>
-            <label class="form-label small mb-1 mt-2">Ảnh mẫu / bản đồ màu (tuỳ chọn)</label>
+            <label class="form-label small mb-1">Mã tranh</label>
+            <input type="text" name="code" id="fCode" class="form-control" placeholder="VD: K490" required>
+
+            <label class="form-label small mb-1 mt-2">Ảnh mẫu / bản đồ màu</label>
             <input type="file" name="image" id="fImage" accept="image/*" class="form-control">
-            <div class="form-text">Nhân viên bấm vào ảnh để xem khi rót (vd: ảnh K490 kèm bảng mã màu).</div>
+            <div class="form-text">Nhân viên bấm vào ảnh để xem khi rót (vd: ảnh K490 kèm bảng mã màu). Hệ thống tự đếm số màu từ ảnh.</div>
             <div id="curImageWrap" class="mt-2" style="display:none">
               <img id="curImage" class="rounded border" style="max-height:130px; cursor:zoom-in">
               <label class="d-block small mt-1"><input type="checkbox" name="remove_image" value="1" id="fRemoveImage"> Xoá ảnh hiện tại</label>
             </div>
-            <input type="text" name="note" id="fNote" class="form-control mt-2" placeholder="Ghi chú (tuỳ chọn)">
+
+            <label class="form-label small mb-1 mt-2">Số màu <span id="ccHint" class="text-secondary small"></span></label>
+            <input type="number" name="color_count" id="fCount" class="form-control" min="0" placeholder="Tự đếm từ ảnh — sửa lại nếu cần">
+
             <button class="btn btn-success w-100 mt-3"><i class="bi bi-save"></i> Lưu mã tranh</button>
             <button type="button" id="resetForm" class="btn btn-outline-secondary w-100 mt-2">Làm mới form</button>
           </form>
@@ -70,34 +58,26 @@
           {% else %}
           <div class="input-group input-group-sm mb-3" style="max-width:280px;">
             <span class="input-group-text"><i class="bi bi-search"></i></span>
-            <input id="paintSearch" class="form-control" placeholder="Tìm mã tranh / tên…">
+            <input id="paintSearch" class="form-control" placeholder="Tìm mã tranh…">
           </div>
           <div class="row g-2" id="paintGrid">
             {% for p in paintings %}
-            <div class="col-md-6 paint-col">
-              <div class="border rounded p-2 h-100 paint-card"
-                   data-search="{{ p.code|lower }} {{ p.name|lower }}">
-                <div class="d-flex align-items-center gap-2 mb-1">
-                  <div class="fw-semibold">{{ p.code }}{% if p.name %} <span class="text-secondary small">· {{ p.name }}</span>{% endif %}</div>
-                  <span class="badge text-bg-light border ms-auto">{{ p.colors|length }} màu</span>
-                  {% if p.image %}<button type="button" class="btn btn-sm btn-outline-info py-0 zoom-btn" title="Xem ảnh mẫu" data-image="/media/{{ p.image }}"><i class="bi bi-image"></i></button>{% endif %}
-                  <button class="btn btn-sm btn-outline-secondary py-0 edit-btn" title="Sửa"
-                          data-code="{{ p.code }}" data-name="{{ p.name }}" data-note="{{ p.note }}"
-                          data-image="{% if p.image %}/media/{{ p.image }}{% endif %}"
-                          data-colors='{% for c in p.colors %}{{ c.dali }}{% if not forloop.last %};{% endif %}{% endfor %}'>
-                    <i class="bi bi-pencil"></i></button>
+            <div class="col-md-4 col-6 paint-col">
+              <div class="border rounded p-2 h-100 paint-card" data-search="{{ p.code|lower }}">
+                <div class="d-flex align-items-center gap-1 mb-1">
+                  <span class="fw-semibold">{{ p.code }}</span>
+                  <span class="badge text-bg-primary ms-auto">{{ p.color_count }} màu</span>
+                </div>
+                {% if p.image %}<img src="/media/{{ p.image }}" class="rounded border w-100 zoom-img mb-1" style="max-height:130px; object-fit:contain; cursor:zoom-in" title="Bấm xem to">{% else %}<div class="text-secondary small text-center py-3 bg-body-secondary rounded mb-1">Chưa có ảnh</div>{% endif %}
+                <div class="d-flex gap-1">
+                  <button class="btn btn-sm btn-outline-secondary py-0 flex-fill edit-btn" title="Sửa"
+                          data-code="{{ p.code }}" data-count="{{ p.color_count }}"
+                          data-image="{% if p.image %}/media/{{ p.image }}{% endif %}"><i class="bi bi-pencil"></i> Sửa</button>
                   <form method="POST" action="/ma-tranh" onsubmit="return confirm('Xoá mã tranh {{ p.code }}?')">{% csrf_token %}
                     <input type="hidden" name="action" value="delete_painting"><input type="hidden" name="code" value="{{ p.code }}">
                     <button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-trash"></i></button>
                   </form>
                 </div>
-                {% if p.note %}<div class="small text-secondary mb-1"><i class="bi bi-sticky"></i> {{ p.note }}</div>{% endif %}
-                <div>
-                  {% for c in p.colors %}
-                  <span class="color-chip"><span class="sw-sm" style="background:{% if c.hex %}#{{ c.hex }}{% else %}#ccc{% endif %}"></span>{{ c.dali }}</span>
-                  {% endfor %}
-                </div>
-                {% if p.image %}<img src="/media/{{ p.image }}" class="rounded border mt-2 zoom-img" style="max-height:90px; cursor:zoom-in" title="Bấm xem to">{% endif %}
               </div>
             </div>
             {% endfor %}
@@ -140,7 +120,7 @@
               <button class="btn btn-warning w-100 fw-semibold"><i class="bi bi-send-check"></i> Giao việc</button>
             </div>
             <div class="col-12">
-              <div id="reqColorBox" class="small text-secondary">Chọn mã tranh để xem các mã màu cần rót.</div>
+              <div id="reqPreview" class="small text-secondary">Chọn mã tranh để xem ảnh mẫu &amp; số màu.</div>
             </div>
           </form>
 
@@ -152,12 +132,12 @@
           {% else %}
           <div class="table-responsive">
             <table class="table table-sm align-middle">
-              <thead class="table-light"><tr><th>Mã tranh</th><th>Mã màu cần rót</th><th>Giao cho</th><th class="text-center">SL</th><th>Ghi chú</th><th></th></tr></thead>
+              <thead class="table-light"><tr><th>Mã tranh</th><th class="text-center">Số màu</th><th>Giao cho</th><th class="text-center">SL</th><th>Ghi chú</th><th></th></tr></thead>
               <tbody>
                 {% for r in pending %}
                 <tr>
                   <td class="fw-semibold text-nowrap">{{ r.painting }}{% if r.image %} <button type="button" class="btn btn-sm btn-outline-info py-0 zoom-btn" title="Xem ảnh mẫu" data-image="{{ r.image }}"><i class="bi bi-image"></i></button>{% endif %}</td>
-                  <td>{% for c in r.colors %}<span class="color-chip"><span class="sw-sm" style="background:{% if c.hex %}#{{ c.hex }}{% else %}#ccc{% endif %}"></span>{{ c.dali }}</span>{% endfor %}</td>
+                  <td class="text-center">{{ r.count }}</td>
                   <td>{% if r.assignee %}<span class="badge text-bg-info">{{ r.assignee }}</span>{% else %}<span class="text-secondary">Mọi người</span>{% endif %}</td>
                   <td class="text-center">{{ r.qty }}</td>
                   <td class="small">{{ r.note }}</td>
@@ -213,14 +193,15 @@
             <span id="statLabel" class="fw-semibold ms-2">{{ stat_label }}</span>
           </div>
           <div class="row g-2 mb-3">
-            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Số lượt rót</div><div class="fs-4 fw-bold text-primary" id="statPours">{{ stat_agg.pours }}</div></div></div>
-            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Tổng số tranh</div><div class="fs-4 fw-bold text-success" id="statPaintings">{{ stat_agg.paintings }}</div></div></div>
+            <div class="col-4"><div class="border rounded text-center py-2"><div class="text-secondary small">Số lượt rót</div><div class="fs-4 fw-bold text-primary" id="statPours">{{ stat_agg.pours }}</div></div></div>
+            <div class="col-4"><div class="border rounded text-center py-2"><div class="text-secondary small">Tổng số tranh</div><div class="fs-4 fw-bold text-success" id="statPaintings">{{ stat_agg.paintings }}</div></div></div>
+            <div class="col-4"><div class="border rounded text-center py-2"><div class="text-secondary small">Tổng số màu đã rót</div><div class="fs-4 fw-bold text-warning" id="statColors">{{ stat_agg.colors_total }}</div></div></div>
           </div>
           <table class="table table-sm">
-            <thead class="table-light"><tr><th>Mã màu DALI</th><th class="text-end">Số lượt rót</th></tr></thead>
+            <thead class="table-light"><tr><th>Mã tranh</th><th class="text-center">Số lượt</th><th class="text-center">Tổng tranh</th><th class="text-center">Số màu/tranh</th><th class="text-end">Tổng màu</th></tr></thead>
             <tbody id="statBody">
-              {% for u in stat_agg.rows %}<tr><td><span class="sw-sm" style="background:{% if u.hex %}#{{ u.hex }}{% else %}#ccc{% endif %}"></span> {{ u.dali }}</td><td class="text-end">{{ u.count }}</td></tr>
-              {% empty %}<tr><td colspan="2" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>{% endfor %}
+              {% for u in stat_agg.rows %}<tr><td class="fw-semibold">{{ u.painting }}</td><td class="text-center">{{ u.pours }}</td><td class="text-center">{{ u.qty }}</td><td class="text-center">{{ u.cc }}</td><td class="text-end">{{ u.colors }}</td></tr>
+              {% empty %}<tr><td colspan="5" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>{% endfor %}
             </tbody>
           </table>
         </div>
@@ -258,14 +239,13 @@
   var PAINTINGS = {{ paintings_json|safe }};
   var PMAP = {}; PAINTINGS.forEach(function(p){ PMAP[(p.code||'').trim().toLowerCase()] = p; });
 
-  // Chống bộ gõ tiếng Việt làm hỏng mã (X->ngã, F->huyền...)
   function normCode(s){
     var TONE = {'́':'s','̀':'f','̉':'r','̃':'x','̣':'j'};
     return s.normalize('NFD').replace(/[̀-ͯ]/g, function(m){ return TONE[m] || ''; })
             .replace(/đ/g,'dd').replace(/Đ/g,'DD').toUpperCase();
   }
   function attachCode(el){ if(el) el.addEventListener('input', function(){ var v=normCode(this.value); if(v!==this.value) this.value=v; }); }
-  ['fCode','fColors','paintSearch','reqPainting'].forEach(function(id){ attachCode(document.getElementById(id)); });
+  ['fCode','paintSearch','reqPainting'].forEach(function(id){ attachCode(document.getElementById(id)); });
 
   function toast(msg){
     var t=document.createElement('div'); t.textContent=msg;
@@ -273,8 +253,9 @@
     document.body.appendChild(t); setTimeout(function(){t.remove()},1600);
   }
   function esc(s){ return (s||'').replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function csrf(){ var m=document.cookie.match(/csrftoken=([^;]+)/); return m?m[1]:''; }
 
-  // ---- Lightbox xem ảnh mẫu ----
+  // ---- Lightbox ----
   var lightbox = document.getElementById('lightbox');
   function openLightbox(src){ if(!src) return; document.getElementById('lightboxImg').src = src; lightbox.style.display='flex'; }
   lightbox.addEventListener('click', function(){ lightbox.style.display='none'; });
@@ -283,29 +264,39 @@
     var zi = e.target.closest('.zoom-img'); if(zi){ openLightbox(zi.getAttribute('src')); return; }
   });
 
-  // ---- Ảnh hiện tại trong form ----
+  // ---- Ảnh hiện tại trong form + tự đếm số màu khi chọn ảnh ----
   function showCurImage(src){
     var wrap = document.getElementById('curImageWrap');
     if(src){ document.getElementById('curImage').src = src; wrap.style.display=''; document.getElementById('fRemoveImage').checked=false; }
     else wrap.style.display='none';
   }
   document.getElementById('curImage').addEventListener('click', function(){ openLightbox(this.src); });
+  document.getElementById('fImage').addEventListener('change', function(){
+    var f = this.files && this.files[0]; if(!f) return;
+    showCurImage(URL.createObjectURL(f));
+    var hint = document.getElementById('ccHint'); hint.textContent = '· đang đếm…';
+    var fd = new FormData(); fd.append('image', f);
+    fetch('/ma-tranh-doc-so-mau', {method:'POST', body:fd, headers:{'X-CSRFToken':csrf()}})
+      .then(function(r){ return r.json(); }).then(function(res){
+        if(res.ok && res.count){ document.getElementById('fCount').value = res.count; hint.textContent = '· tự đếm: '+res.count+' (sửa được)'; }
+        else hint.textContent = '· không tự đếm được, nhập tay';
+      }).catch(function(){ hint.textContent=''; });
+  });
 
-  // ---- Sửa mã tranh: nạp vào form ----
+  // ---- Sửa mã tranh ----
   document.addEventListener('click', function(e){
     var ed = e.target.closest('.edit-btn'); if(!ed) return;
     document.getElementById('fCode').value = ed.dataset.code || '';
-    document.getElementById('fName').value = ed.dataset.name || '';
-    document.getElementById('fNote').value = ed.dataset.note || '';
-    document.getElementById('fColors').value = (ed.dataset.colors || '').split(';').filter(Boolean).join('\n');
+    document.getElementById('fCount').value = ed.dataset.count || '';
     document.getElementById('fImage').value = '';
+    document.getElementById('ccHint').textContent = '';
     showCurImage(ed.dataset.image || '');
     window.scrollTo({top:0, behavior:'smooth'});
     toast('Đã nạp vào form để sửa');
   });
   document.getElementById('resetForm').addEventListener('click', function(){
     document.getElementById('paintForm').reset();
-    showCurImage('');
+    showCurImage(''); document.getElementById('ccHint').textContent = '';
   });
 
   // ---- Tìm mã tranh ----
@@ -319,21 +310,17 @@
     });
   });
 
-  // ---- Giao việc: hiện mã màu của mã tranh được chọn ----
+  // ---- Giao việc: xem trước ảnh + số màu ----
   var reqPainting = document.getElementById('reqPainting');
-  var reqColorBox = document.getElementById('reqColorBox');
-  function renderReqColors(){
+  var reqPreview = document.getElementById('reqPreview');
+  function renderReqPreview(){
     var p = PMAP[(reqPainting.value||'').trim().toLowerCase()];
-    if (!p){ reqColorBox.innerHTML = '<span class="text-danger">Mã tranh chưa có trong danh mục — sẽ không giao được.</span>'; return; }
-    if (!p.colors || !p.colors.length){ reqColorBox.textContent = 'Mã tranh này chưa khai báo màu.'; return; }
-    var html = '<div class="mb-1">Mã màu cần rót (bỏ tích nếu không cần rót màu đó):</div>';
-    html += p.colors.map(function(c){
-      var sw = '<span class="sw-sm" style="background:'+(c.hex?'#'+c.hex:'#ccc')+'"></span>';
-      return '<label class="color-chip"><input type="checkbox" name="req_color" value="'+esc(c.dali)+'" checked> '+sw+' '+esc(c.dali)+'</label>';
-    }).join('');
-    reqColorBox.innerHTML = html;
+    if (!p){ reqPreview.innerHTML = '<span class="text-danger">Mã tranh chưa có trong danh mục — sẽ không giao được.</span>'; return; }
+    var html = '<span class="badge text-bg-primary">'+p.count+' màu</span>';
+    if (p.image) html += ' <img src="'+p.image+'" class="rounded border zoom-img ms-1" style="max-height:70px;cursor:zoom-in">';
+    reqPreview.innerHTML = html;
   }
-  if (reqPainting){ reqPainting.addEventListener('input', renderReqColors); reqPainting.addEventListener('change', renderReqColors); }
+  if (reqPainting){ reqPainting.addEventListener('input', renderReqPreview); reqPainting.addEventListener('change', renderReqPreview); }
 
   // ---- Thống kê ----
   var curRange = 'today';
@@ -345,11 +332,11 @@
       document.getElementById('statLabel').textContent = res.label;
       document.getElementById('statPours').textContent = res.pours;
       document.getElementById('statPaintings').textContent = res.paintings;
+      document.getElementById('statColors').textContent = res.colors_total;
       var tb = document.getElementById('statBody');
-      if (!res.rows || !res.rows.length){ tb.innerHTML = '<tr><td colspan="2" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>'; }
+      if (!res.rows || !res.rows.length){ tb.innerHTML = '<tr><td colspan="5" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>'; }
       else tb.innerHTML = res.rows.map(function(u){
-        var sw = '<span class="sw-sm" style="background:'+(u.hex?'#'+u.hex:'#ccc')+'"></span>';
-        return '<tr><td>'+sw+' '+esc(u.dali)+'</td><td class="text-end">'+u.count+'</td></tr>';
+        return '<tr><td class="fw-semibold">'+esc(u.painting)+'</td><td class="text-center">'+u.pours+'</td><td class="text-center">'+u.qty+'</td><td class="text-center">'+u.cc+'</td><td class="text-end">'+u.colors+'</td></tr>';
       }).join('');
     });
   }

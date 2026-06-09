@@ -656,21 +656,28 @@ def dali_colors(request):
 
 
 # ===================== RÓT MÀU (theo mã tranh) =====================
-def _parse_color_codes(text):
-    """Tách danh sách mã màu DALI từ chuỗi (xuống dòng / dấu phẩy / chấm phẩy),
-    tra cứu HEX từ bảng màu DALI. Trả [{'dali','hex'}] (giữ thứ tự, bỏ trùng)."""
-    from pha import dali_match
-    import re as _re
-    codes = [c.strip() for c in _re.split(r'[\n,;]+', text or '') if c.strip()]
-    out, seen = [], set()
-    for code in codes:
-        key = code.lower().replace(' ', '')
-        if key in seen:
-            continue
-        seen.add(key)
-        it = dali_match.find_by_dali(code)
-        out.append({'dali': code, 'hex': (it['hex'] if it else '')})
-    return out
+def _detect_color_count(path):
+    """Ước lượng SỐ MÀU trong ảnh mẫu (bản đồ màu tô số). Đếm các mảng màu phẳng
+    chiếm diện tích đáng kể, gộp các màu gần giống nhau. Là số GỢI Ý — sửa được."""
+    try:
+        from PIL import Image
+        import numpy as np
+        img = Image.open(path).convert('RGB')
+        img.thumbnail((400, 400))                      # nhỏ lại cho nhanh
+        arr = np.asarray(img).reshape(-1, 3).astype(int)
+        q = (arr // 24) * 24                            # gom bớt sai khác do khử răng cưa
+        colors, counts = np.unique(q, axis=0, return_counts=True)
+        total = counts.sum()
+        keep = counts >= total * 0.012                 # chỉ giữ màu chiếm >=1.2% diện tích
+        colors, counts = colors[keep], counts[keep]
+        order = np.argsort(-counts)                     # nhiều diện tích trước
+        reps = []
+        for c in colors[order]:
+            if all(int(np.sum((c - r) ** 2)) > 42 * 42 for r in reps):  # cách nhau đủ xa
+                reps.append(c)
+        return len(reps)
+    except Exception:
+        return 0
 
 
 def _painting_map():
@@ -690,20 +697,26 @@ def _remove_media(name):
 
 
 def _painting_dict(p):
-    """Mã tranh dạng dict cho JSON (kèm URL ảnh nếu có)."""
-    return {'code': p.code, 'name': p.name, 'colors': p.colors or [],
+    """Mã tranh dạng dict cho JSON (mã + số màu + URL ảnh)."""
+    return {'code': p.code, 'count': p.color_count,
             'image': ('/media/' + p.image) if p.image else ''}
 
 
-def _record_pour(painting, colors, qty, user, req=None):
+def _painting_count(code):
+    """Trả (số_màu, Painting|None) theo mã tranh."""
+    from pha.models import Painting
+    p = Painting.objects.filter(code__iexact=(code or '').strip()).first()
+    return (p.color_count if p else 0), p
+
+
+def _record_pour(painting, qty, color_count, user, req=None):
     """Ghi 1 lượt rót màu vào nhật ký; nếu có yêu cầu (req) thì đánh dấu đã rót."""
     from pha.models import PourLog, PourRequest
     now = _now()
     qty = max(1, int(qty or 1))
-    colors = colors or []
     PourLog.objects.create(
         day=now.strftime('%Y-%m-%d'), month=now.strftime('%Y-%m'),
-        painting=painting, colors=colors, color_count=len(colors), qty=qty,
+        painting=painting, colors=[], color_count=int(color_count or 0), qty=qty,
         user=user, request_id=(req.id if req else None),
     )
     if req and req.status != PourRequest.STATUS_DONE:
@@ -735,24 +748,25 @@ def _pour_stats_qs(range_, month_param):
 
 
 def _pour_aggregate(qs):
-    """Tổng hợp: số lượt rót, tổng số tranh, và lượt từng mã màu (theo số lượng tranh)."""
+    """Tổng hợp: số lượt rót, tổng số tranh, tổng số màu đã rót, và chi tiết theo mã tranh."""
     pours = 0
     paintings = 0
-    color_acc = {}      # dali -> {'count', 'hex'}
+    colors_total = 0
+    acc = {}      # code -> {'painting','pours','qty','cc','colors'}
     for log in qs:
         pours += 1
         q = max(1, int(log.qty or 1))
+        cc = int(log.color_count or 0)
         paintings += q
-        for c in (log.colors or []):
-            dali = c.get('dali') if isinstance(c, dict) else str(c)
-            if not dali:
-                continue
-            row = color_acc.setdefault(dali, {'dali': dali, 'count': 0, 'hex': ''})
-            row['count'] += q
-            if not row['hex'] and isinstance(c, dict) and c.get('hex'):
-                row['hex'] = c['hex']
-    rows = sorted(color_acc.values(), key=lambda x: -x['count'])
-    return {'pours': pours, 'paintings': paintings, 'rows': rows}
+        colors_total += cc * q
+        row = acc.setdefault(log.painting, {'painting': log.painting, 'pours': 0,
+                                            'qty': 0, 'cc': cc, 'colors': 0})
+        row['pours'] += 1
+        row['qty'] += q
+        row['colors'] += cc * q
+        row['cc'] = cc
+    rows = sorted(acc.values(), key=lambda x: -x['qty'])
+    return {'pours': pours, 'paintings': paintings, 'colors_total': colors_total, 'rows': rows}
 
 
 def _staff_users():
@@ -771,32 +785,37 @@ def ma_tranh(request):
         action = request.POST.get('action')
         if action == 'save_painting':
             code = (request.POST.get('code') or '').strip()
-            name = (request.POST.get('name') or '').strip()
-            note = (request.POST.get('note') or '').strip()
-            colors = _parse_color_codes(request.POST.get('colors_text') or '')
             if not code:
                 messages.error(request, 'Thiếu mã tranh.')
-            elif not colors:
-                messages.error(request, 'Chưa nhập mã màu cho tranh.')
             else:
                 obj = Painting.objects.filter(code__iexact=code).first()
                 image_name = obj.image if obj else ''
                 up = request.FILES.get('image')
+                new_upload = False
                 if up and up.content_type and up.content_type.startswith('image/'):
                     fss = FileSystemStorage()
                     new_name = fss.save(f'painting_{datetime.now():%Y-%m-%d_%H-%M-%S}_{up.name}', up)
                     _remove_media(image_name)        # xoá ảnh cũ (nếu thay)
                     image_name = new_name
+                    new_upload = True
                 elif request.POST.get('remove_image') == '1':
                     _remove_media(image_name)
                     image_name = ''
-                if obj:
-                    obj.code, obj.name, obj.note, obj.colors, obj.image = code, name, note, colors, image_name
-                    obj.save()
-                    messages.info(request, f'Đã cập nhật mã tranh {code} ({len(colors)} màu).')
+                # Số màu: ưu tiên số người nhập; nếu để trống thì tự đếm từ ảnh mới
+                raw_cc = (request.POST.get('color_count') or '').strip()
+                if raw_cc.isdigit():
+                    color_count = int(raw_cc)
+                elif new_upload:
+                    color_count = _detect_color_count(os.path.join(settings.MEDIA_ROOT, image_name))
                 else:
-                    Painting.objects.create(code=code, name=name, note=note, colors=colors, image=image_name)
-                    messages.info(request, f'Đã lưu mã tranh {code} ({len(colors)} màu).')
+                    color_count = obj.color_count if obj else 0
+                if obj:
+                    obj.code, obj.image, obj.color_count = code, image_name, color_count
+                    obj.save()
+                    messages.info(request, f'Đã cập nhật mã tranh {code} ({color_count} màu).')
+                else:
+                    Painting.objects.create(code=code, image=image_name, color_count=color_count)
+                    messages.info(request, f'Đã lưu mã tranh {code} ({color_count} màu).')
         elif action == 'delete_painting':
             dp = Painting.objects.filter(code__iexact=(request.POST.get('code') or '').strip()).first()
             if dp:
@@ -811,18 +830,12 @@ def ma_tranh(request):
             if not p:
                 messages.error(request, f'Mã tranh "{code}" chưa có trong danh mục.')
             else:
-                picked = request.POST.getlist('req_color')   # các mã màu được chọn
-                if picked:
-                    pset = {x.strip().lower() for x in picked}
-                    colors = [c for c in (p.colors or []) if c.get('dali', '').strip().lower() in pset]
-                else:
-                    colors = list(p.colors or [])
                 try:
                     qty = max(1, int(request.POST.get('qty') or 1))
                 except ValueError:
                     qty = 1
                 PourRequest.objects.create(
-                    painting=p.code, colors=colors, qty=qty,
+                    painting=p.code, colors=[], qty=qty,
                     note=(request.POST.get('note') or '').strip(),
                     assignee=(request.POST.get('assignee') or '').strip(),
                     created_by=request.user.username,
@@ -834,7 +847,8 @@ def ma_tranh(request):
         elif action == 'done_request':
             req = PourRequest.objects.filter(id=request.POST.get('id')).first()
             if req and req.status != PourRequest.STATUS_DONE:
-                _record_pour(req.painting, req.colors, req.qty, request.user.username, req)
+                cc, _ = _painting_count(req.painting)
+                _record_pour(req.painting, req.qty, cc, request.user.username, req)
                 messages.info(request, f'Đã đánh dấu rót xong {req.painting}.')
         return redirect('/ma-tranh')
 
@@ -844,6 +858,7 @@ def ma_tranh(request):
     for r in pending:
         pp = pmap.get(r.painting.strip().lower())
         r.image = ('/media/' + pp.image) if (pp and pp.image) else ''
+        r.count = pp.color_count if pp else 0
     done = list(PourRequest.objects.filter(status=PourRequest.STATUS_DONE)
                 .order_by('-done_time', '-id')[:30])
     for r in done:
@@ -884,7 +899,7 @@ def rot(request):
     """Ghi nhận đã rót xong 1 mã tranh. POST: painting, qty, [request_id], [colors_json]."""
     if request.method != 'POST':
         return HttpResponseNotFound('POST only')
-    from pha.models import Painting, PourRequest
+    from pha.models import PourRequest
     req = None
     rid = request.POST.get('request_id')
     if rid:
@@ -893,7 +908,7 @@ def rot(request):
             return JsonResponse({'ok': False, 'msg': 'Yêu cầu không tồn tại.'})
         if req.status == PourRequest.STATUS_DONE:
             return JsonResponse({'ok': False, 'msg': 'Yêu cầu đã được rót trước đó.'})
-        painting, colors, qty = req.painting, req.colors, req.qty
+        painting, qty = req.painting, req.qty
     else:
         painting = (request.POST.get('painting') or '').strip()
         if not painting:
@@ -902,17 +917,27 @@ def rot(request):
             qty = max(1, int(request.POST.get('qty') or 1))
         except ValueError:
             qty = 1
-        raw = request.POST.get('colors_json')
-        if raw:
-            try:
-                colors = json.loads(raw)
-            except (ValueError, TypeError):
-                colors = []
-        else:
-            p = Painting.objects.filter(code__iexact=painting).first()
-            colors = list(p.colors or []) if p else []
-    _record_pour(painting, colors, qty, request.user.username, req)
+    cc, _ = _painting_count(painting)
+    _record_pour(painting, qty, cc, request.user.username, req)
     return JsonResponse({'ok': True, 'msg': f'Đã ghi rót {painting} ×{qty}'})
+
+
+@csrf_exempt
+@staff_required
+def doc_so_mau(request):
+    """AJAX: nhận 1 ảnh, trả số màu ước lượng (cho form khai báo mã tranh)."""
+    if request.method != 'POST':
+        return HttpResponseNotFound('POST only')
+    up = request.FILES.get('image')
+    if not up or not (up.content_type or '').startswith('image/'):
+        return JsonResponse({'ok': False, 'count': 0})
+    fss = FileSystemStorage()
+    tmp = fss.save(f'_tmp_count_{datetime.now():%H-%M-%S}_{up.name}', up)
+    try:
+        n = _detect_color_count(os.path.join(settings.MEDIA_ROOT, tmp))
+    finally:
+        _remove_media(tmp)
+    return JsonResponse({'ok': True, 'count': n})
 
 
 @csrf_exempt
@@ -936,7 +961,7 @@ def rot_yeu_cau_list(request):
         p = pmap.get(r.painting.strip().lower())
         rows.append({
             'id': r.id, 'painting': r.painting, 'qty': r.qty,
-            'colors': r.colors or [], 'note': r.note,
+            'count': p.color_count if p else 0, 'note': r.note,
             'assignee': r.assignee, 'by': r.created_by,
             'image': ('/media/' + p.image) if (p and p.image) else '',
             'dt': t.strftime('%d/%m %H:%M'),
@@ -973,7 +998,8 @@ def lich_su_rot(request):
 def thong_ke_rot(request):
     label, agg = _pour_stats(request.GET.get('range', 'today'), request.GET.get('month'))
     return JsonResponse({'label': label, 'pours': agg['pours'],
-                         'paintings': agg['paintings'], 'rows': agg['rows']})
+                         'paintings': agg['paintings'],
+                         'colors_total': agg['colors_total'], 'rows': agg['rows']})
 
 
 @csrf_exempt
@@ -993,23 +1019,24 @@ def export_thong_ke_rot_excel(request):
     head_font = Font(bold=True, color='FFFFFF')
     center = Alignment(horizontal='center')
 
-    # Sheet 1: tổng lượt theo mã màu
+    # Sheet 1: tổng theo mã tranh
     ws = wb.active
-    ws.title = "Tong theo mau"
+    ws.title = "Tong theo ma tranh"
     ws.append(["BÁO CÁO RÓT MÀU"])
     ws.append([label])
-    ws.append([f"Số lượt rót: {agg['pours']}    Tổng số tranh: {agg['paintings']}"])
-    ws.append(["Mã màu DALI", "Số lượt rót"])
+    ws.append([f"Số lượt rót: {agg['pours']}    Tổng số tranh: {agg['paintings']}"
+               f"    Tổng số màu đã rót: {agg['colors_total']}"])
+    ws.append(["Mã tranh", "Số lượt rót", "Tổng số tranh", "Số màu/tranh", "Tổng số màu"])
     for c in ws[4]:
         c.fill = head_fill; c.font = head_font; c.alignment = center
     for u in agg['rows']:
-        ws.append([u['dali'], u['count']])
-    ws.column_dimensions['A'].width = 24
-    ws.column_dimensions['B'].width = 16
+        ws.append([u['painting'], u['pours'], u['qty'], u['cc'], u['colors']])
+    for col, w in zip('ABCDE', (20, 14, 14, 14, 14)):
+        ws.column_dimensions[col].width = w
 
     # Sheet 2: chi tiết từng lượt rót
     ws2 = wb.create_sheet("Chi tiet rot")
-    ws2.append(["Ngày giờ", "Mã tranh", "Số lượng", "Số màu", "Người rót", "Danh sách màu"])
+    ws2.append(["Ngày giờ", "Mã tranh", "Số lượng", "Số màu", "Người rót"])
     for c in ws2[1]:
         c.fill = head_fill; c.font = head_font; c.alignment = center
     for log in qs.order_by('created_time'):
@@ -1018,11 +1045,9 @@ def export_thong_ke_rot_excel(request):
             t = t.astimezone(_VN) if _VN else t
         except Exception:
             pass
-        detail = ", ".join(c.get('dali', '') if isinstance(c, dict) else str(c)
-                           for c in (log.colors or []))
         ws2.append([t.strftime('%d/%m/%Y %H:%M'), log.painting, log.qty,
-                    log.color_count, log.user or '', detail])
-    for col, w in zip('ABCDEF', (18, 16, 10, 8, 16, 70)):
+                    log.color_count, log.user or ''])
+    for col, w in zip('ABCDE', (18, 18, 10, 10, 16)):
         ws2.column_dimensions[col].width = w
 
     resp = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

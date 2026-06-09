@@ -106,8 +106,9 @@ class Painting(models.Model):
     """Mã tranh: danh mục tranh tô màu số. Mỗi mã tranh gồm danh sách mã màu DALI
     cần rót. Chủ/quản lý khai báo trước; nhân viên chọn mã tranh là ra sẵn list màu."""
     code = models.CharField(max_length=100, unique=True)            # mã tranh
-    name = models.CharField(max_length=200, blank=True, default='')  # tên tranh (tuỳ chọn)
-    colors = models.JSONField(default=list)        # [{'dali':..., 'hex':...}, ...]
+    name = models.CharField(max_length=200, blank=True, default='')  # tên tranh (không dùng nữa)
+    colors = models.JSONField(default=list)        # (cũ) danh sách mã màu — không dùng nữa
+    color_count = models.IntegerField(default=0)   # số màu của tranh (tự đếm từ ảnh / sửa tay)
     image = models.TextField(blank=True, default='')   # ảnh mẫu/bản đồ màu (file trong MEDIA_ROOT)
     note = models.CharField(max_length=200, blank=True, default='')
     updated = models.DateTimeField(auto_now=True)

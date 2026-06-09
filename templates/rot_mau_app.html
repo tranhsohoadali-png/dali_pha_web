@@ -146,7 +146,7 @@
             '<button class="btn btn-success rot-btn rot-req" data-id="'+r.id+'" data-painting="'+esc(r.painting)+'" data-qty="'+r.qty+'"><i class="bi bi-check-lg"></i> Đã rót</button>'+
           '</div>'+
           (r.assignee ? '<div class="small mb-1"><span class="badge text-bg-info">'+esc(r.assignee)+'</span></div>' : '')+
-          '<div class="mb-1">'+chips(r.colors)+'</div>'+
+          '<div class="mb-1"><span class="badge text-bg-primary" style="font-size:.95rem">'+(r.count||0)+' màu</span></div>'+
           (r.image ? '<img src="'+r.image+'" class="img-fluid rounded border mb-1 zoom-img" style="max-height:180px;cursor:zoom-in">' : '')+
           (r.note ? '<div class="small text-secondary"><i class="bi bi-sticky"></i> '+esc(r.note)+'</div>' : '')+
           '<div class="small text-secondary"><i class="bi bi-person"></i> '+esc(r.by||'')+' · '+r.dt+'</div>'+
@@ -161,14 +161,13 @@
     var box=document.getElementById('catList');
     if(!PAINTINGS.length){ box.innerHTML='<p class="text-secondary text-center py-5">Chưa có mã tranh nào. Quản lý cần khai báo trước.</p>'; return; }
     box.innerHTML = PAINTINGS.map(function(p){
-      return '<div class="rc p-2 cat-card" data-search="'+esc((p.code+' '+(p.name||'')).toLowerCase())+'">'+
+      return '<div class="rc p-2 cat-card" data-search="'+esc((p.code||'').toLowerCase())+'">'+
         '<div class="d-flex align-items-center gap-2 mb-1">'+
-          '<h2 class="flex-grow-1">'+esc(p.code)+(p.name?' <span class="text-secondary" style="font-size:.85rem">· '+esc(p.name)+'</span>':'')+'</h2>'+
+          '<h2 class="flex-grow-1">'+esc(p.code)+' <span class="badge text-bg-primary" style="font-size:.85rem">'+(p.count||0)+' màu</span></h2>'+
           '<input type="number" class="form-control qtybox catqty" value="1" min="1">'+
           '<button class="btn btn-primary rot-btn rot-cat" data-painting="'+esc(p.code)+'"><i class="bi bi-paint-bucket"></i> Rót</button>'+
         '</div>'+
-        '<div>'+chips(p.colors)+'</div>'+
-        (p.image ? '<img src="'+p.image+'" class="img-fluid rounded border mt-2 zoom-img" style="max-height:160px;cursor:zoom-in">' : '')+
+        (p.image ? '<img src="'+p.image+'" class="img-fluid rounded border mt-1 zoom-img" style="max-height:200px;cursor:zoom-in">' : '')+
       '</div>';
     }).join('');
   }

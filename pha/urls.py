@@ -27,6 +27,7 @@ urlpatterns = [
 
     # Rót màu theo mã tranh
     path('ma-tranh', views.ma_tranh, name='ma_tranh'),
+    path('ma-tranh-doc-so-mau', views.doc_so_mau, name='doc_so_mau'),
     path('app-rot', views.rot_mau_app, name='rot_mau_app'),
     path('rot', views.rot, name='rot'),
     path('rot-yeu-cau', views.rot_yeu_cau_list, name='rot_yeu_cau_list'),
