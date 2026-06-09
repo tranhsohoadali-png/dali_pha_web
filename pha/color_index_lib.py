@@ -21,19 +21,13 @@ except ImportError:
 
 EDGE_COLOR = (0, 0, 0)
 MAX_CIRCLE_RADIUS = config("MAX_CIRCLE_RADIUS", default=10, cast=int)
-# Cỡ số (px) trên ảnh làm việc. Số nhỏ gọn, tỉ lệ theo vùng:
-#  - MIN: vùng nhỏ hơn mức này thì BỎ số (tránh số tí hon tràn/lệch).
-#  - MEAN: trần cỡ số cho vùng to (không để số phình quá).
-#  - NUMBER_FILL: số chiếm ~bao nhiêu phần đường kính vùng.
-MIN_TEXT_SIZE = config("MIN_TEXT_SIZE", default=7, cast=int)
-MEAN_TEXT_SIZE = config("MEAN_TEXT_SIZE", default=14, cast=int)
-MAX_TEXT_SIZE = config("MAX_TEXT_SIZE", default=24, cast=int)
-NUMBER_FILL = config("NUMBER_FILL", default=0.5, cast=float)
-# Cỡ số tính theo KHỔ IN THẬT (cm): khi biết khổ in, ngưỡng đánh số + cỡ số sẽ
-# theo cm -> khổ to (40x50) thì vùng nhỏ vẫn đủ chỗ đánh số, và số không quá to.
-MIN_NUMBER_CM = config("MIN_NUMBER_CM", default=0.22, cast=float)   # vùng nhỏ hơn -> bỏ số
-NUMBER_CM = config("NUMBER_CM", default=0.34, cast=float)           # cỡ số nhắm tới
-MAX_NUMBER_CM = config("MAX_NUMBER_CM", default=0.6, cast=float)    # trần cỡ số
+# Cỡ số (px) trên ảnh làm việc — CHUẨN (số TO, tỉ lệ theo vùng, KHÔNG theo cm):
+#  - MIN: số nhỏ hơn cỡ này -> BỎ số (vùng quá bé, không lọt số).
+#  - MEAN: phóng số lớn dần tới khi chiều NHỎ của số đạt mức này (số đầy đặn, dễ đọc).
+#  - MAX: trần chiều LỚN của số (số 2-3 chữ số không phình quá).
+MIN_TEXT_SIZE = config("MIN_TEXT_SIZE", default=4, cast=int)
+MEAN_TEXT_SIZE = config("MEAN_TEXT_SIZE", default=22, cast=int)
+MAX_TEXT_SIZE = config("MAX_TEXT_SIZE", default=40, cast=int)
 GREEN = (0, 255, 0)
 BLUE = (255, 0, 0)
 PADDING_CIRCLE = config("PADDING_CIRCLE", default=1, cast=int)
@@ -140,36 +134,22 @@ def get_text_size(text: str, scale: float = 1, thickness=1, font=cv2.FONT_HERSHE
 
 def get_number_size(text: str, max_size: float,
                     min_t=None, mean_t=None, max_t=None) -> Tuple[Tuple, float, float]:
-    """Cỡ số TỈ LỆ theo vùng: nhắm chiều lớn của số ~ NUMBER_FILL * đường kính vùng,
-    kẹp trong [min_t, mean_t] (trần max_t) và luôn lọt vùng.
-    Vùng quá nhỏ (số không đạt min_t) -> trả None để BỎ số.
-    min_t/mean_t/max_t: cỡ số (px) tính theo KHỔ IN thật; None = dùng mặc định.
-    """
+    """CHUẨN (bản đánh số gốc): phóng số LỚN DẦN tới khi chiều NHỎ của số đạt
+    mean_t (mặc định 22) HOẶC chiều LỚN đạt max_t (40) HOẶC chạm mép vùng. Bỏ số
+    nếu chiều nhỏ < min_t (4). Số TO, tỉ lệ theo vùng — KHÔNG theo cm.
+    (min_t/mean_t/max_t để None = dùng hằng số mặc định.)"""
     min_t = MIN_TEXT_SIZE if min_t is None else min_t
     mean_t = MEAN_TEXT_SIZE if mean_t is None else mean_t
     max_t = MAX_TEXT_SIZE if max_t is None else max_t
-    # cỡ mong muốn = theo CHIỀU CAO chữ (mới quyết định đọc được hay không).
-    # BỀ RỘNG chỉ dùng để KHỚP vùng. Số 2+ chữ số ("10","11"...) rộng > cao; nếu
-    # nhắm chiều lớn thì bề rộng chạm trần khi số còn lùn tịt (cao < min_t) -> bị
-    # loại oan -> tranh chốt cứng ở 9 màu. Nhắm chiều cao thì số nào cũng đủ cao.
-    target = max_size * NUMBER_FILL
-    if target > mean_t:
-        target = mean_t
-    scale = 0.1
+    text_size = (0, 0)
+    scale = 0.05
     thickness = 1
-    text_size = get_text_size(text, scale, thickness)
-    while True:
-        nxt = get_text_size(text, scale + 0.1, thickness)   # nxt = (rộng, cao)
-        if (nxt[1] > target or nxt[1] > max_t
-                or max(nxt) + PADDING_CIRCLE >= max_size):   # max() = bề rộng/cao lớn nhất -> khớp vùng
-            break
-        scale += 0.1
-        text_size = nxt
-    # Bỏ số nếu CHIỀU CAO chưa đủ đọc, HOẶC bao chữ không lọt vùng.
-    if text_size[1] < min_t or max(text_size) + PADDING_CIRCLE >= max_size:
+    while (min(text_size) < mean_t and max(text_size) < max_t
+           and max(text_size) + PADDING_CIRCLE < max_size):
+        text_size = get_text_size(text, scale, thickness)
+        scale += 0.05
+    if min(text_size) < min_t:
         return None, None, None
-    # số to thì nét dày hơn chút cho rõ
-    thickness = 2 if text_size[1] >= 16 else 1
     return text_size, scale, thickness
 
 
@@ -725,14 +705,8 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long
         ksize_sm = 5
 
     # GỘP các vùng không đánh được số vào hàng xóm -> hết 'dăm', mọi ô đều numberable.
-    # Ngưỡng gộp theo KHỔ IN: khổ to -> giữ được vùng nhỏ hơn (đánh số được khi in).
-    if print_long_cm and print_long_cm > 0:
-        H0, W0 = arr.shape[:2]
-        px_per_cm = max(H0, W0) / float(print_long_cm)
-        min_t_px = max(4, int(round(MIN_NUMBER_CM * px_per_cm)))
-    else:
-        min_t_px = MIN_TEXT_SIZE
-    min_radius = (min_t_px + 2 * PADDING_CIRCLE) / 2.0 + 1.0
+    # Ngưỡng gộp theo CỠ SỐ cố định (CHUẨN, không theo cm).
+    min_radius = (MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0
     arr = _merge_small_regions(arr, min_area=min_area, min_radius=min_radius, max_pass=4,
                                face_mask=face_mask, face_min_radius=FACE_MIN_RADIUS,
                                feature_mask=feature_mask, feature_min_radius=FEATURE_MIN_RADIUS)
@@ -868,15 +842,8 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
 
     img = load_image(work_path, debug=debug)
 
-    # Cỡ số theo KHỔ IN thật: vùng nhỏ hơn min_t -> bỏ số; số nhắm mean_t (trần max_t).
-    H_i, W_i = img.shape[:2]
-    if print_long_cm and print_long_cm > 0:
-        px_per_cm = max(H_i, W_i) / float(print_long_cm)
-        min_t = max(4, int(round(MIN_NUMBER_CM * px_per_cm)))
-        mean_t = max(min_t + 2, int(round(NUMBER_CM * px_per_cm)))
-        max_t = max(mean_t + 1, int(round(MAX_NUMBER_CM * px_per_cm)))
-    else:
-        min_t, mean_t, max_t = MIN_TEXT_SIZE, MEAN_TEXT_SIZE, MAX_TEXT_SIZE
+    # Cỡ số CHUẨN: cố định theo px (số to, tỉ lệ vùng) — KHÔNG theo cm.
+    min_t, mean_t, max_t = MIN_TEXT_SIZE, MEAN_TEXT_SIZE, MAX_TEXT_SIZE
 
     img_white = np.zeros([img.shape[0], img.shape[1], 1], dtype=np.uint8)
     img_white.fill(255)
