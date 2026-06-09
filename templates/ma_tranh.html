@@ -15,81 +15,8 @@
 <div class="container-fluid py-3">
   {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
 
-  <div class="row g-3">
-    <!-- Khai báo mã tranh -->
-    <div class="col-lg-5">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold"><i class="bi bi-pencil-square"></i> Khai báo mã tranh</div>
-        <div class="card-body">
-          <form method="POST" action="/ma-tranh" id="paintForm" enctype="multipart/form-data">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="save_painting">
-            <label class="form-label small mb-1">Mã tranh</label>
-            <input type="text" name="code" id="fCode" class="form-control" placeholder="VD: K490" required>
-
-            <label class="form-label small mb-1 mt-2">Ảnh mẫu / bản đồ màu</label>
-            <input type="file" name="image" id="fImage" accept="image/*" class="form-control">
-            <div class="form-text">Nhân viên bấm vào ảnh để xem khi rót (vd: ảnh K490 kèm bảng mã màu). Hệ thống tự đếm số màu từ ảnh.</div>
-            <div id="curImageWrap" class="mt-2" style="display:none">
-              <img id="curImage" class="rounded border" style="max-height:130px; cursor:zoom-in">
-              <label class="d-block small mt-1"><input type="checkbox" name="remove_image" value="1" id="fRemoveImage"> Xoá ảnh hiện tại</label>
-            </div>
-
-            <label class="form-label small mb-1 mt-2">Số màu <span id="ccHint" class="text-secondary small"></span></label>
-            <input type="number" name="color_count" id="fCount" class="form-control" min="0" placeholder="Tự đếm từ ảnh — sửa lại nếu cần">
-
-            <button class="btn btn-success w-100 mt-3"><i class="bi bi-save"></i> Lưu mã tranh</button>
-            <button type="button" id="resetForm" class="btn btn-outline-secondary w-100 mt-2">Làm mới form</button>
-          </form>
-        </div>
-      </div>
-    </div>
-
-    <!-- Danh mục mã tranh -->
-    <div class="col-lg-7">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
-          <span><i class="bi bi-images"></i> Danh mục mã tranh
-            {% if paintings %}<span class="badge text-bg-secondary">{{ paintings|length }}</span>{% endif %}</span>
-        </div>
-        <div class="card-body">
-          {% if not paintings %}
-            <p class="text-secondary text-center py-5">Chưa có mã tranh. Khai báo ở bên trái rồi bấm <b>Lưu mã tranh</b>.</p>
-          {% else %}
-          <div class="input-group input-group-sm mb-3" style="max-width:280px;">
-            <span class="input-group-text"><i class="bi bi-search"></i></span>
-            <input id="paintSearch" class="form-control" placeholder="Tìm mã tranh…">
-          </div>
-          <div class="row g-2" id="paintGrid">
-            {% for p in paintings %}
-            <div class="col-md-4 col-6 paint-col">
-              <div class="border rounded p-2 h-100 paint-card" data-search="{{ p.code|lower }}">
-                <div class="d-flex align-items-center gap-1 mb-1">
-                  <span class="fw-semibold">{{ p.code }}</span>
-                  <span class="badge text-bg-primary ms-auto">{{ p.color_count }} màu</span>
-                </div>
-                {% if p.image %}<img src="/media/{{ p.image }}" class="rounded border w-100 zoom-img mb-1" style="max-height:130px; object-fit:contain; cursor:zoom-in" title="Bấm xem to">{% else %}<div class="text-secondary small text-center py-3 bg-body-secondary rounded mb-1">Chưa có ảnh</div>{% endif %}
-                <div class="d-flex gap-1">
-                  <button class="btn btn-sm btn-outline-secondary py-0 flex-fill edit-btn" title="Sửa"
-                          data-code="{{ p.code }}" data-count="{{ p.color_count }}"
-                          data-image="{% if p.image %}/media/{{ p.image }}{% endif %}"><i class="bi bi-pencil"></i> Sửa</button>
-                  <form method="POST" action="/ma-tranh" onsubmit="return confirm('Xoá mã tranh {{ p.code }}?')">{% csrf_token %}
-                    <input type="hidden" name="action" value="delete_painting"><input type="hidden" name="code" value="{{ p.code }}">
-                    <button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-trash"></i></button>
-                  </form>
-                </div>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- Giao rót màu -->
-  <div class="row mt-3">
+  <div class="row">
     <div class="col-12">
       <div class="card shadow-sm">
         <div class="card-header fw-semibold"><i class="bi bi-send"></i> Giao rót màu cho nhân viên</div>
@@ -226,6 +153,86 @@
       </div>
     </div>
   </div>
+
+  <!-- Khai báo & danh mục mã tranh (gập lại - ít dùng) -->
+  <div class="row mt-3">
+    <div class="col-12">
+      <details id="declDetails" class="card shadow-sm">
+        <summary class="card-header fw-semibold" style="cursor:pointer; list-style:none;">
+          <i class="bi bi-gear"></i> Khai báo &amp; danh mục mã tranh
+          {% if paintings %}<span class="badge text-bg-secondary">{{ paintings|length }}</span>{% endif %}
+          <span class="text-secondary small fw-normal ms-1">(bấm để mở/đóng)</span>
+        </summary>
+        <div class="card-body">
+          <div class="row g-3">
+            <!-- Khai báo -->
+            <div class="col-lg-5">
+              <div class="border rounded p-3">
+                <div class="fw-semibold mb-2"><i class="bi bi-pencil-square"></i> Khai báo mã tranh</div>
+                <form method="POST" action="/ma-tranh" id="paintForm" enctype="multipart/form-data">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="save_painting">
+                  <label class="form-label small mb-1">Mã tranh</label>
+                  <input type="text" name="code" id="fCode" class="form-control" placeholder="VD: K490" required>
+
+                  <label class="form-label small mb-1 mt-2">Ảnh mẫu / bản đồ màu</label>
+                  <input type="file" name="image" id="fImage" accept="image/*" class="form-control">
+                  <div class="form-text">Nhân viên bấm vào ảnh để xem khi rót. Hệ thống tự đếm số màu từ ảnh.</div>
+                  <div id="curImageWrap" class="mt-2" style="display:none">
+                    <img id="curImage" class="rounded border" style="max-height:130px; cursor:zoom-in">
+                    <label class="d-block small mt-1"><input type="checkbox" name="remove_image" value="1" id="fRemoveImage"> Xoá ảnh hiện tại</label>
+                  </div>
+
+                  <label class="form-label small mb-1 mt-2">Số màu <span id="ccHint" class="text-secondary small"></span></label>
+                  <input type="number" name="color_count" id="fCount" class="form-control" min="0" placeholder="Tự đếm từ ảnh — sửa lại nếu cần">
+
+                  <button class="btn btn-success w-100 mt-3"><i class="bi bi-save"></i> Lưu mã tranh</button>
+                  <button type="button" id="resetForm" class="btn btn-outline-secondary w-100 mt-2">Làm mới form</button>
+                </form>
+              </div>
+            </div>
+
+            <!-- Danh mục -->
+            <div class="col-lg-7">
+              <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                <div class="input-group input-group-sm" style="max-width:240px;">
+                  <span class="input-group-text"><i class="bi bi-search"></i></span>
+                  <input id="paintSearch" class="form-control" placeholder="Tìm mã tranh…">
+                </div>
+                <button id="catToggle" type="button" class="btn btn-sm btn-outline-primary" style="display:none"></button>
+              </div>
+              {% if not paintings %}
+                <p class="text-secondary text-center py-4">Chưa có mã tranh. Khai báo ở bên trái rồi bấm <b>Lưu mã tranh</b>.</p>
+              {% else %}
+              <div class="row g-2" id="paintGrid">
+                {% for p in paintings %}
+                <div class="col-md-4 col-6 paint-col">
+                  <div class="border rounded p-2 h-100 paint-card" data-search="{{ p.code|lower }}">
+                    <div class="d-flex align-items-center gap-1 mb-1">
+                      <span class="fw-semibold">{{ p.code }}</span>
+                      <span class="badge text-bg-primary ms-auto">{{ p.color_count }} màu</span>
+                    </div>
+                    {% if p.image %}<img src="/media/{{ p.image }}" class="rounded border w-100 zoom-img mb-1" style="max-height:120px; object-fit:contain; cursor:zoom-in" title="Bấm xem to">{% else %}<div class="text-secondary small text-center py-3 bg-body-secondary rounded mb-1">Chưa có ảnh</div>{% endif %}
+                    <div class="d-flex gap-1">
+                      <button class="btn btn-sm btn-outline-secondary py-0 flex-fill edit-btn" title="Sửa"
+                              data-code="{{ p.code }}" data-count="{{ p.color_count }}"
+                              data-image="{% if p.image %}/media/{{ p.image }}{% endif %}"><i class="bi bi-pencil"></i> Sửa</button>
+                      <form method="POST" action="/ma-tranh" onsubmit="return confirm('Xoá mã tranh {{ p.code }}?')">{% csrf_token %}
+                        <input type="hidden" name="action" value="delete_painting"><input type="hidden" name="code" value="{{ p.code }}">
+                        <button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-trash"></i></button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
 </div>
 
 <datalist id="paintList">{% for p in paintings %}<option value="{{ p.code }}"></option>{% endfor %}</datalist>
@@ -286,12 +293,13 @@
   // ---- Sửa mã tranh ----
   document.addEventListener('click', function(e){
     var ed = e.target.closest('.edit-btn'); if(!ed) return;
+    var dd = document.getElementById('declDetails'); if(dd) dd.open = true;
     document.getElementById('fCode').value = ed.dataset.code || '';
     document.getElementById('fCount').value = ed.dataset.count || '';
     document.getElementById('fImage').value = '';
     document.getElementById('ccHint').textContent = '';
     showCurImage(ed.dataset.image || '');
-    window.scrollTo({top:0, behavior:'smooth'});
+    document.getElementById('paintForm').scrollIntoView({behavior:'smooth', block:'center'});
     toast('Đã nạp vào form để sửa');
   });
   document.getElementById('resetForm').addEventListener('click', function(){
@@ -299,16 +307,32 @@
     showCurImage(''); document.getElementById('ccHint').textContent = '';
   });
 
-  // ---- Tìm mã tranh ----
+  // ---- Danh mục: tìm + thu gọn còn 6 ----
+  var CAT_LIMIT = 6, catExpanded = false;
+  var catCols = Array.prototype.slice.call(document.querySelectorAll('#paintGrid .paint-col'));
+  var catToggle = document.getElementById('catToggle');
+  function updateCatToggle(){
+    if(!catToggle) return;
+    if(catCols.length <= CAT_LIMIT){ catToggle.style.display='none'; return; }
+    catToggle.style.display=''; catToggle.textContent = catExpanded ? 'Thu gọn' : ('Xem tất cả ('+catCols.length+')');
+  }
+  function showCatCollapsed(){
+    catCols.forEach(function(c,i){ c.style.display = (catExpanded || i<CAT_LIMIT) ? '' : 'none'; });
+    updateCatToggle();
+  }
+  if(catToggle) catToggle.addEventListener('click', function(){ catExpanded=!catExpanded; showCatCollapsed(); });
   var pSearch = document.getElementById('paintSearch');
   if (pSearch) pSearch.addEventListener('input', function(){
     var q = this.value.trim().toLowerCase();
-    document.querySelectorAll('#paintGrid .paint-col').forEach(function(col){
+    if(!q){ showCatCollapsed(); return; }
+    catCols.forEach(function(col){
       var card = col.querySelector('.paint-card');
       var hay = card ? (card.dataset.search||'') : '';
-      col.style.display = (!q || hay.indexOf(q)!==-1) ? '' : 'none';
+      col.style.display = (hay.indexOf(q)!==-1) ? '' : 'none';
     });
+    if(catToggle) catToggle.style.display='none';
   });
+  showCatCollapsed();
 
   // ---- Giao việc: xem trước ảnh + số màu ----
   var reqPainting = document.getElementById('reqPainting');

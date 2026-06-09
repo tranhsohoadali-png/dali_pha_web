@@ -132,12 +132,30 @@
   document.getElementById('tabCat').addEventListener('click', function(){ showTab('cat'); });
   document.getElementById('tabHist').addEventListener('click', function(){ showTab('hist'); });
 
-  // ---- Cần rót (yêu cầu) ----
+  // ---- Cần rót (yêu cầu) + THÔNG BÁO (chuông + thông báo hệ thống) ----
   function setBadge(n){ var b=document.getElementById('reqBadge'); if(n>0){ b.textContent=n; b.style.display=''; } else b.style.display='none'; }
+  var ROT_SEEN_KEY='rot_seen_ids';
+  function rotGetSeen(){ try{ return JSON.parse(localStorage.getItem(ROT_SEEN_KEY)||'null'); }catch(e){ return null; } }
+  function rotSaveSeen(ids){ try{ localStorage.setItem(ROT_SEEN_KEY, JSON.stringify(ids.slice(-300))); }catch(e){} }
+  var _ac=null;
+  function rotBeep(){
+    try{
+      _ac=_ac||new (window.AudioContext||window.webkitAudioContext)(); if(_ac.state==='suspended') _ac.resume();
+      [0,0.2].forEach(function(dt){ var o=_ac.createOscillator(),g=_ac.createGain(); o.type='sine'; o.frequency.value=dt?1245:932; o.connect(g); g.connect(_ac.destination); var s=_ac.currentTime+dt; g.gain.setValueAtTime(0.0001,s); g.gain.exponentialRampToValueAtTime(0.35,s+0.02); g.gain.exponentialRampToValueAtTime(0.0001,s+0.18); o.start(s); o.stop(s+0.2); });
+    }catch(e){}
+  }
+  function rotSysNotify(rows){
+    if(!('Notification' in window) || Notification.permission!=='granted') return;
+    rows.forEach(function(r){ try{ var n=new Notification('🎨 Mã màu cần rót',{body:r.painting+' ×'+r.qty+' · '+(r.count||0)+' màu'+(r.note?(' · '+r.note):''),tag:'rot-'+r.id,renotify:true,icon:'/media/icon-192.png'}); n.onclick=function(){ window.focus(); showTab('req'); n.close(); }; }catch(e){} });
+  }
+  function askNotif(){ try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(e){} }
   function loadReq(){
     var box=document.getElementById('reqList');
     fetch('/rot-yeu-cau').then(function(r){return r.json();}).then(function(res){
       setBadge(res.count||0);
+      var prev=rotGetSeen(), rows0=res.rows||[];
+      if(prev!==null){ var ps={}; prev.forEach(function(id){ps[id]=1;}); var fresh=rows0.filter(function(r){return !ps[r.id];}); if(fresh.length){ rotBeep(); rotSysNotify(fresh); toast('🔔 Có '+fresh.length+' mã tranh cần rót'); } }
+      rotSaveSeen(rows0.map(function(r){return r.id;}));
       if(!res.rows || !res.rows.length){ box.innerHTML='<p class="text-secondary text-center py-4"><i class="bi bi-emoji-smile"></i> Không có việc cần rót.</p>'; return; }
       box.innerHTML = res.rows.map(function(r){
         return '<div class="rc p-2">'+
@@ -247,6 +265,10 @@
 
   // mặc định mở tab "Cần rót"
   loadReq();
+  askNotif();
+  document.addEventListener('click', function once(){ askNotif(); if(_ac&&_ac.state==='suspended') _ac.resume(); document.removeEventListener('click', once); });
+  setInterval(loadReq, 25000);
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) loadReq(); });
 </script>
 </body>
 </html>
