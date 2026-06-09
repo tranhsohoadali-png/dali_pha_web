@@ -50,8 +50,7 @@ THRESHOLD_PERCENT_COLOR = config("THRESHOLD_PERCENT_COLOR", default=0.0003, cast
 # Dồn nhiều màu vào vùng mặt bằng cách OVERSAMPLE pixel mặt khi xây bảng màu
 # (k-means LAB), giữ chi tiết mắt/mũi/môi (min_radius nhỏ trong mặt) và làm mềm
 # da (bilateral) trước khi gom. Một bảng màu duy nhất -> không seam mặt/nền.
-# Mặc định TẮT: trả về đúng luồng mượt cũ (đẹp). Bật lại thử bằng FACE_PRIORITY=1.
-FACE_PRIORITY = config("FACE_PRIORITY", default=False, cast=bool)
+FACE_PRIORITY = config("FACE_PRIORITY", default=True, cast=bool)
 FACE_OVERSAMPLE = config("FACE_OVERSAMPLE", default=12, cast=int)    # mức ưu tiên màu cho mặt+tóc
 FACE_BILATERAL_D = config("FACE_BILATERAL_D", default=7, cast=int)    # làm mềm da (0 = tắt)
 KMEANS_MAX_SIDE = config("KMEANS_MAX_SIDE", default=900, cast=int)    # downscale CHỈ để xây bảng màu
@@ -60,6 +59,8 @@ FACE_MIN_RADIUS = config("FACE_MIN_RADIUS", default=3.0, cast=float)  # ngưỡn
 FACE_FEATURE_OVERSAMPLE = config("FACE_FEATURE_OVERSAMPLE", default=13, cast=int)  # dồn THÊM màu cho ngũ quan (0 = tắt)
 FEATURE_MIN_RADIUS = config("FEATURE_MIN_RADIUS", default=2.2, cast=float)         # giữ chi tiết rất nhỏ trong ngũ quan
 FACE_SHARPEN = config("FACE_SHARPEN", default=0.5, cast=float)                     # tăng nét ngũ quan trước khi gom màu (0 = tắt)
+# Màu RỰC (chroma > ngưỡng) như MÔI ĐỎ / tông nổi -> bảo vệ khỏi bị gộp mất khi giảm màu.
+VIVID_CHROMA = config("VIVID_CHROMA", default=55, cast=int)
 FEATURE_PROTECT_SMOOTH = config("FEATURE_PROTECT_SMOOTH", default=True, cast=bool)  # KHÔNG median-smooth làm mất chi tiết ngũ quan
 
 PADDING_IN_CM = config("PADDING_IN_CM", default=4, cast=int)
@@ -473,13 +474,25 @@ def _face_mask(bgr):
         return None, None, 0
 
 
-def _quantize_face_priority(arr_rgb, target, face_mask, feature_mask=None):
+def _quantize_face_priority(arr_rgb, target, face_mask, feature_mask=None, smooth_level=2):
     """Xây bảng màu bằng k-means LAB, OVERSAMPLE pixel vùng mặt -> mặt giành nhiều
     màu hơn. NGŨ QUAN (feature_mask) được ưu tiên MẠNH hơn: KHÔNG làm mềm (giữ nét),
     TĂNG NÉT (unsharp) và oversample THÊM -> mắt/mũi/miệng có màu riêng, sống động.
+    smooth_level: LÀM PHẲNG (mean-shift) toàn ảnh TRƯỚC k-means -> hết vón cục, mượt.
     Map TOÀN ẢNH về center gần nhất (đúng K màu) -> không seam."""
     bgr = arr_rgb[:, :, ::-1].copy()
     H, W = bgr.shape[:2]
+    # 0) LÀM PHẲNG mean-shift (de-speckle) -> k-means không bị loang/vón cục.
+    if smooth_level and int(smooth_level) > 0:
+        sp, sr = {1: (9, 18), 2: (16, 32), 3: (26, 50)}.get(int(smooth_level), (16, 32))
+        scale = 1.0
+        a = bgr
+        if max(H, W) > 900:
+            scale = 900.0 / max(H, W)
+            a = cv2.resize(bgr, (int(W * scale), int(H * scale)), interpolation=cv2.INTER_AREA)
+        a = cv2.pyrMeanShiftFiltering(a, sp, sr)
+        bgr = cv2.resize(a, (W, H), interpolation=cv2.INTER_NEAREST) if scale != 1.0 else a
+        bgr = np.ascontiguousarray(bgr)
     # 1) Làm mềm DA: bilateral trên crop mặt, NHƯNG CHỪA ngũ quan (giữ nét mắt/miệng)
     if FACE_BILATERAL_D > 0:
         ys, xs = np.where(face_mask > 0)
@@ -650,39 +663,33 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True):
             face_mask = feature_mask = None
 
     src_rgb = np.array(im)
-    # Tôn trọng mức "Đơn giản hoá" người dùng chọn (bản đẹp cũ dùng "Không").
     sm_level = int(smooth) if (smooth and int(smooth) > 0) else 0
-    if sm_level > 0:
-        sp, sr = {1: (9, 18), 2: (16, 32), 3: (26, 50)}.get(sm_level, (16, 32))
-        a = src_rgb[:, :, ::-1].copy()                     # RGB -> BGR
-        h, w = a.shape[:2]
-        scale = 1.0
-        if max(h, w) > 900:
-            scale = 900.0 / max(h, w)
-            a = cv2.resize(a, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-        a = cv2.pyrMeanShiftFiltering(a, sp, sr)
-        if scale != 1.0:
-            a = cv2.resize(a, (w, h), interpolation=cv2.INTER_NEAREST)
-        msf = np.ascontiguousarray(a[:, :, ::-1])          # BGR -> RGB
-        if feature_mask is not None:
-            fmm = feature_mask > 0
-            msf[fmm] = src_rgb[fmm]                         # GIỮ NÉT ngũ quan (không làm mờ)
-        im = Image.fromarray(msf)
-    # Tăng nét NHẸ riêng vùng ngũ quan -> mắt/môi tách rõ khỏi da khi gom màu.
-    if feature_mask is not None and FACE_SHARPEN > 0:
-        a2 = np.array(im)
-        fmm = feature_mask > 0
-        if fmm.any():
-            blur = cv2.GaussianBlur(a2, (0, 0), 1.0)
-            sh = cv2.addWeighted(a2, 1.0 + FACE_SHARPEN, blur, -FACE_SHARPEN, 0)
-            a2[fmm] = sh[fmm]
-            im = Image.fromarray(a2)
-    # Gom DƯ nhiều màu trước rồi HỢP NHẤT các màu cùng tông (LAB) xuống `target`,
-    # BẢO VỆ màu ngũ quan (không bị gộp/dồn đen-trắng).
-    k_work = min(96, max(target * 5, 48))
-    q = im.quantize(colors=k_work, method=Image.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
-    arr = np.array(q)
-    arr = _reduce_palette_perceptual(arr, target, protect_mask=feature_mask)
+
+    if face_mask is not None:
+        # ƯU TIÊN MẶT (k-means oversample) — nhưng LÀM PHẲNG (mean-shift) bên trong
+        # trước khi k-means để KHÔNG vón cục; mặt giành nhiều màu (môi/mắt/da chi tiết).
+        face_sm = sm_level if sm_level > 0 else 2          # ảnh chân dung cần phẳng -> tối thiểu Vừa
+        arr = _quantize_face_priority(src_rgb, target, face_mask, feature_mask, face_sm)
+        ksize_sm = 7                                       # làm mượt biên mạnh hơn cho k-means
+    else:
+        if sm_level > 0:
+            sp, sr = {1: (9, 18), 2: (16, 32), 3: (26, 50)}.get(sm_level, (16, 32))
+            a = src_rgb[:, :, ::-1].copy()                 # RGB -> BGR
+            h, w = a.shape[:2]
+            scale = 1.0
+            if max(h, w) > 900:
+                scale = 900.0 / max(h, w)
+                a = cv2.resize(a, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+            a = cv2.pyrMeanShiftFiltering(a, sp, sr)
+            if scale != 1.0:
+                a = cv2.resize(a, (w, h), interpolation=cv2.INTER_NEAREST)
+            im = Image.fromarray(np.ascontiguousarray(a[:, :, ::-1]))   # BGR -> RGB
+        # Gom DƯ nhiều màu rồi HỢP NHẤT các màu cùng tông (LAB), bảo vệ màu rực.
+        k_work = min(96, max(target * 5, 48))
+        q = im.quantize(colors=k_work, method=Image.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
+        arr = np.array(q)
+        arr = _reduce_palette_perceptual(arr, target)
+        ksize_sm = 5
 
     # GỘP các vùng không đánh được số vào hàng xóm -> hết 'dăm', mọi ô đều numberable.
     # Trong vùng MẶT dùng ngưỡng nhỏ hơn để GIỮ chi tiết mắt/mũi/môi.
@@ -690,10 +697,9 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True):
     arr = _merge_small_regions(arr, min_area=min_area, min_radius=min_radius, max_pass=4,
                                face_mask=face_mask, face_min_radius=FACE_MIN_RADIUS,
                                feature_mask=feature_mask, feature_min_radius=FEATURE_MIN_RADIUS)
-    # LÀM MƯỢT biên vùng (median trên nhãn màu) -> bỏ răng cưa/mảnh thừa do gộp.
-    # CHỪA ngũ quan (protect) để không median làm mất chi tiết mắt/mũi/miệng.
+    # LÀM MƯỢT biên vùng (median trên nhãn màu) -> bỏ răng cưa/mảnh thừa, nét trơn.
     protect = feature_mask if FEATURE_PROTECT_SMOOTH else None
-    arr = _smooth_boundaries(arr, ksize=5, protect_mask=protect)
+    arr = _smooth_boundaries(arr, ksize=ksize_sm, protect_mask=protect)
     arr = _merge_small_regions(arr, min_area=0, min_radius=min_radius, max_pass=2,
                                face_mask=face_mask, face_min_radius=FACE_MIN_RADIUS,
                                feature_mask=feature_mask, feature_min_radius=FEATURE_MIN_RADIUS)
@@ -715,12 +721,15 @@ def _reduce_palette_perceptual(img_rgb, target_n, protect_mask=None):
         return img_rgb
     lab = cv2.cvtColor(colors.reshape(-1, 1, 3).astype('uint8'),
                        cv2.COLOR_RGB2LAB).reshape(-1, 3).astype(float)
-    # Màu nào CHỦ YẾU nằm trong protect_mask -> bảo vệ (vd màu mắt/môi/lông mày):
-    # gộp sau cùng + không bị dồn vào 'đen/trắng' -> ngũ quan giữ tông riêng, rõ nét.
-    prot = np.zeros(K, dtype=bool)
+    L = lab[:, 0]
+    chroma = np.abs(lab[:, 1] - 128) + np.abs(lab[:, 2] - 128)
+    # BẢO VỆ (gộp sau cùng + không dồn vào đen/trắng):
+    #  - màu RỰC (chroma cao) như MÔI ĐỎ / tông nổi -> đỡ bị gộp mất;
+    #  - màu chủ yếu nằm trong protect_mask (vd ngũ quan) nếu có.
+    prot = chroma > VIVID_CHROMA
     if protect_mask is not None and protect_mask.any():
         inmask = np.bincount(inv[protect_mask.reshape(-1) > 0], minlength=K)
-        prot = (inmask / np.maximum(counts, 1)) > 0.35
+        prot = prot | ((inmask / np.maximum(counts, 1)) > 0.35)
     clusters = {i: {'lab': lab[i].copy(), 'cnt': float(counts[i]), 'members': [i],
                     'prot': bool(prot[i])}
                 for i in range(K)}
