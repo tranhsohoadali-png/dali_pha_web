@@ -35,8 +35,13 @@
             <!-- Loại tranh (preset): đóng gói cấu hình + prompt theo loại -->
             <div class="mb-2">
               <label class="form-label small mb-1"><i class="bi bi-collection-fill text-primary"></i> Loại tranh (gói cấu hình)</label>
-              <select id="presetSel" name="preset" class="form-select form-select-sm"></select>
+              <div class="input-group input-group-sm">
+                <select id="presetSel" name="preset" class="form-select form-select-sm"></select>
+                <button type="button" id="savePresetBtn" class="btn btn-outline-primary" title="Lưu thông số hiện tại thành preset của bạn"><i class="bi bi-save"></i></button>
+                <button type="button" id="delPresetBtn" class="btn btn-outline-danger" title="Xoá preset của tôi" hidden><i class="bi bi-trash"></i></button>
+              </div>
               <div id="presetDesc" class="form-text"></div>
+              <input type="hidden" name="base" id="presetBase" value="anime">
             </div>
 
             <!-- Tinh chỉnh bản đồ màu (luôn hiện, áp cả khi không dùng AI) -->
@@ -60,8 +65,17 @@
                     <option value="3">Mạnh (ảnh màu nước/ảnh chụp)</option>
                   </select>
                 </div>
+                <div class="col-12">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="facePriority" name="face_priority" value="1">
+                    <label class="form-check-label small" for="facePriority">
+                      <i class="bi bi-person-bounding-box text-primary"></i> Ưu tiên khuôn mặt (chân dung)
+                      <span class="text-secondary d-block">Dồn nhiều màu cho mặt + giữ chi tiết mắt/mũi/môi. Bật khi ảnh có người; tắt với tranh phong cảnh/đồ vật.</span>
+                    </label>
+                  </div>
+                </div>
               </div>
-              <div class="form-text">Số màu = giới hạn số ô tô · Bỏ mảng nhỏ = xoá đốm li ti (vd 30–150) · Đơn giản hoá = gộp vùng cho ảnh mượt/màu nước đỡ chi chít. Ảnh màu nước nên chọn <b>Mạnh</b>.</div>
+              <div class="form-text">Số màu = giới hạn số ô tô · Bỏ mảng nhỏ = xoá đốm li ti (vd 30–150) · Đơn giản hoá = gộp vùng cho ảnh mượt/màu nước đỡ chi chít.</div>
             </div>
 
             {% if ai_available %}
@@ -162,26 +176,59 @@
 
   function spin(on){ var s=document.getElementById('spin'); s.classList.toggle('d-none',!on); s.classList.toggle('d-flex',on); }
 
-  // ====== Preset theo loại tranh: đóng gói cấu hình + prompt ======
+  // ====== Preset theo loại tranh: đóng gói cấu hình + prompt + TỰ LƯU ======
   var PRESETS={{ presets_json|safe }}, DEFAULT_PRESET="{{ default_preset }}";
-  (function initPresets(){
-    var sel=document.getElementById('presetSel');
+  function fillPresetSelect(selKey){
+    var sel=document.getElementById('presetSel'); sel.innerHTML='';
     Object.keys(PRESETS).forEach(function(k){
       var o=document.createElement('option'); o.value=k; o.textContent=PRESETS[k].label;
-      if(k===DEFAULT_PRESET) o.selected=true; sel.appendChild(o);
+      if(k===selKey) o.selected=true; sel.appendChild(o);
     });
-    function apply(k){
-      var p=PRESETS[k]; if(!p) return;
-      document.getElementById('presetDesc').textContent=p.desc||'';
-      var cl=document.querySelector('[name="color_limit"]'); if(cl) cl.value=p.color_limit||'';
-      var ma=document.querySelector('[name="min_area"]'); if(ma) ma.value=p.min_area||'';
-      var sm=document.querySelector('[name="smooth"]'); if(sm) sm.value=String(p.smooth||0);
-      var en=document.getElementById('enhance');
-      if(en){ en.checked=!!p.enhance; var sw=document.getElementById('styleWrap'); if(sw) sw.classList.toggle('d-none',!en.checked); }
-    }
-    sel.addEventListener('change',function(){ apply(this.value); });
-    apply(DEFAULT_PRESET);
+  }
+  function applyPreset(k){
+    var p=PRESETS[k]; if(!p) return;
+    document.getElementById('presetDesc').textContent=p.desc||'';
+    var cl=document.querySelector('[name="color_limit"]'); if(cl) cl.value=p.color_limit||'';
+    var ma=document.querySelector('[name="min_area"]'); if(ma) ma.value=p.min_area||'';
+    var sm=document.querySelector('[name="smooth"]'); if(sm) sm.value=String(p.smooth||0);
+    var fp=document.getElementById('facePriority'); if(fp) fp.checked=!!p.face_priority;
+    document.getElementById('presetBase').value=p.base||k;
+    var en=document.getElementById('enhance');
+    if(en){ en.checked=!!p.enhance; var sw=document.getElementById('styleWrap'); if(sw) sw.classList.toggle('d-none',!en.checked); }
+    document.getElementById('delPresetBtn').hidden=!p.custom;
+  }
+  (function initPresets(){
+    fillPresetSelect(DEFAULT_PRESET);
+    document.getElementById('presetSel').addEventListener('change',function(){ applyPreset(this.value); });
+    applyPreset(DEFAULT_PRESET);
   })();
+  function curParams(){
+    return {
+      name:'', color_limit:document.querySelector('[name="color_limit"]').value||'',
+      min_area:document.querySelector('[name="min_area"]').value||'',
+      smooth:document.querySelector('[name="smooth"]').value||'0',
+      enhance:(document.getElementById('enhance')&&document.getElementById('enhance').checked)?'1':'0',
+      face_priority:document.getElementById('facePriority').checked?'1':'0',
+      base:document.getElementById('presetBase').value||'photo'
+    };
+  }
+  document.getElementById('savePresetBtn').addEventListener('click',function(){
+    var name=prompt('Đặt tên preset (cho loại ảnh này, vd "Chân dung nền đơn giản"):'); if(!name) return;
+    var fd=new FormData(); fd.append('action','save'); fd.append('name',name.trim());
+    var p=curParams(); Object.keys(p).forEach(function(k){ if(k!=='name') fd.append(k,p[k]); });
+    fetch('/anh-preset',{method:'POST',body:fd}).then(r=>r.json()).then(function(res){
+      if(!res.ok){ alert(res.msg||'Lưu thất bại'); return; }
+      PRESETS=res.presets; fillPresetSelect(res.selected); applyPreset(res.selected); alert('Đã lưu preset "'+name+'".');
+    }).catch(function(){ alert('Lỗi kết nối'); });
+  });
+  document.getElementById('delPresetBtn').addEventListener('click',function(){
+    var k=document.getElementById('presetSel').value; if(!PRESETS[k]||!PRESETS[k].custom) return;
+    if(!confirm('Xoá preset "'+PRESETS[k].label+'"?')) return;
+    var fd=new FormData(); fd.append('action','delete'); fd.append('name',k);
+    fetch('/anh-preset',{method:'POST',body:fd}).then(r=>r.json()).then(function(res){
+      if(res.ok){ PRESETS=res.presets; fillPresetSelect(DEFAULT_PRESET); applyPreset(DEFAULT_PRESET); }
+    });
+  });
   function showPalette(pages){
     var rows=[]; pages.forEach(p=>rows=rows.concat(p));
     var el=document.getElementById('palette'); el.innerHTML='';

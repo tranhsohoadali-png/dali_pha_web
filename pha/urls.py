@@ -45,6 +45,7 @@ urlpatterns = [
     path('cai-dat-ai', views.cai_dat_ai, name='cai_dat_ai'),
     path('xu-ly-anh', views.xu_ly_anh, name='xu_ly_anh'),
     path('anh-result', views.anh_result, name='anh_result'),
+    path('anh-preset', views.anh_preset, name='anh_preset'),
     path('anh-save-color', views.anh_save_color, name='anh_save_color'),
     path('anh-nearest-dali', views.anh_nearest_dali, name='anh_nearest_dali'),
     path('anh-export-colors', views.anh_export_colors, name='anh_export_colors'),

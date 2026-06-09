@@ -1249,6 +1249,92 @@ def _colors_with_edits(res, request):
     return colors
 
 
+# ===== PRESET TỰ LƯU (người dùng tự tạo gói cấu hình cho từng loại ảnh) =====
+def _load_custom_presets():
+    from pha.models import AppSetting
+    try:
+        return json.loads(AppSetting.get('IMAGE_PRESETS', '{}')) or {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def _save_custom_presets(d):
+    from pha.models import AppSetting
+    AppSetting.set('IMAGE_PRESETS', json.dumps(d, ensure_ascii=False))
+
+
+def _all_presets_ui():
+    """Gộp preset dựng sẵn + preset người dùng tự lưu (cho giao diện)."""
+    from pha.ai_enhance import presets_for_ui
+    out = {}
+    for k, v in presets_for_ui().items():
+        v = dict(v)
+        v['custom'] = False
+        v['base'] = k
+        v['face_priority'] = bool(_preset_face_priority(k))
+        out[k] = v
+    for k, v in _load_custom_presets().items():
+        out[k] = {
+            'label': v.get('label', k), 'desc': v.get('desc', 'Preset của tôi'),
+            'color_limit': v.get('color_limit', 0), 'min_area': v.get('min_area', 0),
+            'smooth': v.get('smooth', 0), 'enhance': bool(v.get('enhance')),
+            'face_priority': bool(v.get('face_priority')),
+            'base': v.get('base', 'photo'), 'custom': True,
+        }
+    return out
+
+
+def _preset_face_priority(key):
+    from pha.ai_enhance import PRESETS
+    return bool(PRESETS.get(key, {}).get('face_priority'))
+
+
+def _resolve_preset_ai(preset_key):
+    """Trả (ai_prompt, use_refs, face_priority_mặc_định) cho preset (kể cả preset tự lưu)."""
+    from pha.ai_enhance import get_preset
+    custom = _load_custom_presets()
+    if preset_key in custom:
+        base = get_preset(custom[preset_key].get('base', 'photo'))
+        return base.get('prompt'), bool(base.get('use_refs')), bool(custom[preset_key].get('face_priority'))
+    p = get_preset(preset_key)
+    return p.get('prompt'), bool(p.get('use_refs')), bool(p.get('face_priority'))
+
+
+@csrf_exempt
+@staff_required
+def anh_preset(request):
+    """Lưu / xoá preset tự tạo (gói cấu hình cho từng loại ảnh)."""
+    if request.method != 'POST':
+        return HttpResponseNotFound('POST only')
+    action = request.POST.get('action')
+    d = _load_custom_presets()
+    if action == 'save':
+        name = (request.POST.get('name') or '').strip()
+        if not name:
+            return JsonResponse({'ok': False, 'msg': 'Thiếu tên preset.'})
+
+        def _i(k, lo, hi):
+            try:
+                return max(lo, min(hi, int(request.POST.get(k) or 0)))
+            except ValueError:
+                return 0
+        d[name] = {
+            'label': name + ' (của tôi)', 'desc': 'Preset tự lưu',
+            'color_limit': _i('color_limit', 0, 60), 'min_area': _i('min_area', 0, 100000),
+            'smooth': _i('smooth', 0, 3),
+            'enhance': request.POST.get('enhance') in ('1', 'on', 'true'),
+            'face_priority': request.POST.get('face_priority') in ('1', 'on', 'true'),
+            'base': (request.POST.get('base') or 'photo').strip(),
+        }
+        _save_custom_presets(d)
+        return JsonResponse({'ok': True, 'presets': _all_presets_ui(), 'selected': name})
+    if action == 'delete':
+        d.pop((request.POST.get('name') or '').strip(), None)
+        _save_custom_presets(d)
+        return JsonResponse({'ok': True, 'presets': _all_presets_ui()})
+    return JsonResponse({'ok': False})
+
+
 @csrf_exempt
 @staff_required
 def xu_ly_anh(request):
@@ -1256,14 +1342,14 @@ def xu_ly_anh(request):
     from pha.ai_enhance import is_configured as ai_configured
     from pha import style_library
 
-    from pha.ai_enhance import presets_for_ui, DEFAULT_PRESET
+    from pha.ai_enhance import DEFAULT_PRESET
 
     def build_ctx():
         last = ImageResult.objects.all().order_by('-created_time')[:RESULT_CACHE_KEEP]
         return {'last_query': [{'name': _fmt_name(q.name), 'url': q.name} for q in last],
                 'ai_available': ai_configured(),
                 'style_categories': style_library.categories(),
-                'presets_json': json.dumps(presets_for_ui()),
+                'presets_json': json.dumps(_all_presets_ui(), ensure_ascii=False),
                 'default_preset': DEFAULT_PRESET}
 
     if request.method == 'POST' and request.FILES.get('image'):
@@ -1288,17 +1374,17 @@ def xu_ly_anh(request):
         except ValueError:
             smooth = 0
         smooth = max(0, min(smooth, 3))  # 0=không, 1=nhẹ, 2=vừa, 3=mạnh
-        from pha.ai_enhance import get_preset
         preset_key = (request.POST.get('preset') or 'anime').strip()
-        preset = get_preset(preset_key)
-        ai_prompt = preset.get('prompt')        # prompt riêng theo loại tranh
-        use_refs = bool(preset.get('use_refs'))  # dùng Kho mẫu làm tham chiếu phong cách
-        face_priority = bool(preset.get('face_priority'))  # dồn màu cho khuôn mặt
+        ai_prompt, use_refs, preset_face = _resolve_preset_ai(preset_key)
+        # Ưu tiên mặt: lấy từ TOGGLE trên giao diện (người dùng tự bật/tắt theo ảnh),
+        # nếu form không gửi thì theo mặc định của preset.
+        fp_form = request.POST.get('face_priority')
+        face_priority = (fp_form in ('1', 'on', 'true')) if fp_form is not None else preset_face
         rec = ImageResult.objects.create(
             name=name, status=ImageResult.STATUS_PROCESSING, user=request.user.username,
             params={'enhance': enhance, 'color_limit': color_limit, 'min_area': min_area,
                     'smooth': smooth, 'style_category': style_category or '',
-                    'preset': preset_key})
+                    'preset': preset_key, 'face_priority': face_priority})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
                              color_limit, min_area, smooth, ai_prompt, use_refs, face_priority)
         _prune_image_results()                 # giữ 10 kết quả gần nhất (bộ nhớ tạm)
