@@ -148,7 +148,10 @@ def get_number_size(text: str, max_size: float,
     min_t = MIN_TEXT_SIZE if min_t is None else min_t
     mean_t = MEAN_TEXT_SIZE if mean_t is None else mean_t
     max_t = MAX_TEXT_SIZE if max_t is None else max_t
-    # cỡ mong muốn (theo chiều lớn của chữ)
+    # cỡ mong muốn = theo CHIỀU CAO chữ (mới quyết định đọc được hay không).
+    # BỀ RỘNG chỉ dùng để KHỚP vùng. Số 2+ chữ số ("10","11"...) rộng > cao; nếu
+    # nhắm chiều lớn thì bề rộng chạm trần khi số còn lùn tịt (cao < min_t) -> bị
+    # loại oan -> tranh chốt cứng ở 9 màu. Nhắm chiều cao thì số nào cũng đủ cao.
     target = max_size * NUMBER_FILL
     if target > mean_t:
         target = mean_t
@@ -156,16 +159,17 @@ def get_number_size(text: str, max_size: float,
     thickness = 1
     text_size = get_text_size(text, scale, thickness)
     while True:
-        nxt = get_text_size(text, scale + 0.1, thickness)
-        if (max(nxt) > target or max(nxt) > max_t
-                or max(nxt) + PADDING_CIRCLE >= max_size):
+        nxt = get_text_size(text, scale + 0.1, thickness)   # nxt = (rộng, cao)
+        if (nxt[1] > target or nxt[1] > max_t
+                or max(nxt) + PADDING_CIRCLE >= max_size):   # max() = bề rộng/cao lớn nhất -> khớp vùng
             break
         scale += 0.1
         text_size = nxt
-    if min(text_size) < min_t or max(text_size) + PADDING_CIRCLE >= max_size:
+    # Bỏ số nếu CHIỀU CAO chưa đủ đọc, HOẶC bao chữ không lọt vùng.
+    if text_size[1] < min_t or max(text_size) + PADDING_CIRCLE >= max_size:
         return None, None, None
     # số to thì nét dày hơn chút cho rõ
-    thickness = 2 if max(text_size) >= 16 else 1
+    thickness = 2 if text_size[1] >= 16 else 1
     return text_size, scale, thickness
 
 
