@@ -57,6 +57,19 @@
                   <input type="number" name="min_area" class="form-control form-control-sm" min="0" max="100000" placeholder="vd: 30">
                 </div>
                 <div class="col-12">
+                  <label class="form-label small mb-1"><i class="bi bi-rulers"></i> Khổ in thật (cm) — cỡ số tính theo khổ này</label>
+                  <select name="print_size" class="form-select form-select-sm">
+                    <option value="20x20">20×20</option>
+                    <option value="30x30">30×30</option>
+                    <option value="30x40">30×40</option>
+                    <option value="40x40">40×40</option>
+                    <option value="40x50" selected>40×50</option>
+                    <option value="50x65">50×65</option>
+                    <option value="50x70">50×70</option>
+                    <option value="60x80">60×80</option>
+                  </select>
+                </div>
+                <div class="col-12">
                   <label class="form-label small mb-1">Độ đơn giản hoá (làm phẳng vùng)</label>
                   <select name="smooth" class="form-select form-select-sm">
                     <option value="0">Không (ảnh đã phẳng/cel)</option>
@@ -328,7 +341,9 @@
       var sm=['Không','Nhẹ','Vừa','Mạnh'][p.smooth||0]||'Không';
       var t='<i class="bi bi-sliders"></i> Thông số: '+(p.color_limit?('Số màu '+p.color_limit):'Số màu tự động')
             +' · '+(p.min_area?('Bỏ mảng <'+p.min_area+'px'):'Không lọc mảng')
+            +(p.print_size?(' · Khổ '+p.print_size):'')
             +' · Đơn giản: '+sm
+            +(p.face_priority?' · Ưu tiên mặt':'')
             +' · AI: '+(p.enhance?'có':'không')+(p.enhance&&p.style_category?(' ('+p.style_category+')'):'');
       pi.innerHTML=t; pi.classList.remove('d-none');
       if(res.warn){ var e=document.getElementById('err'); e.className='alert alert-warning'; e.textContent='⚠️ '+res.warn; }

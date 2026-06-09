@@ -1426,13 +1426,21 @@ def xu_ly_anh(request):
         # nếu form không gửi thì theo mặc định của preset.
         fp_form = request.POST.get('face_priority')
         face_priority = (fp_form in ('1', 'on', 'true')) if fp_form is not None else preset_face
+        # Khổ in (cm) -> cạnh dài, để cỡ số + ngưỡng đánh số tính theo kích thước thật.
+        size_str = (request.POST.get('print_size') or '40x50').strip()
+        try:
+            dims = [int(x) for x in size_str.lower().replace(' ', '').split('x') if x]
+            print_long_cm = max(dims) if dims else 0
+        except ValueError:
+            print_long_cm = 0
         rec = ImageResult.objects.create(
             name=name, status=ImageResult.STATUS_PROCESSING, user=request.user.username,
             params={'enhance': enhance, 'color_limit': color_limit, 'min_area': min_area,
                     'smooth': smooth, 'style_category': style_category or '',
-                    'preset': preset_key, 'face_priority': face_priority})
+                    'preset': preset_key, 'face_priority': face_priority, 'print_size': size_str})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
-                             color_limit, min_area, smooth, ai_prompt, use_refs, face_priority)
+                             color_limit, min_area, smooth, ai_prompt, use_refs, face_priority,
+                             print_long_cm)
         _prune_image_results()                 # giữ 10 kết quả gần nhất (bộ nhớ tạm)
         ctx = build_ctx()
         ctx['file_url'] = '/media/' + name

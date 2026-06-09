@@ -29,6 +29,11 @@ MIN_TEXT_SIZE = config("MIN_TEXT_SIZE", default=7, cast=int)
 MEAN_TEXT_SIZE = config("MEAN_TEXT_SIZE", default=14, cast=int)
 MAX_TEXT_SIZE = config("MAX_TEXT_SIZE", default=24, cast=int)
 NUMBER_FILL = config("NUMBER_FILL", default=0.5, cast=float)
+# Cỡ số tính theo KHỔ IN THẬT (cm): khi biết khổ in, ngưỡng đánh số + cỡ số sẽ
+# theo cm -> khổ to (40x50) thì vùng nhỏ vẫn đủ chỗ đánh số, và số không quá to.
+MIN_NUMBER_CM = config("MIN_NUMBER_CM", default=0.22, cast=float)   # vùng nhỏ hơn -> bỏ số
+NUMBER_CM = config("NUMBER_CM", default=0.34, cast=float)           # cỡ số nhắm tới
+MAX_NUMBER_CM = config("MAX_NUMBER_CM", default=0.6, cast=float)    # trần cỡ số
 GREEN = (0, 255, 0)
 BLUE = (255, 0, 0)
 PADDING_CIRCLE = config("PADDING_CIRCLE", default=1, cast=int)
@@ -133,26 +138,31 @@ def get_text_size(text: str, scale: float = 1, thickness=1, font=cv2.FONT_HERSHE
     return text_size
 
 
-def get_number_size(text: str, max_size: float) -> Tuple[Tuple, float, float]:
+def get_number_size(text: str, max_size: float,
+                    min_t=None, mean_t=None, max_t=None) -> Tuple[Tuple, float, float]:
     """Cỡ số TỈ LỆ theo vùng: nhắm chiều lớn của số ~ NUMBER_FILL * đường kính vùng,
-    kẹp trong [MIN_TEXT_SIZE, MEAN_TEXT_SIZE] (trần MAX_TEXT_SIZE) và luôn lọt vùng.
-    Vùng quá nhỏ (số không đạt MIN) -> trả None để BỎ số (đỡ số tí hon tràn/lệch).
+    kẹp trong [min_t, mean_t] (trần max_t) và luôn lọt vùng.
+    Vùng quá nhỏ (số không đạt min_t) -> trả None để BỎ số.
+    min_t/mean_t/max_t: cỡ số (px) tính theo KHỔ IN thật; None = dùng mặc định.
     """
+    min_t = MIN_TEXT_SIZE if min_t is None else min_t
+    mean_t = MEAN_TEXT_SIZE if mean_t is None else mean_t
+    max_t = MAX_TEXT_SIZE if max_t is None else max_t
     # cỡ mong muốn (theo chiều lớn của chữ)
     target = max_size * NUMBER_FILL
-    if target > MEAN_TEXT_SIZE:
-        target = MEAN_TEXT_SIZE
+    if target > mean_t:
+        target = mean_t
     scale = 0.1
     thickness = 1
     text_size = get_text_size(text, scale, thickness)
     while True:
         nxt = get_text_size(text, scale + 0.1, thickness)
-        if (max(nxt) > target or max(nxt) > MAX_TEXT_SIZE
+        if (max(nxt) > target or max(nxt) > max_t
                 or max(nxt) + PADDING_CIRCLE >= max_size):
             break
         scale += 0.1
         text_size = nxt
-    if min(text_size) < MIN_TEXT_SIZE or max(text_size) + PADDING_CIRCLE >= max_size:
+    if min(text_size) < min_t or max(text_size) + PADDING_CIRCLE >= max_size:
         return None, None, None
     # số to thì nét dày hơn chút cho rõ
     thickness = 2 if max(text_size) >= 16 else 1
@@ -175,8 +185,9 @@ def draw_number(img: np.ndarray, center: Tuple[int, int], max_size: float, numbe
     return True
 
 
-def get_draw_number(img: np.ndarray, center: Tuple[int, int], max_size: float, number: str, debug=False) -> Tuple:
-    text_size, scale, thickness = get_number_size(number, max_size)
+def get_draw_number(img: np.ndarray, center: Tuple[int, int], max_size: float, number: str,
+                    debug=False, min_t=None, mean_t=None, max_t=None) -> Tuple:
+    text_size, scale, thickness = get_number_size(number, max_size, min_t, mean_t, max_t)
     if text_size is None:
         return None
 
@@ -641,7 +652,7 @@ def _merge_small_regions(img_rgb, min_area=0, min_radius=5.5, max_pass=6,
     return img
 
 
-def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True):
+def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long_cm=0):
     """Gom ảnh về tối đa n màu (median-cut) rồi lưu file tạm. Trả (đường_dẫn_tạm).
     smooth (0..3): làm phẳng vùng bằng mean-shift trước khi gom màu — biến ảnh
     màu nước/ảnh chụp (chuyển sắc mượt, nhiều chi tiết) thành các MẢNG ĐẶC sạch,
@@ -692,8 +703,14 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True):
         ksize_sm = 5
 
     # GỘP các vùng không đánh được số vào hàng xóm -> hết 'dăm', mọi ô đều numberable.
-    # Trong vùng MẶT dùng ngưỡng nhỏ hơn để GIỮ chi tiết mắt/mũi/môi.
-    min_radius = (MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0
+    # Ngưỡng gộp theo KHỔ IN: khổ to -> giữ được vùng nhỏ hơn (đánh số được khi in).
+    if print_long_cm and print_long_cm > 0:
+        H0, W0 = arr.shape[:2]
+        px_per_cm = max(H0, W0) / float(print_long_cm)
+        min_t_px = max(4, int(round(MIN_NUMBER_CM * px_per_cm)))
+    else:
+        min_t_px = MIN_TEXT_SIZE
+    min_radius = (min_t_px + 2 * PADDING_CIRCLE) / 2.0 + 1.0
     arr = _merge_small_regions(arr, min_area=min_area, min_radius=min_radius, max_pass=4,
                                face_mask=face_mask, face_min_radius=FACE_MIN_RADIUS,
                                feature_mask=feature_mask, feature_min_radius=FEATURE_MIN_RADIUS)
@@ -807,16 +824,18 @@ def _reduce_palette_perceptual(img_rgb, target_n, protect_mask=None):
 
 
 def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_out=None,
-                face_priority=True):
+                face_priority=True, print_long_cm=0):
     """num_colors > 0: gom ảnh về tối đa N màu (để trống = DEFAULT_NUM_COLORS).
     min_area > 0: bỏ các mảng màu nhỏ hơn N pixel (đỡ lấm tấm).
     smooth (0..3): làm phẳng vùng (mean-shift) trước khi gom — dọn ảnh màu nước/chụp.
-    design_out: nếu có, lưu ảnh THIẾT KẾ (bản màu phẳng đã gom) ra đường dẫn này."""
+    design_out: nếu có, lưu ảnh THIẾT KẾ (bản màu phẳng đã gom) ra đường dẫn này.
+    print_long_cm > 0: khổ in cạnh dài (cm) -> cỡ số + ngưỡng đánh số tính theo cm
+      thật (khổ to thì vùng nhỏ vẫn được đánh số, số không quá to)."""
     import os
     import shutil
     effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
     work_path = _quantize_file(path, effective_n, smooth=smooth, min_area=min_area,
-                               face_priority=face_priority)
+                               face_priority=face_priority, print_long_cm=print_long_cm)
     if design_out:
         try:
             shutil.copyfile(work_path, design_out)   # bản màu phẳng để xem trước
@@ -827,8 +846,15 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
 
     img = load_image(work_path, debug=debug)
 
-    # edge_img = get_edges(img)
-    # edge_img = cv2.bitwise_not(edge_img)
+    # Cỡ số theo KHỔ IN thật: vùng nhỏ hơn min_t -> bỏ số; số nhắm mean_t (trần max_t).
+    H_i, W_i = img.shape[:2]
+    if print_long_cm and print_long_cm > 0:
+        px_per_cm = max(H_i, W_i) / float(print_long_cm)
+        min_t = max(4, int(round(MIN_NUMBER_CM * px_per_cm)))
+        mean_t = max(min_t + 2, int(round(NUMBER_CM * px_per_cm)))
+        max_t = max(mean_t + 1, int(round(MAX_NUMBER_CM * px_per_cm)))
+    else:
+        min_t, mean_t, max_t = MIN_TEXT_SIZE, MEAN_TEXT_SIZE, MAX_TEXT_SIZE
 
     img_white = np.zeros([img.shape[0], img.shape[1], 1], dtype=np.uint8)
     img_white.fill(255)
@@ -854,7 +880,8 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
         count_number = 0
         for c, d in zip(centers, dists):
             d = d * 2
-            draw = get_draw_number(img_white, (int(c[0]), int(c[1])), d, f'{len(color_mapping) + 1}', debug=debug)
+            draw = get_draw_number(img_white, (int(c[0]), int(c[1])), d, f'{len(color_mapping) + 1}',
+                                   debug=debug, min_t=min_t, mean_t=mean_t, max_t=max_t)
             if draw is not None:
                 count_number += 1
                 draws.append(draw)
