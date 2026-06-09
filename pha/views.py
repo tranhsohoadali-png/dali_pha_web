@@ -622,12 +622,12 @@ def service_worker(request):
         "  var d={}; try{ d=e.data.json(); }catch(_){ try{ d={body:e.data.text()}; }catch(__){ d={}; } }\n"
         "  var title=d.title||'🎨 Mã màu cần rót';\n"
         "  var opts={ body:d.body||'', icon:d.icon||'/media/icon-192.png', badge:'/media/icon-192.png',\n"
-        "    tag:d.tag||'rot', renotify:true, vibrate:[120,60,120], data:{url:d.url||'/app-rot'} };\n"
+        "    tag:d.tag||'rot', renotify:true, vibrate:[120,60,120], data:{url:d.url||'/app'} };\n"
         "  e.waitUntil(self.registration.showNotification(title, opts));\n"
         "});\n"
         "self.addEventListener('notificationclick', function(e){\n"
         "  e.notification.close();\n"
-        "  var url=(e.notification.data&&e.notification.data.url)||'/app-rot';\n"
+        "  var url=(e.notification.data&&e.notification.data.url)||'/app';\n"
         "  e.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(function(cl){\n"
         "    for(var i=0;i<cl.length;i++){ var c=cl[i]; if('focus' in c){ try{ c.navigate&&c.navigate(url); }catch(_){}; return c.focus(); } }\n"
         "    if(clients.openWindow) return clients.openWindow(url);\n"
@@ -937,10 +937,8 @@ def _pour_stats(range_, month_param):
 @csrf_exempt
 @login_required(login_url='/login')
 def rot_mau_app(request):
-    """App ĐIỆN THOẠI cho nhân viên: rót màu theo mã tranh + nhận yêu cầu từ quản lý."""
-    from pha.models import Painting
-    paintings = [_painting_dict(p) for p in Painting.objects.all()]
-    return render(request, 'rot_mau_app.html', {'paintings_json': json.dumps(paintings)})
+    """Đã gộp vào app nhân viên /app (pha + rót chung 1 app) -> chuyển hướng."""
+    return redirect('/app')
 
 
 @csrf_exempt

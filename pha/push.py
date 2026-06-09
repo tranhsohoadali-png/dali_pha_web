@@ -119,7 +119,7 @@ def notify_pour(req):
         body = f'{req.painting} ×{req.qty} · {cnt} màu' + (f' · {req.note}' if req.note else '')
         payload = json.dumps({
             'title': '🎨 Mã màu cần rót', 'body': body,
-            'url': '/app-rot', 'tag': f'rot-{req.id}', 'icon': '/media/icon-192.png',
+            'url': '/app', 'tag': f'rot-{req.id}', 'icon': '/media/icon-192.png',
         })
         subs = PushSubscription.objects.all()
         if req.assignee:
