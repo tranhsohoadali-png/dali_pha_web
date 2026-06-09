@@ -58,7 +58,7 @@ FACE_MIN_RADIUS = config("FACE_MIN_RADIUS", default=3.0, cast=float)  # ngưỡn
 # ----- NGŨ QUAN (mắt/mày/mũi/miệng): giữ nét + dồn thêm màu để mặt sống động -----
 FACE_FEATURE_OVERSAMPLE = config("FACE_FEATURE_OVERSAMPLE", default=13, cast=int)  # dồn THÊM màu cho ngũ quan (0 = tắt)
 FEATURE_MIN_RADIUS = config("FEATURE_MIN_RADIUS", default=2.2, cast=float)         # giữ chi tiết rất nhỏ trong ngũ quan
-FACE_SHARPEN = config("FACE_SHARPEN", default=1.0, cast=float)                     # tăng nét ngũ quan trước khi gom màu (0 = tắt)
+FACE_SHARPEN = config("FACE_SHARPEN", default=0.5, cast=float)                     # tăng nét ngũ quan trước khi gom màu (0 = tắt)
 FEATURE_PROTECT_SMOOTH = config("FEATURE_PROTECT_SMOOTH", default=True, cast=bool)  # KHÔNG median-smooth làm mất chi tiết ngũ quan
 
 PADDING_IN_CM = config("PADDING_IN_CM", default=4, cast=int)
@@ -395,6 +395,7 @@ def _face_mask_yunet(bgr):
         feat = cv2.bitwise_and(feat, face_mask)
         return face_mask, feat, n
     except Exception:
+        _tls.yunet = None          # cv2 cũ không chạy được YuNet -> tắt, dùng Haar
         return None
 
 
@@ -636,8 +637,9 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True):
     im = Image.open(path).convert('RGB')
     target = max(2, n)
 
-    # ƯU TIÊN MẶT: nếu phát hiện khuôn mặt -> xây bảng màu k-means LAB oversample mặt
-    # + NGŨ QUAN (feature_mask) ưu tiên mạnh hơn để mắt/mũi/miệng sống động.
+    # ƯU TIÊN MẶT: phát hiện mặt + ngũ quan để (1) GIỮ NÉT ngũ quan khỏi mean-shift,
+    # (2) BẢO VỆ màu mắt/mũi/miệng khi gom. Vẫn dùng LUỒNG MƯỢT (mean-shift + median-cut
+    # + gộp tông) cho cả ảnh -> mượt như mong muốn, KHÔNG dùng k-means (gây vón cục).
     face_mask = None
     feature_mask = None
     if FACE_PRIORITY and face_priority:
@@ -646,27 +648,40 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True):
         except Exception:
             face_mask = feature_mask = None
 
-    if face_mask is not None:
-        arr = _quantize_face_priority(np.array(im), target, face_mask, feature_mask)
-    else:
-        if smooth and int(smooth) > 0:
-            # sp = bán kính không gian, sr = bán kính màu. sr lớn -> gộp nhiều màu hơn.
-            sp, sr = {1: (9, 18), 2: (16, 32), 3: (26, 50)}.get(int(smooth), (16, 32))
-            arr = np.array(im)[:, :, ::-1].copy()              # RGB -> BGR cho cv2
-            h, w = arr.shape[:2]
-            scale = 1.0
-            if max(h, w) > 900:                                # hạ cỡ để mean-shift nhanh
-                scale = 900.0 / max(h, w)
-                arr = cv2.resize(arr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-            arr = cv2.pyrMeanShiftFiltering(arr, sp, sr)
-            if scale != 1.0:
-                arr = cv2.resize(arr, (w, h), interpolation=cv2.INTER_NEAREST)
-            im = Image.fromarray(arr[:, :, ::-1])              # BGR -> RGB
-        # Gom DƯ nhiều màu trước rồi HỢP NHẤT các màu cùng tông (LAB) xuống `target`.
-        k_work = min(96, max(target * 5, 48))
-        q = im.quantize(colors=k_work, method=Image.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
-        arr = np.array(q)
-        arr = _reduce_palette_perceptual(arr, target)
+    src_rgb = np.array(im)
+    # Tôn trọng mức "Đơn giản hoá" người dùng chọn (bản đẹp cũ dùng "Không").
+    sm_level = int(smooth) if (smooth and int(smooth) > 0) else 0
+    if sm_level > 0:
+        sp, sr = {1: (9, 18), 2: (16, 32), 3: (26, 50)}.get(sm_level, (16, 32))
+        a = src_rgb[:, :, ::-1].copy()                     # RGB -> BGR
+        h, w = a.shape[:2]
+        scale = 1.0
+        if max(h, w) > 900:
+            scale = 900.0 / max(h, w)
+            a = cv2.resize(a, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        a = cv2.pyrMeanShiftFiltering(a, sp, sr)
+        if scale != 1.0:
+            a = cv2.resize(a, (w, h), interpolation=cv2.INTER_NEAREST)
+        msf = np.ascontiguousarray(a[:, :, ::-1])          # BGR -> RGB
+        if feature_mask is not None:
+            fmm = feature_mask > 0
+            msf[fmm] = src_rgb[fmm]                         # GIỮ NÉT ngũ quan (không làm mờ)
+        im = Image.fromarray(msf)
+    # Tăng nét NHẸ riêng vùng ngũ quan -> mắt/môi tách rõ khỏi da khi gom màu.
+    if feature_mask is not None and FACE_SHARPEN > 0:
+        a2 = np.array(im)
+        fmm = feature_mask > 0
+        if fmm.any():
+            blur = cv2.GaussianBlur(a2, (0, 0), 1.0)
+            sh = cv2.addWeighted(a2, 1.0 + FACE_SHARPEN, blur, -FACE_SHARPEN, 0)
+            a2[fmm] = sh[fmm]
+            im = Image.fromarray(a2)
+    # Gom DƯ nhiều màu trước rồi HỢP NHẤT các màu cùng tông (LAB) xuống `target`,
+    # BẢO VỆ màu ngũ quan (không bị gộp/dồn đen-trắng).
+    k_work = min(96, max(target * 5, 48))
+    q = im.quantize(colors=k_work, method=Image.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
+    arr = np.array(q)
+    arr = _reduce_palette_perceptual(arr, target, protect_mask=feature_mask)
 
     # GỘP các vùng không đánh được số vào hàng xóm -> hết 'dăm', mọi ô đều numberable.
     # Trong vùng MẶT dùng ngưỡng nhỏ hơn để GIỮ chi tiết mắt/mũi/môi.
@@ -687,19 +702,26 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True):
     return out
 
 
-def _reduce_palette_perceptual(img_rgb, target_n):
+def _reduce_palette_perceptual(img_rgb, target_n, protect_mask=None):
     """Hợp nhất bảng màu xuống target_n bằng cách GỘP DẦN 2 màu GIỐNG NHAU NHẤT
     (khoảng cách trong không gian LAB), không phụ thuộc diện tích. Nhờ vậy nhiều
     sắc cùng tông (vd hàng loạt xanh lá nền) dồn lại, nhường suất cho các tông
     khác biệt (hồng, cam, xanh dương) -> tranh đặc sắc + đỡ 'dăm'."""
     flat = img_rgb.reshape(-1, 3)
-    colors, counts = np.unique(flat, axis=0, return_counts=True)
+    colors, inv, counts = np.unique(flat, axis=0, return_inverse=True, return_counts=True)
     K = len(colors)
     if K <= target_n:
         return img_rgb
     lab = cv2.cvtColor(colors.reshape(-1, 1, 3).astype('uint8'),
                        cv2.COLOR_RGB2LAB).reshape(-1, 3).astype(float)
-    clusters = {i: {'lab': lab[i].copy(), 'cnt': float(counts[i]), 'members': [i]}
+    # Màu nào CHỦ YẾU nằm trong protect_mask -> bảo vệ (vd màu mắt/môi/lông mày):
+    # gộp sau cùng + không bị dồn vào 'đen/trắng' -> ngũ quan giữ tông riêng, rõ nét.
+    prot = np.zeros(K, dtype=bool)
+    if protect_mask is not None and protect_mask.any():
+        inmask = np.bincount(inv[protect_mask.reshape(-1) > 0], minlength=K)
+        prot = (inmask / np.maximum(counts, 1)) > 0.35
+    clusters = {i: {'lab': lab[i].copy(), 'cnt': float(counts[i]), 'members': [i],
+                    'prot': bool(prot[i])}
                 for i in range(K)}
 
     def _merge_into(base, others):
@@ -719,20 +741,27 @@ def _reduce_palette_perceptual(img_rgb, target_n):
     # (cv2-LAB: L 0-255; chroma quanh 128.)
     L = lab[:, 0]
     chroma = np.abs(lab[:, 1] - 128) + np.abs(lab[:, 2] - 128)
-    darks = [i for i in range(K) if L[i] < 55 and chroma[i] < 36]
-    whites = [i for i in range(K) if L[i] > 240 and chroma[i] < 24]
+    # KHÔNG dồn màu ngũ quan (prot) vào đen/trắng -> mắt/mày/môi không bị mất tông.
+    darks = [i for i in range(K) if L[i] < 55 and chroma[i] < 36 and not prot[i]]
+    whites = [i for i in range(K) if L[i] > 240 and chroma[i] < 24 and not prot[i]]
     if len(darks) > 1:
         _merge_into(min(darks, key=lambda m: L[m]), darks)        # gốc = tối nhất
     if len(whites) > 1:
         _merge_into(max(whites, key=lambda m: L[m]), whites)      # gốc = sáng nhất
 
+    PROT_PEN = 1e7   # phạt lớn để màu ngũ quan gộp SAU CÙNG (khi đã hết màu thường)
     while len(clusters) > target_n:
         ids = list(clusters.keys())
         best, pair = None, None
         for a in range(len(ids)):
-            la = clusters[ids[a]]['lab']
+            ca = clusters[ids[a]]; la = ca['lab']
             for b in range(a + 1, len(ids)):
-                d = float(((la - clusters[ids[b]]['lab']) ** 2).sum())
+                cb = clusters[ids[b]]
+                d = float(((la - cb['lab']) ** 2).sum())
+                if ca['prot']:
+                    d += PROT_PEN
+                if cb['prot']:
+                    d += PROT_PEN
                 if best is None or d < best:
                     best, pair = d, (ids[a], ids[b])
         i, j = pair
@@ -741,6 +770,7 @@ def _reduce_palette_perceptual(img_rgb, target_n):
         ci['lab'] = (ci['lab'] * ci['cnt'] + cj['lab'] * cj['cnt']) / tot
         ci['cnt'] = tot
         ci['members'] += cj['members']
+        ci['prot'] = ci['prot'] or cj['prot']
         del clusters[j]
     # Đại diện mỗi nhóm:
     #  - nhóm sáng & trung tính -> lấy màu TRẮNG NHẤT (tránh ám xanh do vùng lạnh
