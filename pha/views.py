@@ -553,6 +553,7 @@ def quan_ly(request):
         'total_value': f'{round(total_value):,.0f}'.replace(',', '.'),
         'paintings_json': json.dumps([_painting_dict(p) for p in Painting.objects.all()]),
         'staff_users': _staff_users(),
+        'paint_sizes': _paint_sizes(),
     })
 
 
@@ -741,14 +742,32 @@ def _painting_count(code):
     return (p.color_count if p else 0), p
 
 
-def _record_pour(painting, qty, color_count, user, req=None):
+def _paint_sizes():
+    """Danh sách kích thước tranh (gợi ý). Chủ có thể đặt AppSetting 'PAINT_SIZES'
+    (cách nhau dấu phẩy) để đổi; mặc định các khổ phổ biến."""
+    from pha.models import AppSetting
+    raw = (AppSetting.get('PAINT_SIZES', '') or '').strip()
+    if raw:
+        out = [s.strip() for s in raw.split(',') if s.strip()]
+        if out:
+            return out
+    return ['20x20', '30x30', '30x40', '40x40', '40x50', '50x65', '60x90']
+
+
+def _norm_size(s):
+    """Chuẩn hoá kích thước: bỏ khoảng trắng, thường hoá 'x' (40 X 50 -> 40x50)."""
+    return (s or '').strip().replace(' ', '').lower()
+
+
+def _record_pour(painting, qty, color_count, user, req=None, size=''):
     """Ghi 1 lượt rót màu vào nhật ký; nếu có yêu cầu (req) thì đánh dấu đã rót."""
     from pha.models import PourLog, PourRequest
     now = _now()
     qty = max(1, int(qty or 1))
     PourLog.objects.create(
         day=now.strftime('%Y-%m-%d'), month=now.strftime('%Y-%m'),
-        painting=painting, colors=[], color_count=int(color_count or 0), qty=qty,
+        painting=painting, size=_norm_size(size), colors=[],
+        color_count=int(color_count or 0), qty=qty,
         user=user, request_id=(req.id if req else None),
     )
     if req and req.status != PourRequest.STATUS_DONE:
@@ -787,6 +806,7 @@ def _pour_aggregate(qs):
     colors_total = 0
     acc = {}      # code -> {'painting','pours','qty','cc','colors'}
     dayacc = {}   # YYYY-MM-DD -> {'paintings','colors','pours'}
+    sizeacc = {}  # size -> {'paintings','pours'}
     for log in qs:
         pours += 1
         q = max(1, int(log.qty or 1))
@@ -803,6 +823,10 @@ def _pour_aggregate(qs):
         d['paintings'] += q
         d['colors'] += cc * q
         d['pours'] += 1
+        sz = (log.size or '').strip() or '(chưa ghi)'
+        s = sizeacc.setdefault(sz, {'paintings': 0, 'pours': 0})
+        s['paintings'] += q
+        s['pours'] += 1
     rows = sorted(acc.values(), key=lambda x: -x['qty'])
     daily = []
     for k in sorted(dayacc.keys()):
@@ -813,8 +837,10 @@ def _pour_aggregate(qs):
             lbl = k
         daily.append({'label': lbl, 'paintings': dd['paintings'],
                       'colors': dd['colors'], 'pours': dd['pours']})
+    by_size = sorted([{'size': k, 'paintings': v['paintings'], 'pours': v['pours']}
+                      for k, v in sizeacc.items()], key=lambda x: -x['paintings'])
     return {'pours': pours, 'paintings': paintings, 'colors_total': colors_total,
-            'rows': rows, 'daily': daily}
+            'rows': rows, 'daily': daily, 'by_size': by_size}
 
 
 def _staff_users():
@@ -883,14 +909,16 @@ def ma_tranh(request):
                 except ValueError:
                     qty = 1
                 req = PourRequest.objects.create(
-                    painting=p.code, colors=[], qty=qty,
+                    painting=p.code, size=_norm_size(request.POST.get('size')),
+                    colors=[], qty=qty,
                     note=(request.POST.get('note') or '').strip(),
                     assignee=(request.POST.get('assignee') or '').strip(),
                     created_by=request.user.username,
                 )
                 from pha import push
                 push.notify_pour(req)
-                messages.info(request, f'Đã giao rót {p.code} ×{qty}.')
+                messages.info(request, f'Đã giao rót {p.code} ×{qty}'
+                              + (f' ({req.size})' if req.size else '') + '.')
         elif action == 'delete_request':
             PourRequest.objects.filter(id=request.POST.get('id')).delete()
             messages.info(request, 'Đã xoá yêu cầu.')
@@ -898,7 +926,7 @@ def ma_tranh(request):
             req = PourRequest.objects.filter(id=request.POST.get('id')).first()
             if req and req.status != PourRequest.STATUS_DONE:
                 cc, _ = _painting_count(req.painting)
-                _record_pour(req.painting, req.qty, cc, request.user.username, req)
+                _record_pour(req.painting, req.qty, cc, request.user.username, req, size=req.size)
                 messages.info(request, f'Đã đánh dấu rót xong {req.painting}.')
         return redirect('/ma-tranh')
 
@@ -925,6 +953,7 @@ def ma_tranh(request):
         'pending': pending, 'done': done,
         'staff_users': _staff_users(),
         'stat_months': stat_months, 'stat_label': label, 'stat_agg': agg,
+        'paint_sizes': _paint_sizes(),
         'low_stock': _low_stock_names(),
     })
 
@@ -956,7 +985,7 @@ def rot(request):
             return JsonResponse({'ok': False, 'msg': 'Yêu cầu không tồn tại.'})
         if req.status == PourRequest.STATUS_DONE:
             return JsonResponse({'ok': False, 'msg': 'Yêu cầu đã được rót trước đó.'})
-        painting, qty = req.painting, req.qty
+        painting, qty, size = req.painting, req.qty, req.size
     else:
         painting = (request.POST.get('painting') or '').strip()
         if not painting:
@@ -965,8 +994,9 @@ def rot(request):
             qty = max(1, int(request.POST.get('qty') or 1))
         except ValueError:
             qty = 1
+        size = (request.POST.get('size') or '').strip()
     cc, _ = _painting_count(painting)
-    _record_pour(painting, qty, cc, request.user.username, req)
+    _record_pour(painting, qty, cc, request.user.username, req, size=size)
     return JsonResponse({'ok': True, 'msg': f'Đã ghi rót {painting} ×{qty}'})
 
 
@@ -1008,7 +1038,7 @@ def rot_yeu_cau_list(request):
             pass
         p = pmap.get(r.painting.strip().lower())
         rows.append({
-            'id': r.id, 'painting': r.painting, 'qty': r.qty,
+            'id': r.id, 'painting': r.painting, 'size': r.size, 'qty': r.qty,
             'count': p.color_count if p else 0, 'note': r.note,
             'assignee': r.assignee, 'by': r.created_by,
             'image': ('/media/' + p.image) if (p and p.image) else '',
@@ -1036,7 +1066,7 @@ def lich_su_rot(request):
             pass
         rows.append({
             'id': log.id, 'dt': t.strftime('%d/%m %H:%M'), 'painting': log.painting,
-            'qty': log.qty, 'colors': log.color_count, 'user': log.user or '',
+            'size': log.size, 'qty': log.qty, 'colors': log.color_count, 'user': log.user or '',
         })
     return JsonResponse({'rows': rows})
 
@@ -1076,14 +1106,16 @@ def quan_ly_giao_rot(request):
         except ValueError:
             qty = 1
         req = PourRequest.objects.create(
-            painting=p.code, colors=[], qty=qty,
+            painting=p.code, size=_norm_size(request.POST.get('size')),
+            colors=[], qty=qty,
             note=(request.POST.get('note') or '').strip(),
             assignee=(request.POST.get('assignee') or '').strip(),
             created_by=request.user.username,
         )
         from pha import push
         push.notify_pour(req)
-        return JsonResponse({'ok': True, 'msg': f'Đã giao rót {p.code} ×{qty}.'})
+        return JsonResponse({'ok': True, 'msg': f'Đã giao rót {p.code} ×{qty}'
+                             + (f' ({req.size})' if req.size else '') + '.'})
     if action == 'delete':
         PourRequest.objects.filter(id=request.POST.get('id')).delete()
         return JsonResponse({'ok': True, 'msg': 'Đã xoá yêu cầu.'})
@@ -1091,7 +1123,7 @@ def quan_ly_giao_rot(request):
         req = PourRequest.objects.filter(id=request.POST.get('id')).first()
         if req and req.status != PourRequest.STATUS_DONE:
             cc, _ = _painting_count(req.painting)
-            _record_pour(req.painting, req.qty, cc, request.user.username, req)
+            _record_pour(req.painting, req.qty, cc, request.user.username, req, size=req.size)
         return JsonResponse({'ok': True, 'msg': 'Đã đánh dấu rót xong.'})
     return JsonResponse({'ok': False, 'msg': 'Hành động không hợp lệ.'})
 
@@ -1133,7 +1165,8 @@ def thong_ke_rot(request):
     return JsonResponse({'label': label, 'pours': agg['pours'],
                          'paintings': agg['paintings'],
                          'colors_total': agg['colors_total'],
-                         'rows': agg['rows'], 'daily': agg['daily']})
+                         'rows': agg['rows'], 'daily': agg['daily'],
+                         'by_size': agg['by_size']})
 
 
 @csrf_exempt
@@ -1168,9 +1201,22 @@ def export_thong_ke_rot_excel(request):
     for col, w in zip('ABCDE', (20, 14, 14, 14, 14)):
         ws.column_dimensions[col].width = w
 
-    # Sheet 2: chi tiết từng lượt rót
+    # Sheet 2: SỐ LƯỢNG TRANH THEO KÍCH THƯỚC
+    wss = wb.create_sheet("Theo kich thuoc")
+    wss.append(["SỐ LƯỢNG TRANH ĐÃ SẢN XUẤT THEO KÍCH THƯỚC"])
+    wss.append([label])
+    wss.append(["Kích thước", "Số tranh", "Số lượt rót"])
+    for c in wss[3]:
+        c.fill = head_fill; c.font = head_font; c.alignment = center
+    for u in agg['by_size']:
+        wss.append([u['size'], u['paintings'], u['pours']])
+    wss.append(["TỔNG", agg['paintings'], agg['pours']])
+    for col, w in zip('ABC', (18, 14, 14)):
+        wss.column_dimensions[col].width = w
+
+    # Sheet 3: chi tiết từng lượt rót
     ws2 = wb.create_sheet("Chi tiet rot")
-    ws2.append(["Ngày giờ", "Mã tranh", "Số lượng", "Số màu", "Người rót"])
+    ws2.append(["Ngày giờ", "Mã tranh", "Kích thước", "Số lượng", "Số màu", "Người rót"])
     for c in ws2[1]:
         c.fill = head_fill; c.font = head_font; c.alignment = center
     for log in qs.order_by('created_time'):
@@ -1179,9 +1225,9 @@ def export_thong_ke_rot_excel(request):
             t = t.astimezone(_VN) if _VN else t
         except Exception:
             pass
-        ws2.append([t.strftime('%d/%m/%Y %H:%M'), log.painting, log.qty,
-                    log.color_count, log.user or ''])
-    for col, w in zip('ABCDE', (18, 18, 10, 10, 16)):
+        ws2.append([t.strftime('%d/%m/%Y %H:%M'), log.painting, log.size or '',
+                    log.qty, log.color_count, log.user or ''])
+    for col, w in zip('ABCDEF', (18, 18, 12, 10, 10, 16)):
         ws2.column_dimensions[col].width = w
 
     resp = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

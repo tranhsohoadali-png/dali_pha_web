@@ -231,7 +231,7 @@
           ? '<span class="badge text-bg-success" style="font-size:1rem;padding:.5rem .7rem"><i class="bi bi-check-lg"></i> Đã rót</span>'
           : '<button class="btn btn-success rotdone" data-id="'+r.id+'" style="height:46px;font-weight:700;border-radius:10px;padding:0 1rem"><i class="bi bi-check-lg"></i> Đã rót</button>')+
       '</div>'+
-      '<div class="mb-1"><span class="badge text-bg-primary" style="font-size:.95rem">'+(r.count||0)+' màu</span>'+
+      '<div class="mb-1">'+(r.size?'<span class="badge text-bg-dark me-1" style="font-size:.95rem"><i class="bi bi-rulers"></i> '+escR(r.size)+'</span>':'')+'<span class="badge text-bg-primary" style="font-size:.95rem">'+(r.count||0)+' màu</span>'+
         (done?' <span class="text-success small fw-bold"><i class="bi bi-hand-index-thumb"></i> bấm ảnh để xem khi rót</span>':'')+'</div>'+
       (r.image?'<img src="'+r.image+'" class="img-fluid rounded border mb-1 rotzoom" style="max-height:200px;cursor:zoom-in">':'')+
       (r.note?'<div class="small text-secondary"><i class="bi bi-sticky"></i> '+escR(r.note)+'</div>':'')+

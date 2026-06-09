@@ -126,6 +126,7 @@ class PourLog(models.Model):
     day = models.CharField(max_length=10, db_index=True)    # YYYY-MM-DD (giờ VN)
     month = models.CharField(max_length=7, db_index=True)   # YYYY-MM
     painting = models.CharField(max_length=100)             # mã tranh đã rót
+    size = models.CharField(max_length=20, blank=True, default='', db_index=True)  # kích thước (vd 40x50)
     colors = models.JSONField(default=list)                 # màu đã rót [{'dali','hex'}]
     color_count = models.IntegerField(default=0)            # số mã màu trong lượt này
     qty = models.IntegerField(default=1)                    # số lượng tranh trong lượt rót
@@ -156,6 +157,7 @@ class PourRequest(models.Model):
 
     created_time = models.DateTimeField(auto_now_add=True)
     painting = models.CharField(max_length=100)            # mã tranh cần rót
+    size = models.CharField(max_length=20, blank=True, default='')  # kích thước (vd 40x50)
     colors = models.JSONField(default=list)               # mã màu cần rót [{'dali','hex'}]
     qty = models.IntegerField(default=1)                  # số lượng tranh
     note = models.CharField(max_length=300, blank=True, default='')
