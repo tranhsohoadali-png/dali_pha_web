@@ -1312,18 +1312,15 @@ def _prod_aggregate(qs):
     """Tổng hợp sản xuất: số lượt ghi, tổng số tranh; theo kích thước / mã tranh / ngày."""
     entries = 0
     total = 0
-    sizeacc, paintacc, dayacc = {}, {}, {}
+    sizeacc, dayacc = {}, {}
     for r in qs:
         entries += 1
         q = max(1, int(r.qty or 1))
         total += q
         sz = (r.size or '').strip() or '(chưa ghi)'
         sizeacc[sz] = sizeacc.get(sz, 0) + q
-        pc = (r.painting or '').strip() or '(không mã)'
-        paintacc[pc] = paintacc.get(pc, 0) + q
         dayacc[r.day] = dayacc.get(r.day, 0) + q
     by_size = sorted([{'size': k, 'qty': v} for k, v in sizeacc.items()], key=lambda x: -x['qty'])
-    by_painting = sorted([{'painting': k, 'qty': v} for k, v in paintacc.items()], key=lambda x: -x['qty'])
     daily = []
     for k in sorted(dayacc.keys()):
         try:
@@ -1331,15 +1328,14 @@ def _prod_aggregate(qs):
         except ValueError:
             lbl = k
         daily.append({'label': lbl, 'qty': dayacc[k]})
-    return {'entries': entries, 'total': total, 'by_size': by_size,
-            'by_painting': by_painting, 'daily': daily}
+    return {'entries': entries, 'total': total, 'by_size': by_size, 'daily': daily}
 
 
 @csrf_exempt
 @staff_required
 def san_xuat(request):
     """Module SẢN XUẤT TRANH: quản lý tự điền số lượng tranh thành phẩm + thống kê."""
-    from pha.models import PaintingProduction, Painting
+    from pha.models import PaintingProduction
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -1349,14 +1345,16 @@ def san_xuat(request):
             except ValueError:
                 qty = 1
             day, month = _prod_day(request.POST.get('day'))
-            PaintingProduction.objects.create(
-                day=day, month=month,
-                painting=(request.POST.get('painting') or '').strip(),
-                size=_norm_size(request.POST.get('size')),
-                qty=qty, note=(request.POST.get('note') or '').strip(),
-                user=request.user.username,
-            )
-            messages.info(request, f'Đã ghi nhận sản xuất ×{qty}.')
+            size = _norm_size(request.POST.get('size'))
+            if not size:
+                messages.error(request, 'Vui lòng nhập kích thước.')
+            else:
+                PaintingProduction.objects.create(
+                    day=day, month=month, painting='', size=size, qty=qty,
+                    note=(request.POST.get('note') or '').strip(),
+                    user=request.user.username,
+                )
+                messages.info(request, f'Đã ghi nhận {qty} tranh ({size}).')
         elif action == 'delete':
             PaintingProduction.objects.filter(id=request.POST.get('id')).delete()
             messages.info(request, 'Đã xoá 1 dòng.')
@@ -1377,7 +1375,6 @@ def san_xuat(request):
     return render(request, 'san_xuat.html', {
         'entries': entries,
         'paint_sizes': _paint_sizes(),
-        'paintings': list(Painting.objects.values_list('code', flat=True)),
         'today': now.strftime('%Y-%m-%d'),
         'stat_months': stat_months, 'stat_label': label, 'stat_agg': agg,
     })
@@ -1389,8 +1386,7 @@ def thong_ke_san_xuat(request):
     label, qs = _prod_stats_qs(request.GET.get('range', 'today'), request.GET.get('month'))
     agg = _prod_aggregate(qs)
     return JsonResponse({'label': label, 'entries': agg['entries'], 'total': agg['total'],
-                         'by_size': agg['by_size'], 'by_painting': agg['by_painting'],
-                         'daily': agg['daily']})
+                         'by_size': agg['by_size'], 'daily': agg['daily']})
 
 
 @csrf_exempt
@@ -1421,22 +1417,13 @@ def export_san_xuat_excel(request):
     for col, w in zip('AB', (18, 14)):
         ws.column_dimensions[col].width = w
 
-    ws2 = wb.create_sheet("Theo ma tranh")
-    ws2.append(["Mã tranh", "Số tranh"])
-    for c in ws2[1]:
-        c.fill = head_fill; c.font = head_font; c.alignment = center
-    for u in agg['by_painting']:
-        ws2.append([u['painting'], u['qty']])
-    for col, w in zip('AB', (22, 14)):
-        ws2.column_dimensions[col].width = w
-
     ws3 = wb.create_sheet("Chi tiet")
-    ws3.append(["Ngày", "Mã tranh", "Kích thước", "Số lượng", "Người nhập", "Ghi chú"])
+    ws3.append(["Ngày", "Kích thước", "Số lượng", "Người nhập", "Ghi chú"])
     for c in ws3[1]:
         c.fill = head_fill; c.font = head_font; c.alignment = center
     for r in qs.order_by('day', 'id'):
-        ws3.append([r.day, r.painting or '', r.size or '', r.qty, r.user or '', r.note or ''])
-    for col, w in zip('ABCDEF', (12, 18, 12, 10, 14, 40)):
+        ws3.append([r.day, r.size or '', r.qty, r.user or '', r.note or ''])
+    for col, w in zip('ABCDE', (12, 14, 10, 14, 40)):
         ws3.column_dimensions[col].width = w
 
     resp = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
