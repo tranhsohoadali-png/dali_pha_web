@@ -307,7 +307,8 @@ _tls = _threading.local()
 
 
 def _get_cascades():
-    """Lazy + thread-local (detectMultiScale không reentrant nên không share)."""
+    """Lazy + thread-local (detectMultiScale không reentrant nên không share).
+    Trả 3 cascade khuôn mặt; mắt lấy riêng qua _get_eye_cascade()."""
     if not hasattr(_tls, 'front'):
         base = cv2.data.haarcascades
         _tls.front = cv2.CascadeClassifier(base + 'haarcascade_frontalface_default.xml')
