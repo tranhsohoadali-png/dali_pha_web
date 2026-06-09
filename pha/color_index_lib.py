@@ -489,6 +489,24 @@ def _face_mask(bgr):
         return None, None, 0
 
 
+def count_faces(path, max_side=768):
+    """Đếm số khuôn mặt trong ảnh (dò nhanh trên bản THU NHỎ). Dùng cho auto-gợi-ý
+    preset chân dung khi người dùng chọn ảnh. Trả 0 nếu không có mặt / đọc lỗi."""
+    try:
+        bgr = cv2.imread(path)
+        if bgr is None:
+            return 0
+        h, w = bgr.shape[:2]
+        if max(h, w) > max_side:
+            s = max_side / float(max(h, w))
+            bgr = cv2.resize(bgr, (max(1, int(w * s)), max(1, int(h * s))),
+                             interpolation=cv2.INTER_AREA)
+        _, _, n = _face_mask(bgr)
+        return int(n or 0)
+    except Exception:
+        return 0
+
+
 def _quantize_face_priority(arr_rgb, target, face_mask, feature_mask=None, smooth_level=2):
     """Xây bảng màu bằng k-means LAB, OVERSAMPLE pixel vùng mặt -> mặt giành nhiều
     màu hơn. NGŨ QUAN (feature_mask) được ưu tiên MẠNH hơn: KHÔNG làm mềm (giữ nét),

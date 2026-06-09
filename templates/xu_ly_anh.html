@@ -44,6 +44,15 @@
               <input type="hidden" name="base" id="presetBase" value="anime">
             </div>
 
+            <!-- Auto-gợi-ý: ảnh có khuôn mặt -> nên dùng preset Chân dung -->
+            <div id="faceSuggest" class="alert alert-info py-2 px-2 small d-none mb-2">
+              <i class="bi bi-person-check-fill"></i> Phát hiện <b><span id="faceSuggestN">khuôn mặt</span></b> trong ảnh — nên dùng preset <b>Chân dung</b> (giữ mặt, 30–48 màu, ưu tiên khuôn mặt).
+              <div class="mt-1 d-flex gap-1">
+                <button type="button" id="faceSuggestApply" class="btn btn-sm btn-primary py-0 px-2">Áp dụng</button>
+                <button type="button" id="faceSuggestDismiss" class="btn btn-sm btn-outline-secondary py-0 px-2">Bỏ qua</button>
+              </div>
+            </div>
+
             <!-- Tinh chỉnh bản đồ màu (luôn hiện, áp cả khi không dùng AI) -->
             <div class="border rounded p-2 mb-2">
               <div class="small fw-semibold mb-1"><i class="bi bi-sliders text-success"></i> Tinh chỉnh bản đồ màu <span class="text-secondary fw-normal">(preset tự điền, sửa được)</span></div>
@@ -185,7 +194,35 @@
   dz.addEventListener('drop',ev=>{ if(ev.dataTransfer.files.length){fi.files=ev.dataTransfer.files;onPick();} });
   fi.addEventListener('change',onPick);
   function onPick(){ var f=fi.files[0]; if(!f)return; document.getElementById('sub').disabled=false;
-    var r=new FileReader(); r.onload=e=>{var p=document.getElementById('preview');p.src=e.target.result;p.hidden=false;}; r.readAsDataURL(f); }
+    var r=new FileReader(); r.onload=e=>{var p=document.getElementById('preview');p.src=e.target.result;p.hidden=false;}; r.readAsDataURL(f);
+    detectFaceSuggest(f); }
+
+  // ===== Auto-gợi-ý preset CHÂN DUNG khi ảnh có khuôn mặt =====
+  function faceTargetPreset(){           // preset chân dung để gợi ý (ưu tiên 'photo')
+    if(PRESETS['photo'] && PRESETS['photo'].face_priority) return 'photo';
+    return Object.keys(PRESETS).find(function(k){ return PRESETS[k] && PRESETS[k].face_priority; }) || null;
+  }
+  function detectFaceSuggest(f){
+    var box=document.getElementById('faceSuggest'); if(box) box.classList.add('d-none');
+    if((PRESETS[document.getElementById('presetSel').value]||{}).face_priority) return; // đã chân dung
+    if(!faceTargetPreset()) return;                                  // không có preset chân dung
+    var fd=new FormData(); fd.append('image', f);
+    fetch('/anh-detect-face',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(res){
+      if(!res || !res.face || !box) return;
+      if((PRESETS[document.getElementById('presetSel').value]||{}).face_priority) return; // user đã tự đổi
+      document.getElementById('faceSuggestN').textContent = (res.n>1 ? (res.n+' khuôn mặt') : 'khuôn mặt');
+      box.classList.remove('d-none');
+    }).catch(function(){});
+  }
+  (function bindFaceSuggest(){
+    var ap=document.getElementById('faceSuggestApply'), ds=document.getElementById('faceSuggestDismiss');
+    if(ap) ap.addEventListener('click',function(){
+      var k=faceTargetPreset(); if(!k) return;
+      fillPresetSelect(k); applyPreset(k);
+      document.getElementById('faceSuggest').classList.add('d-none');
+    });
+    if(ds) ds.addEventListener('click',function(){ document.getElementById('faceSuggest').classList.add('d-none'); });
+  })();
 
   function spin(on){ var s=document.getElementById('spin'); s.classList.toggle('d-none',!on); s.classList.toggle('d-flex',on); }
 
