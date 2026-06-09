@@ -655,6 +655,346 @@ def dali_colors(request):
     })
 
 
+# ===================== RÓT MÀU (theo mã tranh) =====================
+def _parse_color_codes(text):
+    """Tách danh sách mã màu DALI từ chuỗi (xuống dòng / dấu phẩy / chấm phẩy),
+    tra cứu HEX từ bảng màu DALI. Trả [{'dali','hex'}] (giữ thứ tự, bỏ trùng)."""
+    from pha import dali_match
+    import re as _re
+    codes = [c.strip() for c in _re.split(r'[\n,;]+', text or '') if c.strip()]
+    out, seen = [], set()
+    for code in codes:
+        key = code.lower().replace(' ', '')
+        if key in seen:
+            continue
+        seen.add(key)
+        it = dali_match.find_by_dali(code)
+        out.append({'dali': code, 'hex': (it['hex'] if it else '')})
+    return out
+
+
+def _painting_map():
+    """{code(lower): Painting} để tra nhanh mã tranh trong catalog."""
+    from pha.models import Painting
+    return {p.code.strip().lower(): p for p in Painting.objects.all()}
+
+
+def _record_pour(painting, colors, qty, user, req=None):
+    """Ghi 1 lượt rót màu vào nhật ký; nếu có yêu cầu (req) thì đánh dấu đã rót."""
+    from pha.models import PourLog, PourRequest
+    now = _now()
+    qty = max(1, int(qty or 1))
+    colors = colors or []
+    PourLog.objects.create(
+        day=now.strftime('%Y-%m-%d'), month=now.strftime('%Y-%m'),
+        painting=painting, colors=colors, color_count=len(colors), qty=qty,
+        user=user, request_id=(req.id if req else None),
+    )
+    if req and req.status != PourRequest.STATUS_DONE:
+        req.status = PourRequest.STATUS_DONE
+        req.done_by = user
+        req.done_time = now
+        req.save(update_fields=['status', 'done_by', 'done_time'])
+
+
+def _pour_stats_qs(range_, month_param):
+    """Trả (label, queryset PourLog) theo khoảng: today / week / month."""
+    from pha.models import PourLog
+    now = _now()
+    if range_ == 'week':
+        d = now.date()
+        monday = d - timedelta(days=d.weekday())
+        sunday = monday + timedelta(days=6)
+        qs = PourLog.objects.filter(day__gte=monday.strftime('%Y-%m-%d'),
+                                    day__lte=sunday.strftime('%Y-%m-%d'))
+        label = f"Tuần này ({monday.strftime('%d/%m')} – {sunday.strftime('%d/%m/%Y')})"
+    elif range_ == 'month':
+        m = month_param or now.strftime('%Y-%m')
+        qs = PourLog.objects.filter(month=m)
+        label = "Tháng " + _fmt_month(m)
+    else:
+        qs = PourLog.objects.filter(day=now.strftime('%Y-%m-%d'))
+        label = "Hôm nay (" + now.strftime('%d/%m/%Y') + ")"
+    return label, qs
+
+
+def _pour_aggregate(qs):
+    """Tổng hợp: số lượt rót, tổng số tranh, và lượt từng mã màu (theo số lượng tranh)."""
+    pours = 0
+    paintings = 0
+    color_acc = {}      # dali -> {'count', 'hex'}
+    for log in qs:
+        pours += 1
+        q = max(1, int(log.qty or 1))
+        paintings += q
+        for c in (log.colors or []):
+            dali = c.get('dali') if isinstance(c, dict) else str(c)
+            if not dali:
+                continue
+            row = color_acc.setdefault(dali, {'dali': dali, 'count': 0, 'hex': ''})
+            row['count'] += q
+            if not row['hex'] and isinstance(c, dict) and c.get('hex'):
+                row['hex'] = c['hex']
+    rows = sorted(color_acc.values(), key=lambda x: -x['count'])
+    return {'pours': pours, 'paintings': paintings, 'rows': rows}
+
+
+def _staff_users():
+    """Danh sách tài khoản có thể giao việc (không gồm superuser)."""
+    return list(User.objects.filter(is_superuser=False)
+                .order_by('is_staff', 'username').values_list('username', flat=True))
+
+
+@csrf_exempt
+@staff_required
+def ma_tranh(request):
+    """Danh mục MÃ TRANH + giao việc rót màu + thống kê + lịch sử (cho quản lý)."""
+    from pha.models import Painting, PourRequest, PourLog
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'save_painting':
+            code = (request.POST.get('code') or '').strip()
+            name = (request.POST.get('name') or '').strip()
+            note = (request.POST.get('note') or '').strip()
+            colors = _parse_color_codes(request.POST.get('colors_text') or '')
+            if not code:
+                messages.error(request, 'Thiếu mã tranh.')
+            elif not colors:
+                messages.error(request, 'Chưa nhập mã màu cho tranh.')
+            else:
+                obj = Painting.objects.filter(code__iexact=code).first()
+                if obj:
+                    obj.code, obj.name, obj.note, obj.colors = code, name, note, colors
+                    obj.save()
+                    messages.info(request, f'Đã cập nhật mã tranh {code} ({len(colors)} màu).')
+                else:
+                    Painting.objects.create(code=code, name=name, note=note, colors=colors)
+                    messages.info(request, f'Đã lưu mã tranh {code} ({len(colors)} màu).')
+        elif action == 'delete_painting':
+            n, _ = Painting.objects.filter(code__iexact=(request.POST.get('code') or '').strip()).delete()
+            messages.info(request, 'Đã xoá mã tranh.' if n else 'Không tìm thấy.')
+        elif action == 'add_request':
+            code = (request.POST.get('painting') or '').strip()
+            p = Painting.objects.filter(code__iexact=code).first()
+            if not p:
+                messages.error(request, f'Mã tranh "{code}" chưa có trong danh mục.')
+            else:
+                picked = request.POST.getlist('req_color')   # các mã màu được chọn
+                if picked:
+                    pset = {x.strip().lower() for x in picked}
+                    colors = [c for c in (p.colors or []) if c.get('dali', '').strip().lower() in pset]
+                else:
+                    colors = list(p.colors or [])
+                try:
+                    qty = max(1, int(request.POST.get('qty') or 1))
+                except ValueError:
+                    qty = 1
+                PourRequest.objects.create(
+                    painting=p.code, colors=colors, qty=qty,
+                    note=(request.POST.get('note') or '').strip(),
+                    assignee=(request.POST.get('assignee') or '').strip(),
+                    created_by=request.user.username,
+                )
+                messages.info(request, f'Đã giao rót {p.code} ×{qty}.')
+        elif action == 'delete_request':
+            PourRequest.objects.filter(id=request.POST.get('id')).delete()
+            messages.info(request, 'Đã xoá yêu cầu.')
+        elif action == 'done_request':
+            req = PourRequest.objects.filter(id=request.POST.get('id')).first()
+            if req and req.status != PourRequest.STATUS_DONE:
+                _record_pour(req.painting, req.colors, req.qty, request.user.username, req)
+                messages.info(request, f'Đã đánh dấu rót xong {req.painting}.')
+        return redirect('/ma-tranh')
+
+    paintings = list(Painting.objects.all())
+    pending = list(PourRequest.objects.filter(status=PourRequest.STATUS_PENDING))
+    done = list(PourRequest.objects.filter(status=PourRequest.STATUS_DONE)
+                .order_by('-done_time', '-id')[:30])
+    for r in done:
+        try:
+            r.done_disp = (r.done_time.astimezone(_VN) if _VN and r.done_time else r.done_time)
+        except Exception:
+            r.done_disp = r.done_time
+    months = sorted(set(PourLog.objects.values_list('month', flat=True)), reverse=True)
+    stat_months = [{'value': m, 'label': _fmt_month(m)} for m in months]
+    label, agg = _pour_stats('today', None)
+    return render(request, 'ma_tranh.html', {
+        'paintings': paintings,
+        'paintings_json': json.dumps([
+            {'code': p.code, 'name': p.name, 'colors': p.colors or []} for p in paintings]),
+        'pending': pending, 'done': done,
+        'staff_users': _staff_users(),
+        'stat_months': stat_months, 'stat_label': label, 'stat_agg': agg,
+        'low_stock': _low_stock_names(),
+    })
+
+
+def _pour_stats(range_, month_param):
+    label, qs = _pour_stats_qs(range_, month_param)
+    return label, _pour_aggregate(qs)
+
+
+@csrf_exempt
+@login_required(login_url='/login')
+def rot_mau_app(request):
+    """App ĐIỆN THOẠI cho nhân viên: rót màu theo mã tranh + nhận yêu cầu từ quản lý."""
+    from pha.models import Painting
+    paintings = [{'code': p.code, 'name': p.name, 'colors': p.colors or []}
+                 for p in Painting.objects.all()]
+    return render(request, 'rot_mau_app.html', {'paintings_json': json.dumps(paintings)})
+
+
+@csrf_exempt
+@login_required(login_url='/login')
+def rot(request):
+    """Ghi nhận đã rót xong 1 mã tranh. POST: painting, qty, [request_id], [colors_json]."""
+    if request.method != 'POST':
+        return HttpResponseNotFound('POST only')
+    from pha.models import Painting, PourRequest
+    req = None
+    rid = request.POST.get('request_id')
+    if rid:
+        req = PourRequest.objects.filter(id=rid).first()
+        if not req:
+            return JsonResponse({'ok': False, 'msg': 'Yêu cầu không tồn tại.'})
+        if req.status == PourRequest.STATUS_DONE:
+            return JsonResponse({'ok': False, 'msg': 'Yêu cầu đã được rót trước đó.'})
+        painting, colors, qty = req.painting, req.colors, req.qty
+    else:
+        painting = (request.POST.get('painting') or '').strip()
+        if not painting:
+            return JsonResponse({'ok': False, 'msg': 'Thiếu mã tranh.'})
+        try:
+            qty = max(1, int(request.POST.get('qty') or 1))
+        except ValueError:
+            qty = 1
+        raw = request.POST.get('colors_json')
+        if raw:
+            try:
+                colors = json.loads(raw)
+            except (ValueError, TypeError):
+                colors = []
+        else:
+            p = Painting.objects.filter(code__iexact=painting).first()
+            colors = list(p.colors or []) if p else []
+    _record_pour(painting, colors, qty, request.user.username, req)
+    return JsonResponse({'ok': True, 'msg': f'Đã ghi rót {painting} ×{qty}'})
+
+
+@csrf_exempt
+@login_required(login_url='/login')
+def rot_yeu_cau_list(request):
+    """JSON danh sách yêu cầu rót đang chờ. Nhân viên chỉ thấy việc giao cho mình
+    hoặc cho 'mọi người'; quản lý thấy tất cả."""
+    from pha.models import PourRequest
+    qs = PourRequest.objects.filter(status=PourRequest.STATUS_PENDING)
+    if not request.user.is_staff:
+        from django.db.models import Q
+        qs = qs.filter(Q(assignee='') | Q(assignee=request.user.username))
+    rows = []
+    for r in qs:
+        t = r.created_time
+        try:
+            t = t.astimezone(_VN) if _VN else t
+        except Exception:
+            pass
+        rows.append({
+            'id': r.id, 'painting': r.painting, 'qty': r.qty,
+            'colors': r.colors or [], 'note': r.note,
+            'assignee': r.assignee, 'by': r.created_by,
+            'dt': t.strftime('%d/%m %H:%M'),
+        })
+    return JsonResponse({'rows': rows, 'count': len(rows)})
+
+
+@csrf_exempt
+@login_required(login_url='/login')
+def lich_su_rot(request):
+    """Lịch sử các lượt rót (mới nhất trước). ?range=today|all."""
+    from pha.models import PourLog
+    now = _now()
+    if request.GET.get('range') == 'today':
+        qs = PourLog.objects.filter(day=now.strftime('%Y-%m-%d'))
+    else:
+        qs = PourLog.objects.all()
+    rows = []
+    for log in qs.order_by('-created_time')[:100]:
+        t = log.created_time
+        try:
+            t = t.astimezone(_VN) if _VN else t
+        except Exception:
+            pass
+        rows.append({
+            'dt': t.strftime('%d/%m %H:%M'), 'painting': log.painting,
+            'qty': log.qty, 'colors': log.color_count, 'user': log.user or '',
+        })
+    return JsonResponse({'rows': rows})
+
+
+@csrf_exempt
+@staff_required
+def thong_ke_rot(request):
+    label, agg = _pour_stats(request.GET.get('range', 'today'), request.GET.get('month'))
+    return JsonResponse({'label': label, 'pours': agg['pours'],
+                         'paintings': agg['paintings'], 'rows': agg['rows']})
+
+
+@csrf_exempt
+@staff_required
+def export_thong_ke_rot_excel(request):
+    """Xuất báo cáo rót màu ra Excel (.xlsx) theo khoảng thời gian."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    range_ = request.GET.get('range', 'month')
+    month = request.GET.get('month')
+    label, qs = _pour_stats_qs(range_, month)
+    agg = _pour_aggregate(qs)
+
+    wb = Workbook()
+    head_fill = PatternFill('solid', fgColor='6F42C1')
+    head_font = Font(bold=True, color='FFFFFF')
+    center = Alignment(horizontal='center')
+
+    # Sheet 1: tổng lượt theo mã màu
+    ws = wb.active
+    ws.title = "Tong theo mau"
+    ws.append(["BÁO CÁO RÓT MÀU"])
+    ws.append([label])
+    ws.append([f"Số lượt rót: {agg['pours']}    Tổng số tranh: {agg['paintings']}"])
+    ws.append(["Mã màu DALI", "Số lượt rót"])
+    for c in ws[4]:
+        c.fill = head_fill; c.font = head_font; c.alignment = center
+    for u in agg['rows']:
+        ws.append([u['dali'], u['count']])
+    ws.column_dimensions['A'].width = 24
+    ws.column_dimensions['B'].width = 16
+
+    # Sheet 2: chi tiết từng lượt rót
+    ws2 = wb.create_sheet("Chi tiet rot")
+    ws2.append(["Ngày giờ", "Mã tranh", "Số lượng", "Số màu", "Người rót", "Danh sách màu"])
+    for c in ws2[1]:
+        c.fill = head_fill; c.font = head_font; c.alignment = center
+    for log in qs.order_by('created_time'):
+        t = log.created_time
+        try:
+            t = t.astimezone(_VN) if _VN else t
+        except Exception:
+            pass
+        detail = ", ".join(c.get('dali', '') if isinstance(c, dict) else str(c)
+                           for c in (log.colors or []))
+        ws2.append([t.strftime('%d/%m/%Y %H:%M'), log.painting, log.qty,
+                    log.color_count, log.user or '', detail])
+    for col, w in zip('ABCDEF', (18, 16, 10, 8, 16, 70)):
+        ws2.column_dimensions[col].width = w
+
+    resp = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = 'attachment; filename="bao_cao_rot_mau.xlsx"'
+    wb.save(resp)
+    return resp
+
+
 # ===================== XỬ LÝ ẢNH (tab cho chủ) =====================
 def _fmt_name(filename):
     """Tên hiển thị gọn: '18:58 08/06 · Asset 2@4x.png' từ tên file có timestamp."""

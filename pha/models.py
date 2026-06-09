@@ -100,3 +100,59 @@ class ProductionLog(models.Model):
 
     def __str__(self):
         return f'{self.day} {self.dali} x{self.multiplier}'
+
+
+class Painting(models.Model):
+    """Mã tranh: danh mục tranh tô màu số. Mỗi mã tranh gồm danh sách mã màu DALI
+    cần rót. Chủ/quản lý khai báo trước; nhân viên chọn mã tranh là ra sẵn list màu."""
+    code = models.CharField(max_length=100, unique=True)            # mã tranh
+    name = models.CharField(max_length=200, blank=True, default='')  # tên tranh (tuỳ chọn)
+    colors = models.JSONField(default=list)        # [{'dali':..., 'hex':...}, ...]
+    note = models.CharField(max_length=200, blank=True, default='')
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated', '-id']             # mới lưu/cập nhật lên đầu
+
+    def __str__(self):
+        return self.code
+
+
+class PourLog(models.Model):
+    """Nhật ký RÓT MÀU cho từng mã tranh (thống kê số mã tranh + lượt từng màu)."""
+    created_time = models.DateTimeField(auto_now_add=True)
+    day = models.CharField(max_length=10, db_index=True)    # YYYY-MM-DD (giờ VN)
+    month = models.CharField(max_length=7, db_index=True)   # YYYY-MM
+    painting = models.CharField(max_length=100)             # mã tranh đã rót
+    colors = models.JSONField(default=list)                 # màu đã rót [{'dali','hex'}]
+    color_count = models.IntegerField(default=0)            # số mã màu trong lượt này
+    qty = models.IntegerField(default=1)                    # số lượng tranh trong lượt rót
+    user = models.CharField(max_length=80, blank=True, default='')   # ai đã rót
+    request_id = models.IntegerField(null=True, blank=True)  # liên kết yêu cầu (nếu rót theo giao việc)
+
+    def __str__(self):
+        return f'{self.day} {self.painting} ×{self.qty}'
+
+
+class PourRequest(models.Model):
+    """Yêu cầu rót màu do QUẢN LÝ giao cho nhân viên (một chiều). Nhân viên nhận
+    và đánh dấu 'đã rót' để tắt yêu cầu."""
+    STATUS_PENDING = 'pending'
+    STATUS_DONE = 'done'
+
+    created_time = models.DateTimeField(auto_now_add=True)
+    painting = models.CharField(max_length=100)            # mã tranh cần rót
+    colors = models.JSONField(default=list)               # mã màu cần rót [{'dali','hex'}]
+    qty = models.IntegerField(default=1)                  # số lượng tranh
+    note = models.CharField(max_length=300, blank=True, default='')
+    assignee = models.CharField(max_length=80, blank=True, default='')  # giao cho ai ('' = mọi người)
+    created_by = models.CharField(max_length=80, blank=True, default='')
+    status = models.CharField(max_length=20, default=STATUS_PENDING, db_index=True)
+    done_by = models.CharField(max_length=80, blank=True, default='')
+    done_time = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['status', '-created_time', '-id']      # đang chờ lên đầu
+
+    def __str__(self):
+        return f'{self.painting} → {self.assignee or "mọi người"} ({self.status})'

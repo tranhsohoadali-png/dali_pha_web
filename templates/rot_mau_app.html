@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#6F42C1">
+  <title>Rót màu DALI</title>
+  <link rel="apple-touch-icon" href="/media/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Rót màu">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    body { background:#f6f7f9; padding-bottom: 28px; }
+    .topbar { position: sticky; top:0; z-index:10; background:#6F42C1; color:#fff;
+      padding:.6rem .6rem .7rem; padding-top: calc(.6rem + env(safe-area-inset-top)); }
+    .search-lg { height:50px; font-size:1.1rem; border-radius:10px; }
+    .sw { width:26px; height:26px; border-radius:.35rem; border:1px solid rgba(0,0,0,.2); display:inline-block; vertical-align:middle; }
+    .rc { background:#fff; border-radius:.8rem; box-shadow:0 1px 5px rgba(0,0,0,.1); margin-bottom:.85rem; }
+    .rc h2 { font-size:1.2rem; margin:0; font-weight:700; }
+    .color-chip { display:inline-flex; align-items:center; gap:.3rem; border:1px solid #dee2e6; border-radius:1rem; padding:.15rem .6rem .15rem .35rem; font-size:.95rem; margin:0 .3rem .3rem 0; background:#fff; }
+    .rot-btn { height:46px; font-size:1.1rem; font-weight:700; border-radius:10px; padding:0 1rem; }
+    .qtybox { width:64px; height:46px; font-size:1.15rem; text-align:center; font-weight:700; border-radius:10px; }
+    .pha-modal { position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:1000; display:none; align-items:center; justify-content:center; padding:22px; }
+    .pha-box { background:#fff; border-radius:16px; padding:22px; width:100%; max-width:380px; text-align:center; }
+    .pha-box .ttl { color:#666; font-size:1.05rem; }
+    .pha-box .info { font-size:1.7rem; font-weight:700; margin:6px 0 4px; }
+    .pha-box .sub { color:#6F42C1; font-size:1.2rem; font-weight:700; margin-bottom:18px; }
+    .pha-box .btn { height:54px; font-size:1.15rem; font-weight:700; border-radius:12px; }
+    .tabbtn { height:44px; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="d-flex align-items-center gap-2 mb-2">
+    <i class="bi bi-paint-bucket fs-3"></i>
+    <h1 class="h5 mb-0 flex-grow-1">Rót màu</h1>
+    <a href="/app" class="btn btn-sm btn-light" title="App pha màu"><i class="bi bi-droplet-half"></i></a>
+    <span class="text-white small me-1"><i class="bi bi-person-circle"></i> {{ user.username }}</span>
+    <a href="/logout" class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-right"></i></a>
+  </div>
+  <div class="d-flex gap-2">
+    <button id="tabReq" class="btn btn-light flex-fill fw-bold tabbtn position-relative">Cần rót <span id="reqBadge" class="badge text-bg-danger" style="display:none">0</span></button>
+    <button id="tabCat" class="btn btn-outline-light flex-fill fw-bold tabbtn">Mã tranh</button>
+    <button id="tabHist" class="btn btn-outline-light flex-fill fw-bold tabbtn"><i class="bi bi-clock-history"></i></button>
+  </div>
+</div>
+
+<!-- Cần rót (yêu cầu từ quản lý) -->
+<div class="p-2" id="reqView">
+  <div class="d-flex justify-content-end mb-1">
+    <button id="reqReload" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i> Tải lại</button>
+  </div>
+  <div id="reqList"><p class="text-secondary text-center py-4">Đang tải…</p></div>
+</div>
+
+<!-- Mã tranh (rót chủ động) -->
+<div class="p-2" id="catView" style="display:none">
+  <input id="q" class="form-control search-lg mb-2" placeholder="🔍 Tìm mã tranh…">
+  <div id="catList"></div>
+  <p id="noResult" class="text-secondary text-center py-4" style="display:none">Không tìm thấy mã tranh.</p>
+</div>
+
+<!-- Lịch sử rót -->
+<div class="px-2" id="histView" style="display:none">
+  <div class="rc p-2">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <button class="btn btn-warning flex-fill fw-bold hr" data-r="today">Hôm nay</button>
+      <button class="btn btn-light flex-fill fw-bold hr" data-r="all">Tất cả</button>
+      <button id="histReload" class="btn btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+    <table class="table mb-0">
+      <thead><tr><th>Giờ</th><th>Mã tranh</th><th class="text-center">SL</th></tr></thead>
+      <tbody id="histBody"><tr><td colspan="3" class="text-secondary text-center">Đang tải…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Hộp xác nhận -->
+<div id="phaModal" class="pha-modal">
+  <div class="pha-box">
+    <div class="ttl">Xác nhận đã rót xong</div>
+    <div class="info" id="phaInfo">—</div>
+    <div class="sub" id="phaSub"></div>
+    <button id="phaYes" class="btn btn-success w-100 mb-2"><i class="bi bi-check-lg"></i> Đồng ý, đã rót</button>
+    <button id="phaNo" class="btn btn-outline-secondary w-100">Huỷ</button>
+  </div>
+</div>
+
+<div id="toast" style="position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#212529;color:#fff;padding:12px 18px;border-radius:10px;z-index:1100;display:none;font-size:1.05rem"></div>
+
+<script>
+  var PAINTINGS = {{ paintings_json|safe }};
+
+  function csrf(){ var m=document.cookie.match(/csrftoken=([^;]+)/); return m?m[1]:''; }
+  function toast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(function(){t.style.display='none';},2000); }
+  function esc(s){ return (s||'').replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function chips(colors){
+    return (colors||[]).map(function(c){
+      var sw='<span class="sw" style="background:'+(c.hex?'#'+c.hex:'#ccc')+'"></span>';
+      return '<span class="color-chip">'+sw+esc(c.dali)+'</span>';
+    }).join('');
+  }
+  function normCode(s){
+    var TONE = {'́':'s','̀':'f','̉':'r','̃':'x','̣':'j'};
+    return s.normalize('NFD').replace(/[̀-ͯ]/g, function(m){ return TONE[m] || ''; })
+            .replace(/đ/g,'dd').replace(/Đ/g,'DD').toUpperCase();
+  }
+  (function(){ var q=document.getElementById('q'); if(q) q.addEventListener('input', function(){ var v=normCode(this.value); if(v!==this.value) this.value=v; }); })();
+
+  // ---- Tabs ----
+  function showTab(which){
+    document.getElementById('reqView').style.display  = which==='req'?'':'none';
+    document.getElementById('catView').style.display  = which==='cat'?'':'none';
+    document.getElementById('histView').style.display = which==='hist'?'':'none';
+    [['tabReq','req'],['tabCat','cat'],['tabHist','hist']].forEach(function(p){
+      var b=document.getElementById(p[0]); var on=(p[1]===which);
+      b.className='btn flex-fill fw-bold tabbtn position-relative '+(on?'btn-light':'btn-outline-light');
+    });
+    if(which==='req') loadReq();
+    if(which==='hist') loadHist();
+    window.scrollTo(0,0);
+  }
+  document.getElementById('tabReq').addEventListener('click', function(){ showTab('req'); });
+  document.getElementById('tabCat').addEventListener('click', function(){ showTab('cat'); });
+  document.getElementById('tabHist').addEventListener('click', function(){ showTab('hist'); });
+
+  // ---- Cần rót (yêu cầu) ----
+  function setBadge(n){ var b=document.getElementById('reqBadge'); if(n>0){ b.textContent=n; b.style.display=''; } else b.style.display='none'; }
+  function loadReq(){
+    var box=document.getElementById('reqList');
+    fetch('/rot-yeu-cau').then(function(r){return r.json();}).then(function(res){
+      setBadge(res.count||0);
+      if(!res.rows || !res.rows.length){ box.innerHTML='<p class="text-secondary text-center py-4"><i class="bi bi-emoji-smile"></i> Không có việc cần rót.</p>'; return; }
+      box.innerHTML = res.rows.map(function(r){
+        return '<div class="rc p-2">'+
+          '<div class="d-flex align-items-center gap-2 mb-1">'+
+            '<h2 class="flex-grow-1">'+esc(r.painting)+' <span class="text-secondary" style="font-size:.9rem">×'+r.qty+'</span></h2>'+
+            '<button class="btn btn-success rot-btn rot-req" data-id="'+r.id+'" data-painting="'+esc(r.painting)+'" data-qty="'+r.qty+'"><i class="bi bi-check-lg"></i> Đã rót</button>'+
+          '</div>'+
+          (r.assignee ? '<div class="small mb-1"><span class="badge text-bg-info">'+esc(r.assignee)+'</span></div>' : '')+
+          '<div class="mb-1">'+chips(r.colors)+'</div>'+
+          (r.note ? '<div class="small text-secondary"><i class="bi bi-sticky"></i> '+esc(r.note)+'</div>' : '')+
+          '<div class="small text-secondary"><i class="bi bi-person"></i> '+esc(r.by||'')+' · '+r.dt+'</div>'+
+        '</div>';
+      }).join('');
+    }).catch(function(){ box.innerHTML='<p class="text-danger text-center py-4">Lỗi tải dữ liệu.</p>'; });
+  }
+  document.getElementById('reqReload').addEventListener('click', loadReq);
+
+  // ---- Mã tranh (catalog) ----
+  function renderCat(){
+    var box=document.getElementById('catList');
+    if(!PAINTINGS.length){ box.innerHTML='<p class="text-secondary text-center py-5">Chưa có mã tranh nào. Quản lý cần khai báo trước.</p>'; return; }
+    box.innerHTML = PAINTINGS.map(function(p){
+      return '<div class="rc p-2 cat-card" data-search="'+esc((p.code+' '+(p.name||'')).toLowerCase())+'">'+
+        '<div class="d-flex align-items-center gap-2 mb-1">'+
+          '<h2 class="flex-grow-1">'+esc(p.code)+(p.name?' <span class="text-secondary" style="font-size:.85rem">· '+esc(p.name)+'</span>':'')+'</h2>'+
+          '<input type="number" class="form-control qtybox catqty" value="1" min="1">'+
+          '<button class="btn btn-primary rot-btn rot-cat" data-painting="'+esc(p.code)+'"><i class="bi bi-paint-bucket"></i> Rót</button>'+
+        '</div>'+
+        '<div>'+chips(p.colors)+'</div>'+
+      '</div>';
+    }).join('');
+  }
+  renderCat();
+  document.getElementById('q').addEventListener('input', function(){
+    var s=this.value.trim().toLowerCase(), any=false;
+    document.querySelectorAll('.cat-card').forEach(function(c){
+      var show=!s || (c.dataset.search||'').indexOf(s)!==-1; c.style.display=show?'':'none'; if(show) any=true;
+    });
+    document.getElementById('noResult').style.display = any?'none':'block';
+  });
+
+  // ---- Lịch sử ----
+  var histRange='today';
+  function loadHist(){
+    var tb=document.getElementById('histBody'); if(!tb) return;
+    fetch('/lich-su-rot?range='+histRange).then(function(r){return r.json();}).then(function(res){
+      if(!res.rows || !res.rows.length){ tb.innerHTML='<tr><td colspan="3" class="text-secondary text-center">Chưa có lượt rót nào.</td></tr>'; return; }
+      tb.innerHTML = res.rows.map(function(x){
+        return '<tr><td>'+x.dt+'</td><td class="fw-bold">'+esc(x.painting)+'</td><td class="text-center">×'+x.qty+'</td></tr>';
+      }).join('');
+    }).catch(function(){});
+  }
+  document.getElementById('histReload').addEventListener('click', loadHist);
+  document.querySelectorAll('.hr').forEach(function(b){ b.addEventListener('click', function(){
+    histRange=this.dataset.r;
+    document.querySelectorAll('.hr').forEach(function(x){ var on=(x.dataset.r===histRange); x.classList.toggle('btn-warning',on); x.classList.toggle('btn-light',!on); });
+    loadHist();
+  }); });
+
+  // ---- Xác nhận rót ----
+  var pending=null, busy=false;
+  var modal=document.getElementById('phaModal');
+  function openConfirm(p){
+    if(busy) return;
+    pending=p;
+    document.getElementById('phaInfo').textContent=p.painting;
+    document.getElementById('phaSub').textContent='Số lượng ×'+p.qty;
+    modal.style.display='flex';
+  }
+  function closeConfirm(){ modal.style.display='none'; pending=null; }
+  document.getElementById('phaNo').addEventListener('click', closeConfirm);
+  modal.addEventListener('click', function(e){ if(e.target===modal) closeConfirm(); });
+
+  document.addEventListener('click', function(e){
+    var rq=e.target.closest('.rot-req');
+    if(rq){ openConfirm({request_id:rq.dataset.id, painting:rq.dataset.painting, qty:rq.dataset.qty}); return; }
+    var rc=e.target.closest('.rot-cat');
+    if(rc){
+      var card=rc.closest('.cat-card'); var qty=card.querySelector('.catqty');
+      var q=parseInt(qty.value,10)||1; if(q<1) q=1;
+      openConfirm({painting:rc.dataset.painting, qty:q});
+    }
+  });
+
+  document.getElementById('phaYes').addEventListener('click', function(){
+    if(busy || !pending) return;
+    busy=true; var yes=this; yes.disabled=true; yes.innerHTML='Đang ghi…';
+    var fd=new FormData();
+    fd.append('painting', pending.painting); fd.append('qty', pending.qty);
+    if(pending.request_id) fd.append('request_id', pending.request_id);
+    fetch('/rot',{method:'POST',body:fd,headers:{'X-CSRFToken':csrf()}}).then(function(r){return r.json();}).then(function(res){
+      toast(res.ok?('✓ '+res.msg):(res.msg||'Lỗi'));
+      if(res.ok){ loadReq(); }
+    }).catch(function(){ toast('Lỗi kết nối'); }).then(function(){
+      busy=false; yes.disabled=false; yes.innerHTML='<i class="bi bi-check-lg"></i> Đồng ý, đã rót'; closeConfirm();
+    });
+  });
+
+  // mặc định mở tab "Cần rót"
+  loadReq();
+</script>
+</body>
+</html>
