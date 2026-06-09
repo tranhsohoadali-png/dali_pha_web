@@ -119,7 +119,7 @@ PRESETS = {
         'label': 'Anime / tranh nhỏ (dưới 12 màu)',
         'desc': 'Tranh anime/chibi, nét sạch, ít màu. Số nhỏ gọn, nét mượt.',
         'color_limit': 12, 'smooth': 1, 'min_area': 60, 'enhance': False,
-        'use_refs': False, 'prompt': DEFAULT_ENHANCE_PROMPT,
+        'use_refs': False, 'face_priority': False, 'prompt': DEFAULT_ENHANCE_PROMPT,
     },
     'photo': {
         'label': 'Ảnh thật khách hàng (chân dung, 30–48 màu)',
@@ -127,13 +127,13 @@ PRESETS = {
                 'tô màu (posterize) — KHÔNG đổi sang anime/AI. Bật AI = posterize sạch '
                 'hơn; tắt AI = giản lược thuần thuật toán. Cả hai đều giữ ảnh thật.',
         'color_limit': 40, 'smooth': 2, 'min_area': 60, 'enhance': True,
-        'use_refs': True, 'prompt': _PROMPT_PHOTO,
+        'use_refs': True, 'face_priority': True, 'prompt': _PROMPT_PHOTO,
     },
     'design': {
         'label': 'Tranh thiết kế (đang phát triển)',
         'desc': 'Ảnh thiết kế phẳng/vector sẵn -> chuẩn hoá nét + màu phẳng.',
         'color_limit': 16, 'smooth': 0, 'min_area': 40, 'enhance': False,
-        'use_refs': False, 'prompt': _PROMPT_DESIGN,
+        'use_refs': False, 'face_priority': False, 'prompt': _PROMPT_DESIGN,
     },
 }
 DEFAULT_PRESET = 'anime'

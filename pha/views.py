@@ -679,6 +679,22 @@ def _painting_map():
     return {p.code.strip().lower(): p for p in Painting.objects.all()}
 
 
+def _remove_media(name):
+    """Xoá 1 file trong MEDIA_ROOT (bỏ qua nếu không có)."""
+    if not name:
+        return
+    try:
+        os.remove(os.path.join(settings.MEDIA_ROOT, name))
+    except OSError:
+        pass
+
+
+def _painting_dict(p):
+    """Mã tranh dạng dict cho JSON (kèm URL ảnh nếu có)."""
+    return {'code': p.code, 'name': p.name, 'colors': p.colors or [],
+            'image': ('/media/' + p.image) if p.image else ''}
+
+
 def _record_pour(painting, colors, qty, user, req=None):
     """Ghi 1 lượt rót màu vào nhật ký; nếu có yêu cầu (req) thì đánh dấu đã rót."""
     from pha.models import PourLog, PourRequest
@@ -764,16 +780,31 @@ def ma_tranh(request):
                 messages.error(request, 'Chưa nhập mã màu cho tranh.')
             else:
                 obj = Painting.objects.filter(code__iexact=code).first()
+                image_name = obj.image if obj else ''
+                up = request.FILES.get('image')
+                if up and up.content_type and up.content_type.startswith('image/'):
+                    fss = FileSystemStorage()
+                    new_name = fss.save(f'painting_{datetime.now():%Y-%m-%d_%H-%M-%S}_{up.name}', up)
+                    _remove_media(image_name)        # xoá ảnh cũ (nếu thay)
+                    image_name = new_name
+                elif request.POST.get('remove_image') == '1':
+                    _remove_media(image_name)
+                    image_name = ''
                 if obj:
-                    obj.code, obj.name, obj.note, obj.colors = code, name, note, colors
+                    obj.code, obj.name, obj.note, obj.colors, obj.image = code, name, note, colors, image_name
                     obj.save()
                     messages.info(request, f'Đã cập nhật mã tranh {code} ({len(colors)} màu).')
                 else:
-                    Painting.objects.create(code=code, name=name, note=note, colors=colors)
+                    Painting.objects.create(code=code, name=name, note=note, colors=colors, image=image_name)
                     messages.info(request, f'Đã lưu mã tranh {code} ({len(colors)} màu).')
         elif action == 'delete_painting':
-            n, _ = Painting.objects.filter(code__iexact=(request.POST.get('code') or '').strip()).delete()
-            messages.info(request, 'Đã xoá mã tranh.' if n else 'Không tìm thấy.')
+            dp = Painting.objects.filter(code__iexact=(request.POST.get('code') or '').strip()).first()
+            if dp:
+                _remove_media(dp.image)
+                dp.delete()
+                messages.info(request, 'Đã xoá mã tranh.')
+            else:
+                messages.info(request, 'Không tìm thấy.')
         elif action == 'add_request':
             code = (request.POST.get('painting') or '').strip()
             p = Painting.objects.filter(code__iexact=code).first()
@@ -808,7 +839,11 @@ def ma_tranh(request):
         return redirect('/ma-tranh')
 
     paintings = list(Painting.objects.all())
+    pmap = {p.code.strip().lower(): p for p in paintings}
     pending = list(PourRequest.objects.filter(status=PourRequest.STATUS_PENDING))
+    for r in pending:
+        pp = pmap.get(r.painting.strip().lower())
+        r.image = ('/media/' + pp.image) if (pp and pp.image) else ''
     done = list(PourRequest.objects.filter(status=PourRequest.STATUS_DONE)
                 .order_by('-done_time', '-id')[:30])
     for r in done:
@@ -821,8 +856,7 @@ def ma_tranh(request):
     label, agg = _pour_stats('today', None)
     return render(request, 'ma_tranh.html', {
         'paintings': paintings,
-        'paintings_json': json.dumps([
-            {'code': p.code, 'name': p.name, 'colors': p.colors or []} for p in paintings]),
+        'paintings_json': json.dumps([_painting_dict(p) for p in paintings]),
         'pending': pending, 'done': done,
         'staff_users': _staff_users(),
         'stat_months': stat_months, 'stat_label': label, 'stat_agg': agg,
@@ -840,8 +874,7 @@ def _pour_stats(range_, month_param):
 def rot_mau_app(request):
     """App ĐIỆN THOẠI cho nhân viên: rót màu theo mã tranh + nhận yêu cầu từ quản lý."""
     from pha.models import Painting
-    paintings = [{'code': p.code, 'name': p.name, 'colors': p.colors or []}
-                 for p in Painting.objects.all()]
+    paintings = [_painting_dict(p) for p in Painting.objects.all()]
     return render(request, 'rot_mau_app.html', {'paintings_json': json.dumps(paintings)})
 
 
@@ -892,6 +925,7 @@ def rot_yeu_cau_list(request):
     if not request.user.is_staff:
         from django.db.models import Q
         qs = qs.filter(Q(assignee='') | Q(assignee=request.user.username))
+    pmap = _painting_map()
     rows = []
     for r in qs:
         t = r.created_time
@@ -899,10 +933,12 @@ def rot_yeu_cau_list(request):
             t = t.astimezone(_VN) if _VN else t
         except Exception:
             pass
+        p = pmap.get(r.painting.strip().lower())
         rows.append({
             'id': r.id, 'painting': r.painting, 'qty': r.qty,
             'colors': r.colors or [], 'note': r.note,
             'assignee': r.assignee, 'by': r.created_by,
+            'image': ('/media/' + p.image) if (p and p.image) else '',
             'dt': t.strftime('%d/%m %H:%M'),
         })
     return JsonResponse({'rows': rows, 'count': len(rows)})
@@ -1098,13 +1134,14 @@ def xu_ly_anh(request):
         preset = get_preset(preset_key)
         ai_prompt = preset.get('prompt')        # prompt riêng theo loại tranh
         use_refs = bool(preset.get('use_refs'))  # dùng Kho mẫu làm tham chiếu phong cách
+        face_priority = bool(preset.get('face_priority'))  # dồn màu cho khuôn mặt
         rec = ImageResult.objects.create(
             name=name, status=ImageResult.STATUS_PROCESSING, user=request.user.username,
             params={'enhance': enhance, 'color_limit': color_limit, 'min_area': min_area,
                     'smooth': smooth, 'style_category': style_category or '',
                     'preset': preset_key})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
-                             color_limit, min_area, smooth, ai_prompt, use_refs)
+                             color_limit, min_area, smooth, ai_prompt, use_refs, face_priority)
         _prune_image_results()                 # giữ 10 kết quả gần nhất (bộ nhớ tạm)
         ctx = build_ctx()
         ctx['file_url'] = '/media/' + name
