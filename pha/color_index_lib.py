@@ -50,7 +50,7 @@ THRESHOLD_PERCENT_COLOR = config("THRESHOLD_PERCENT_COLOR", default=0.0003, cast
 # (k-means LAB), giữ chi tiết mắt/mũi/môi (min_radius nhỏ trong mặt) và làm mềm
 # da (bilateral) trước khi gom. Một bảng màu duy nhất -> không seam mặt/nền.
 FACE_PRIORITY = config("FACE_PRIORITY", default=True, cast=bool)
-FACE_OVERSAMPLE = config("FACE_OVERSAMPLE", default=9, cast=int)     # mức ưu tiên màu cho mặt
+FACE_OVERSAMPLE = config("FACE_OVERSAMPLE", default=12, cast=int)    # mức ưu tiên màu cho mặt+tóc
 FACE_BILATERAL_D = config("FACE_BILATERAL_D", default=7, cast=int)    # làm mềm da (0 = tắt)
 KMEANS_MAX_SIDE = config("KMEANS_MAX_SIDE", default=900, cast=int)    # downscale CHỈ để xây bảng màu
 FACE_MIN_RADIUS = config("FACE_MIN_RADIUS", default=3.0, cast=float)  # ngưỡng giữ chi tiết trong mặt
@@ -358,8 +358,10 @@ def _face_mask(bgr):
             if not (0.6 <= w / float(h) <= 1.7):
                 continue
             cx = x + w / 2.0
-            x0 = int(max(0, cx - w * 0.7)); x1 = int(min(W, cx + w * 0.7))
-            y0 = int(max(0, y - h * 0.45)); y1 = int(min(H, y + h * 1.2))   # chừa trán/tóc + cằm
+            # Nới ôm thêm TÓC quanh mặt (hai bên + đỉnh + xuống cổ) nhưng không phình
+            # ra nền (giữ tốc độ + đúng "ưu tiên mặt").
+            x0 = int(max(0, cx - w * 0.78)); x1 = int(min(W, cx + w * 0.78))
+            y0 = int(max(0, y - h * 0.5)); y1 = int(min(H, y + h * 1.3))
             ctr = ((x0 + x1) // 2, (y0 + y1) // 2)
             axes = (max(1, (x1 - x0) // 2), max(1, (y1 - y0) // 2))
             cv2.ellipse(mask, ctr, axes, 0, 0, 360, 255, -1)
