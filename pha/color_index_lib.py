@@ -50,7 +50,8 @@ THRESHOLD_PERCENT_COLOR = config("THRESHOLD_PERCENT_COLOR", default=0.0003, cast
 # Dồn nhiều màu vào vùng mặt bằng cách OVERSAMPLE pixel mặt khi xây bảng màu
 # (k-means LAB), giữ chi tiết mắt/mũi/môi (min_radius nhỏ trong mặt) và làm mềm
 # da (bilateral) trước khi gom. Một bảng màu duy nhất -> không seam mặt/nền.
-FACE_PRIORITY = config("FACE_PRIORITY", default=True, cast=bool)
+# Mặc định TẮT: trả về đúng luồng mượt cũ (đẹp). Bật lại thử bằng FACE_PRIORITY=1.
+FACE_PRIORITY = config("FACE_PRIORITY", default=False, cast=bool)
 FACE_OVERSAMPLE = config("FACE_OVERSAMPLE", default=12, cast=int)    # mức ưu tiên màu cho mặt+tóc
 FACE_BILATERAL_D = config("FACE_BILATERAL_D", default=7, cast=int)    # làm mềm da (0 = tắt)
 KMEANS_MAX_SIDE = config("KMEANS_MAX_SIDE", default=900, cast=int)    # downscale CHỈ để xây bảng màu
