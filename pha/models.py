@@ -137,6 +137,25 @@ class PourLog(models.Model):
         return f'{self.day} {self.painting} ×{self.qty}'
 
 
+class PaintingProduction(models.Model):
+    """Nhật ký SẢN XUẤT tranh (số lượng tranh thành phẩm) — quản lý TỰ ĐIỀN.
+    Tách riêng khỏi luồng rót màu; thống kê số lượng tranh theo kích thước/mã/ngày."""
+    created_time = models.DateTimeField(auto_now_add=True)
+    day = models.CharField(max_length=10, db_index=True)    # YYYY-MM-DD (giờ VN)
+    month = models.CharField(max_length=7, db_index=True)   # YYYY-MM
+    painting = models.CharField(max_length=100, blank=True, default='')  # mã tranh (tuỳ chọn)
+    size = models.CharField(max_length=20, blank=True, default='', db_index=True)  # kích thước
+    qty = models.IntegerField(default=1)                    # số lượng tranh
+    note = models.CharField(max_length=300, blank=True, default='')
+    user = models.CharField(max_length=80, blank=True, default='')
+
+    class Meta:
+        ordering = ['-created_time', '-id']
+
+    def __str__(self):
+        return f'{self.day} {self.painting} {self.size} ×{self.qty}'
+
+
 class PushSubscription(models.Model):
     """Đăng ký Web Push của trình duyệt nhân viên (để đẩy thông báo cả khi tắt app)."""
     username = models.CharField(max_length=80, db_index=True)

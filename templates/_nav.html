@@ -26,6 +26,9 @@
           <a class="nav-link position-relative{% if '/ma-tranh' in request.path %} active fw-semibold{% endif %}" href="/ma-tranh"><i class="bi bi-paint-bucket"></i> Rót màu{% if nav_pour_pending %} <span class="badge text-bg-warning">{{ nav_pour_pending }}</span>{% endif %}</a>
         </li>
         <li class="nav-item">
+          <a class="nav-link{% if '/san-xuat' in request.path %} active fw-semibold{% endif %}" href="/san-xuat"><i class="bi bi-box2-heart"></i> Sản xuất</a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link position-relative{% if '/kho-son' in request.path %} active fw-semibold{% endif %}" href="/kho-son"><i class="bi bi-box-seam"></i> Kho sơn{% if nav_low_count %} <span class="badge text-bg-danger">{{ nav_low_count }}</span>{% endif %}</a>
         </li>
         <li class="nav-item">

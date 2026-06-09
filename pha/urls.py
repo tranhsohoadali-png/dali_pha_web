@@ -34,6 +34,11 @@ urlpatterns = [
     path('rot-yeu-cau', views.rot_yeu_cau_list, name='rot_yeu_cau_list'),
     path('lich-su-rot', views.lich_su_rot, name='lich_su_rot'),
     path('xoa-lich-su-rot', views.xoa_lich_su_rot, name='xoa_lich_su_rot'),
+
+    # Sản xuất tranh (module quản lý tự điền)
+    path('san-xuat', views.san_xuat, name='san_xuat'),
+    path('thong-ke-san-xuat', views.thong_ke_san_xuat, name='thong_ke_san_xuat'),
+    path('san-xuat-excel', views.export_san_xuat_excel, name='san_xuat_excel'),
     path('quan-ly-giao-rot', views.quan_ly_giao_rot, name='quan_ly_giao_rot'),
     path('push-key', views.push_key, name='push_key'),
     path('push-subscribe', views.push_subscribe, name='push_subscribe'),
