@@ -108,6 +108,7 @@ class Painting(models.Model):
     code = models.CharField(max_length=100, unique=True)            # mã tranh
     name = models.CharField(max_length=200, blank=True, default='')  # tên tranh (tuỳ chọn)
     colors = models.JSONField(default=list)        # [{'dali':..., 'hex':...}, ...]
+    image = models.TextField(blank=True, default='')   # ảnh mẫu/bản đồ màu (file trong MEDIA_ROOT)
     note = models.CharField(max_length=200, blank=True, default='')
     updated = models.DateTimeField(auto_now=True)
 

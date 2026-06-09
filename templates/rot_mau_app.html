@@ -89,6 +89,11 @@
   </div>
 </div>
 
+<!-- Lightbox xem ảnh mẫu -->
+<div id="lightbox" style="position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:2000;display:none;align-items:center;justify-content:center;padding:10px;cursor:zoom-out">
+  <img id="lightboxImg" style="max-width:100%;max-height:100%;border-radius:8px">
+</div>
+
 <div id="toast" style="position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#212529;color:#fff;padding:12px 18px;border-radius:10px;z-index:1100;display:none;font-size:1.05rem"></div>
 
 <script>
@@ -142,6 +147,7 @@
           '</div>'+
           (r.assignee ? '<div class="small mb-1"><span class="badge text-bg-info">'+esc(r.assignee)+'</span></div>' : '')+
           '<div class="mb-1">'+chips(r.colors)+'</div>'+
+          (r.image ? '<img src="'+r.image+'" class="img-fluid rounded border mb-1 zoom-img" style="max-height:180px;cursor:zoom-in">' : '')+
           (r.note ? '<div class="small text-secondary"><i class="bi bi-sticky"></i> '+esc(r.note)+'</div>' : '')+
           '<div class="small text-secondary"><i class="bi bi-person"></i> '+esc(r.by||'')+' · '+r.dt+'</div>'+
         '</div>';
@@ -162,6 +168,7 @@
           '<button class="btn btn-primary rot-btn rot-cat" data-painting="'+esc(p.code)+'"><i class="bi bi-paint-bucket"></i> Rót</button>'+
         '</div>'+
         '<div>'+chips(p.colors)+'</div>'+
+        (p.image ? '<img src="'+p.image+'" class="img-fluid rounded border mt-2 zoom-img" style="max-height:160px;cursor:zoom-in">' : '')+
       '</div>';
     }).join('');
   }
@@ -205,6 +212,14 @@
   function closeConfirm(){ modal.style.display='none'; pending=null; }
   document.getElementById('phaNo').addEventListener('click', closeConfirm);
   modal.addEventListener('click', function(e){ if(e.target===modal) closeConfirm(); });
+
+  // ---- Lightbox ----
+  var lightbox=document.getElementById('lightbox');
+  lightbox.addEventListener('click', function(){ lightbox.style.display='none'; });
+  document.addEventListener('click', function(e){
+    var zi=e.target.closest('.zoom-img');
+    if(zi){ document.getElementById('lightboxImg').src=zi.getAttribute('src'); lightbox.style.display='flex'; }
+  });
 
   document.addEventListener('click', function(e){
     var rq=e.target.closest('.rot-req');
