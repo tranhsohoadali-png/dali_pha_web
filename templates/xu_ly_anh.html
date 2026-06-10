@@ -74,6 +74,26 @@
                     <option value="3">Mạnh (ảnh màu nước/ảnh chụp)</option>
                   </select>
                 </div>
+                <div class="col-6">
+                  <label class="form-label small mb-1"><i class="bi bi-person-bounding-box text-primary"></i> Chi tiết MẶT</label>
+                  <select name="face_detail" class="form-select form-select-sm" title="Vùng mặt: dễ tô = ít ô, to; chi tiết = nhiều ô nhỏ">
+                    <option value="0">Dễ tô nhất</option>
+                    <option value="1">Dễ tô</option>
+                    <option value="2" selected>Vừa</option>
+                    <option value="3">Chi tiết</option>
+                    <option value="4">Chi tiết nhất</option>
+                  </select>
+                </div>
+                <div class="col-6">
+                  <label class="form-label small mb-1"><i class="bi bi-image text-success"></i> Chi tiết CẢNH</label>
+                  <select name="scene_detail" class="form-select form-select-sm" title="Nền/cảnh: dễ tô = ít ô, to; chi tiết = nhiều ô nhỏ">
+                    <option value="0">Dễ tô nhất</option>
+                    <option value="1">Dễ tô</option>
+                    <option value="2" selected>Vừa</option>
+                    <option value="3">Chi tiết</option>
+                    <option value="4">Chi tiết nhất</option>
+                  </select>
+                </div>
                 <div class="col-12">
                   <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="facePriority" name="face_priority" value="1">
@@ -230,6 +250,8 @@
     var cl=document.querySelector('[name="color_limit"]'); if(cl) cl.value=p.color_limit||'';
     var ma=document.querySelector('[name="min_area"]'); if(ma) ma.value=p.min_area||'';
     var sm=document.querySelector('[name="smooth"]'); if(sm) sm.value=String(p.smooth||0);
+    var fdt=document.querySelector('[name="face_detail"]'); if(fdt) fdt.value=String(p.face_detail!=null?p.face_detail:2);
+    var sdt=document.querySelector('[name="scene_detail"]'); if(sdt) sdt.value=String(p.scene_detail!=null?p.scene_detail:2);
     var fp=document.getElementById('facePriority'); if(fp) fp.checked=!!p.face_priority;
     document.getElementById('presetBase').value=p.base||k;
     var en=document.getElementById('enhance');
@@ -246,6 +268,8 @@
       name:'', color_limit:document.querySelector('[name="color_limit"]').value||'',
       min_area:document.querySelector('[name="min_area"]').value||'',
       smooth:document.querySelector('[name="smooth"]').value||'0',
+      face_detail:document.querySelector('[name="face_detail"]').value||'2',
+      scene_detail:document.querySelector('[name="scene_detail"]').value||'2',
       enhance:(document.getElementById('enhance')&&document.getElementById('enhance').checked)?'1':'0',
       face_priority:document.getElementById('facePriority').checked?'1':'0',
       base:document.getElementById('presetBase').value||'photo'
@@ -365,10 +389,13 @@
       // Dòng thông số đã dùng (để kiểm tra)
       var p=res.params||{}; var pi=document.getElementById('paramInfo');
       var sm=['Không','Nhẹ','Vừa','Mạnh'][p.smooth||0]||'Không';
+      var dl=['Dễ tô nhất','Dễ tô','Vừa','Chi tiết','Chi tiết nhất'];
       var t='<i class="bi bi-sliders"></i> Thông số: '+(p.color_limit?('Số màu '+p.color_limit):'Số màu tự động')
             +' · '+(p.min_area?('Bỏ mảng <'+p.min_area+'px'):'Không lọc mảng')
             +(p.print_size?(' · Khổ '+p.print_size):'')
             +' · Đơn giản: '+sm
+            +' · Mặt: '+(dl[p.face_detail!=null?p.face_detail:2])
+            +' · Cảnh: '+(dl[p.scene_detail!=null?p.scene_detail:2])
             +(p.face_priority?' · Ưu tiên mặt':'')
             +' · AI: '+(p.enhance?'có':'không')+(p.enhance&&p.style_category?(' ('+p.style_category+')'):'');
       pi.innerHTML=t; pi.classList.remove('d-none');

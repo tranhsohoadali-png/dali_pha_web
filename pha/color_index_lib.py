@@ -666,7 +666,8 @@ def _merge_small_regions(img_rgb, min_area=0, min_radius=5.5, max_pass=6,
     return img
 
 
-def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long_cm=0):
+def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long_cm=0,
+                   bg_radius=None, face_radius=None, feat_radius=None, path_ksize=None):
     """Gom ảnh về tối đa n màu (median-cut) rồi lưu file tạm. Trả (đường_dẫn_tạm).
     smooth (0..3): làm phẳng vùng bằng mean-shift trước khi gom màu — biến ảnh
     màu nước/ảnh chụp (chuyển sắc mượt, nhiều chi tiết) thành các MẢNG ĐẶC sạch,
@@ -721,17 +722,26 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long
         ksize_sm = 5
 
     # GỘP các vùng không đánh được số vào hàng xóm -> hết 'dăm', mọi ô đều numberable.
-    # Ngưỡng gộp theo CỠ SỐ cố định (CHUẨN, không theo cm).
-    min_radius = (MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0
-    arr = _merge_small_regions(arr, min_area=min_area, min_radius=min_radius, max_pass=4,
-                               face_mask=face_mask, face_min_radius=FACE_MIN_RADIUS,
-                               feature_mask=feature_mask, feature_min_radius=FEATURE_MIN_RADIUS)
+    # NÚM DỄ TÔ: bán kính gộp vùng (px). Càng TO = gộp mạnh = ít vùng, dễ tô hơn.
+    #   - bg_radius   : ngưỡng cho NỀN/CẢNH (ngoài mặt).
+    #   - face_radius : ngưỡng trong MẶT (giữ chi tiết da/tóc).
+    #   - feat_radius : ngưỡng NGŨ QUAN (mắt/mũi/môi) — nhỏ nhất.
+    #   - path_ksize  : độ làm mượt PATH/biên (median lớn hơn = viền trơn hơn).
+    # None = giữ mặc định cũ.
+    base_bg = (MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0
+    bg_r = base_bg if bg_radius is None else float(bg_radius)
+    face_r = FACE_MIN_RADIUS if face_radius is None else float(face_radius)
+    feat_r = FEATURE_MIN_RADIUS if feat_radius is None else float(feat_radius)
+    ks = ksize_sm if path_ksize is None else max(3, int(path_ksize) | 1)   # luôn lẻ
+    arr = _merge_small_regions(arr, min_area=min_area, min_radius=bg_r, max_pass=4,
+                               face_mask=face_mask, face_min_radius=face_r,
+                               feature_mask=feature_mask, feature_min_radius=feat_r)
     # LÀM MƯỢT biên vùng (median trên nhãn màu) -> bỏ răng cưa/mảnh thừa, nét trơn.
     protect = feature_mask if FEATURE_PROTECT_SMOOTH else None
-    arr = _smooth_boundaries(arr, ksize=ksize_sm, protect_mask=protect)
-    arr = _merge_small_regions(arr, min_area=0, min_radius=min_radius, max_pass=2,
-                               face_mask=face_mask, face_min_radius=FACE_MIN_RADIUS,
-                               feature_mask=feature_mask, feature_min_radius=FEATURE_MIN_RADIUS)
+    arr = _smooth_boundaries(arr, ksize=ks, protect_mask=protect)
+    arr = _merge_small_regions(arr, min_area=0, min_radius=bg_r, max_pass=2,
+                               face_mask=face_mask, face_min_radius=face_r,
+                               feature_mask=feature_mask, feature_min_radius=feat_r)
     fd, out = tempfile.mkstemp(suffix='.png', prefix='quant_')
     os.close(fd)
     Image.fromarray(arr).save(out)
@@ -835,19 +845,39 @@ def _reduce_palette_perceptual(img_rgb, target_n, protect_mask=None):
     return out.reshape(img_rgb.shape)
 
 
+def detail_to_params(face_detail=2, scene_detail=2):
+    """Map 2 núm 'ĐỘ CHI TIẾT / DỄ TÔ' (0 = dễ tô nhất ... 4 = chi tiết nhất) cho
+    MẶT và CẢNH -> (bg_radius, face_radius, feat_radius, path_ksize) cho index_color.
+    Mức thấp = bán kính gộp TO = ít vùng, viền mượt = dễ tô. Cả hai None -> mặc định."""
+    if face_detail is None and scene_detail is None:
+        return None, None, None, None
+    fd = 2 if face_detail is None else max(0, min(4, int(face_detail)))
+    sd = 2 if scene_detail is None else max(0, min(4, int(scene_detail)))
+    bg = {0: 14.0, 1: 11.0, 2: 8.0, 3: 6.0, 4: 4.0}[sd]          # NỀN / CẢNH
+    face = {0: 10.0, 1: 8.0, 2: 6.0, 3: 4.5, 4: 3.0}[fd]         # trong MẶT
+    feat = {0: 6.0, 1: 5.0, 2: 4.0, 3: 3.0, 4: 2.2}[fd]          # NGŨ QUAN
+    ks = {0: 9, 1: 9, 2: 7, 3: 5, 4: 5}[min(fd, sd)]            # độ mượt viền
+    return bg, face, feat, ks
+
+
 def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_out=None,
-                face_priority=True, print_long_cm=0):
+                face_priority=True, print_long_cm=0,
+                bg_radius=None, face_radius=None, feat_radius=None, path_ksize=None):
     """num_colors > 0: gom ảnh về tối đa N màu (để trống = DEFAULT_NUM_COLORS).
     min_area > 0: bỏ các mảng màu nhỏ hơn N pixel (đỡ lấm tấm).
     smooth (0..3): làm phẳng vùng (mean-shift) trước khi gom — dọn ảnh màu nước/chụp.
     design_out: nếu có, lưu ảnh THIẾT KẾ (bản màu phẳng đã gom) ra đường dẫn này.
-    print_long_cm > 0: khổ in cạnh dài (cm) -> cỡ số + ngưỡng đánh số tính theo cm
-      thật (khổ to thì vùng nhỏ vẫn được đánh số, số không quá to)."""
+    print_long_cm > 0: khổ in cạnh dài (cm) -> cỡ số + ngưỡng đánh số tính theo cm.
+    bg_radius/face_radius/feat_radius: NÚM DỄ TÔ — bán kính gộp vùng (px) cho
+      NỀN / MẶT / NGŨ QUAN (to = gộp mạnh = ít vùng, dễ tô). path_ksize: độ mượt
+      viền (median lớn = path trơn). None = mặc định."""
     import os
     import shutil
     effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
     work_path = _quantize_file(path, effective_n, smooth=smooth, min_area=min_area,
-                               face_priority=face_priority, print_long_cm=print_long_cm)
+                               face_priority=face_priority, print_long_cm=print_long_cm,
+                               bg_radius=bg_radius, face_radius=face_radius,
+                               feat_radius=feat_radius, path_ksize=path_ksize)
     if design_out:
         try:
             shutil.copyfile(work_path, design_out)   # bản màu phẳng để xem trước
