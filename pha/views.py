@@ -267,7 +267,8 @@ def api_ketoan(request):
 @csrf_exempt
 def api_luong(request):
     """API LƯƠNG cho phần mềm kế toán (ketoan.tranhdali.vn): mỗi nhân viên/tháng gồm
-    NĂNG SUẤT (lương khoán) + CHẤM CÔNG (ngày công, giờ, tăng ca, đi muộn, phạt).
+    CHẤM CÔNG (ngày công, giờ, tăng ca, đi muộn) + SẢN LƯỢNG (tham khảo).
+    Lương TÍNH THEO NGÀY CÔNG bên kế toán — API này không tính tiền lương.
     Bảo vệ bằng ?key=KETOAN_API_KEY. Có CORS. ?month=YYYY-MM (mặc định tháng này)."""
     origin = getattr(settings, 'KETOAN_ALLOW_ORIGIN', '*')
 
@@ -287,47 +288,46 @@ def api_luong(request):
     now = _now()
     month = request.GET.get('month') or now.strftime('%Y-%m')
 
-    # Năng suất + lương khoán (piece-rate)
-    _, prows, _ptot, rates = _productivity('month', month)
+    # Sản lượng (để kế toán tham khảo / tính thưởng nếu cần) — KHÔNG tính tiền ở đây
+    _, prows, _ptot = _productivity('month', month)
     pmap = {r['user']: r for r in prows}
 
-    # Chấm công + tăng ca + phạt
+    # Chấm công: ngày công + giờ + tăng ca + đi muộn (đầu vào để kế toán tính lương theo NGÀY CÔNG)
     cfg = _att_cfg()
     att = {}
     for r in Attendance.objects.filter(month=month):
         c = _att_calc(r, cfg)
         a = att.setdefault(r.user, {'work_days': 0, 'total_hours': 0.0, 'ot_hours': 0.0,
-                                    'ot_pay': 0, 'late_minutes': 0, 'late_fine': 0})
+                                    'ot_pay': 0, 'late_minutes': 0, 'late_fine': 0, 'late_days': 0})
         if r.check_in:
             a['work_days'] += 1
+        if c['late_min'] > 0:
+            a['late_days'] += 1
         a['total_hours'] += c['hours']; a['ot_hours'] += c['ot_hours']
         a['ot_pay'] += c['ot_pay']; a['late_minutes'] += c['late_min']; a['late_fine'] += c['fine']
 
     users = sorted(set(pmap) | set(att))
     employees = []
     for u in users:
-        p = pmap.get(u, {'pha': 0, 'rot_p': 0, 'rot_c': 0, 'sx': 0, 'pay': 0})
+        p = pmap.get(u, {'pha': 0, 'rot_p': 0, 'rot_c': 0, 'sx': 0})
         a = att.get(u, {'work_days': 0, 'total_hours': 0.0, 'ot_hours': 0.0,
-                        'ot_pay': 0, 'late_minutes': 0, 'late_fine': 0})
-        piece_pay = round(p['pay'])
-        suggested = piece_pay + round(a['ot_pay']) - round(a['late_fine'])
+                        'ot_pay': 0, 'late_minutes': 0, 'late_fine': 0, 'late_days': 0})
         employees.append({
             'user': u,
-            'piece': {'pha_batches': p['pha'], 'rot_paintings': p['rot_p'],
-                      'rot_colors': p['rot_c'], 'sx_paintings': p['sx'], 'piece_pay': piece_pay},
             'attendance': {'work_days': a['work_days'], 'total_hours': round(a['total_hours'], 2),
                            'ot_hours': round(a['ot_hours'], 2), 'ot_pay': round(a['ot_pay']),
-                           'late_minutes': a['late_minutes'], 'late_fine': round(a['late_fine'])},
-            'suggested_net': suggested,
+                           'late_days': a['late_days'], 'late_minutes': a['late_minutes'],
+                           'late_fine': round(a['late_fine'])},
+            'output': {'pha_batches': p['pha'], 'rot_paintings': p['rot_p'],
+                       'rot_colors': p['rot_c'], 'sx_paintings': p['sx']},
         })
 
     data = {
         'ok': True, 'source': 'mau.tranhdali.vn',
         'generated_at': now.strftime('%Y-%m-%d %H:%M'), 'month': month,
-        'note': 'suggested_net = lương khoán + tiền tăng ca − phạt đi muộn '
-                '(CHƯA gồm lương cơ bản/phụ cấp/BHXH — kế toán tự cộng).',
-        'piece_rates': {'pha_per_batch': rates['pha'], 'rot_per_painting': rates['rot_p'],
-                        'rot_per_color': rates['rot_c'], 'sx_per_painting': rates['sx']},
+        'note': 'Lương tính theo NGÀY CÔNG ở phần mềm kế toán. API này chỉ cung cấp '
+                'số ngày công, giờ, tăng ca, đi muộn (+ sản lượng để tham khảo). '
+                'Không tính tiền lương ở đây.',
         'schedule': {'work_start': cfg['start'], 'work_end': cfg['end'],
                      'work_days': sorted(cfg['workdays']),
                      'work_days_label': [_WEEKDAYS[i] for i in sorted(cfg['workdays'])],
@@ -335,10 +335,10 @@ def api_luong(request):
                      'late_fine_fixed': cfg['fine_fixed'], 'ot_rate_per_hour': cfg['ot_rate']},
         'employees': employees,
         'totals': {
-            'piece_pay': sum(e['piece']['piece_pay'] for e in employees),
+            'work_days': sum(e['attendance']['work_days'] for e in employees),
+            'ot_hours': round(sum(e['attendance']['ot_hours'] for e in employees), 2),
             'ot_pay': sum(e['attendance']['ot_pay'] for e in employees),
             'late_fine': sum(e['attendance']['late_fine'] for e in employees),
-            'suggested_net': sum(e['suggested_net'] for e in employees),
         },
     }
     return _cors(JsonResponse(data))
@@ -1585,21 +1585,9 @@ def _period_filter(range_, month_param):
     return "Hôm nay (" + now.strftime('%d/%m/%Y') + ")", {'day': now.strftime('%Y-%m-%d')}
 
 
-def _pay_rates():
-    """Đơn giá khoán (đồng) lưu trong AppSetting."""
-    from pha.models import AppSetting
-
-    def num(k):
-        try:
-            return float((AppSetting.get(k, '0') or '0').replace(',', '').strip() or 0)
-        except (TypeError, ValueError):
-            return 0.0
-    return {'pha': num('PAY_PHA'), 'rot_p': num('PAY_ROT_P'),
-            'rot_c': num('PAY_ROT_C'), 'sx': num('PAY_SX')}
-
-
 def _productivity(range_, month_param):
-    """Năng suất + lương khoán theo nhân viên trong khoảng. Trả (label, rows, totals, rates)."""
+    """Sản lượng theo nhân viên trong khoảng (để quản lý lãi/lỗ). Trả (label, rows, totals).
+    KHÔNG tính lương — lương tính theo NGÀY CÔNG ở phần mềm kế toán."""
     from pha.models import ProductionLog, PourLog, PaintingProduction
     label, f = _period_filter(range_, month_param)
     acc = {}
@@ -1618,37 +1606,27 @@ def _productivity(range_, month_param):
     for p in PaintingProduction.objects.filter(**f):
         row(p.user)['sx'] += max(1, int(p.qty or 1))
 
-    rates = _pay_rates()
     rows = []
     for v in acc.values():
-        v['pay'] = round(v['pha'] * rates['pha'] + v['rot_p'] * rates['rot_p']
-                         + v['rot_c'] * rates['rot_c'] + v['sx'] * rates['sx'])
+        v['out'] = v['pha'] + v['rot_p'] + v['sx']  # tổng đầu việc (xếp hạng)
         rows.append(v)
-    rows.sort(key=lambda x: -x['pay'])
-    totals = {k: sum(r[k] for r in rows) for k in ('pha', 'rot_p', 'rot_c', 'sx', 'pay')}
-    return label, rows, totals, rates
+    rows.sort(key=lambda x: -x['out'])
+    totals = {k: sum(r[k] for r in rows) for k in ('pha', 'rot_p', 'rot_c', 'sx', 'out')}
+    return label, rows, totals
 
 
 @csrf_exempt
 @staff_required
 def nang_suat(request):
-    """Báo cáo NĂNG SUẤT + LƯƠNG KHOÁN theo nhân viên (chỉ quản lý)."""
-    from pha.models import AppSetting, ProductionLog, PourLog, PaintingProduction
-    if request.method == 'POST' and request.POST.get('action') == 'save_rates':
-        for key, fld in (('PAY_PHA', 'pay_pha'), ('PAY_ROT_P', 'pay_rot_p'),
-                         ('PAY_ROT_C', 'pay_rot_c'), ('PAY_SX', 'pay_sx')):
-            val = (request.POST.get(fld) or '0').replace(',', '').strip() or '0'
-            AppSetting.set(key, val)
-        messages.info(request, 'Đã lưu đơn giá khoán.')
-        return redirect('/nang-suat')
-
-    label, rows, totals, rates = _productivity('month', None)
+    """Báo cáo SẢN LƯỢNG theo nhân viên (để quản lý lãi/lỗ). Lương tính ở phần kế toán."""
+    from pha.models import ProductionLog, PourLog, PaintingProduction
+    label, rows, totals = _productivity('month', None)
     months = set(ProductionLog.objects.values_list('month', flat=True))
     months |= set(PourLog.objects.values_list('month', flat=True))
     months |= set(PaintingProduction.objects.values_list('month', flat=True))
     stat_months = [{'value': m, 'label': _fmt_month(m)} for m in sorted(months, reverse=True)]
     return render(request, 'nang_suat.html', {
-        'label': label, 'rows': rows, 'totals': totals, 'rates': rates,
+        'label': label, 'rows': rows, 'totals': totals,
         'stat_months': stat_months,
     })
 
@@ -1656,39 +1634,37 @@ def nang_suat(request):
 @csrf_exempt
 @staff_required
 def thong_ke_nang_suat(request):
-    label, rows, totals, rates = _productivity(request.GET.get('range', 'month'),
-                                               request.GET.get('month'))
-    return JsonResponse({'label': label, 'rows': rows, 'totals': totals, 'rates': rates})
+    label, rows, totals = _productivity(request.GET.get('range', 'month'),
+                                        request.GET.get('month'))
+    return JsonResponse({'label': label, 'rows': rows, 'totals': totals})
 
 
 @csrf_exempt
 @staff_required
 def export_nang_suat_excel(request):
-    """Xuất bảng lương khoán / năng suất ra Excel."""
+    """Xuất bảng SẢN LƯỢNG theo nhân viên ra Excel."""
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
-    label, rows, totals, rates = _productivity(request.GET.get('range', 'month'),
-                                               request.GET.get('month'))
+    label, rows, totals = _productivity(request.GET.get('range', 'month'),
+                                        request.GET.get('month'))
     wb = Workbook()
     ws = wb.active
-    ws.title = "Luong khoan"
+    ws.title = "San luong"
     head_fill = PatternFill('solid', fgColor='6610F2')
     head_font = Font(bold=True, color='FFFFFF')
     center = Alignment(horizontal='center')
-    ws.append(["BẢNG NĂNG SUẤT & LƯƠNG KHOÁN"])
+    ws.append(["BẢNG SẢN LƯỢNG THEO NHÂN VIÊN"])
     ws.append([label])
-    ws.append([f"Đơn giá: pha {rates['pha']:.0f}đ/mẻ · rót {rates['rot_p']:.0f}đ/tranh · "
-               f"màu rót {rates['rot_c']:.0f}đ/màu · SX {rates['sx']:.0f}đ/tranh"])
-    ws.append(["Nhân viên", "Mẻ pha", "Tranh rót", "Màu rót", "Tranh SX", "Lương khoán (đ)"])
-    for c in ws[4]:
+    ws.append(["Nhân viên", "Mẻ pha", "Tranh rót", "Màu rót", "Tranh SX", "Tổng đầu việc"])
+    for c in ws[3]:
         c.fill = head_fill; c.font = head_font; c.alignment = center
     for r in rows:
-        ws.append([r['user'], r['pha'], r['rot_p'], r['rot_c'], r['sx'], r['pay']])
-    ws.append(["TỔNG", totals['pha'], totals['rot_p'], totals['rot_c'], totals['sx'], totals['pay']])
-    for col, w in zip('ABCDEF', (18, 10, 12, 12, 12, 18)):
+        ws.append([r['user'], r['pha'], r['rot_p'], r['rot_c'], r['sx'], r['out']])
+    ws.append(["TỔNG", totals['pha'], totals['rot_p'], totals['rot_c'], totals['sx'], totals['out']])
+    for col, w in zip('ABCDEF', (18, 10, 12, 12, 12, 16)):
         ws.column_dimensions[col].width = w
     resp = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    resp['Content-Disposition'] = 'attachment; filename="luong_khoan.xlsx"'
+    resp['Content-Disposition'] = 'attachment; filename="san_luong.xlsx"'
     wb.save(resp)
     return resp
 
@@ -1712,9 +1688,18 @@ def _price_list():
     return [{'size': s, 'price': round(_price_of(s))} for s in sizes]
 
 
+def _labor_per_day():
+    """Đơn giá 1 ngày công (đồng/ngày) lưu trong AppSetting — để ước tính nhân công cho lãi/lỗ."""
+    from pha.models import AppSetting
+    try:
+        return float((AppSetting.get('LABOR_PER_DAY', '0') or '0').replace(',', '').strip() or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _profit(range_, month_param):
-    """Doanh thu (SX theo khổ × giá bán) − chi phí sơn − lương khoán = lợi nhuận."""
-    from pha.models import PaintingProduction, ProductionLog
+    """Doanh thu (SX theo khổ × giá bán) − chi phí sơn − nhân công (ngày công × đơn giá) = lợi nhuận."""
+    from pha.models import PaintingProduction, ProductionLog, Attendance
     label, f = _period_filter(range_, month_param)
     sizeqty = {}
     for p in PaintingProduction.objects.filter(**f):
@@ -1728,9 +1713,12 @@ def _profit(range_, month_param):
         rows.append({'size': sz, 'qty': q, 'price': round(price), 'revenue': round(rev)})
     rows.sort(key=lambda x: -x['revenue'])
     paint_cost = ProductionLog.objects.filter(**f).aggregate(s=Sum('cost'))['s'] or 0
-    _, _, totals, _ = _productivity(range_, month_param)
-    labor = totals['pay']
+    # Nhân công ước tính theo NGÀY CÔNG (khớp cách trả lương theo ngày công ở kế toán)
+    work_days = Attendance.objects.filter(check_in__isnull=False, **f).count()
+    per_day = _labor_per_day()
+    labor = work_days * per_day
     summary = {'revenue': round(revenue), 'paint_cost': round(paint_cost),
+               'work_days': work_days, 'per_day': round(per_day),
                'labor': round(labor), 'profit': round(revenue - paint_cost - labor)}
     return label, rows, summary
 
@@ -1745,7 +1733,8 @@ def loi_nhuan(request):
             sz = (sz or '').strip()
             if sz:
                 AppSetting.set('PRICE_' + sz, (pr or '0').replace(',', '').strip() or '0')
-        messages.info(request, 'Đã lưu giá bán theo kích thước.')
+        AppSetting.set('LABOR_PER_DAY', (request.POST.get('labor_per_day') or '0').replace(',', '').strip() or '0')
+        messages.info(request, 'Đã lưu giá bán & đơn giá ngày công.')
         return redirect('/loi-nhuan')
 
     label, rows, summary = _profit('month', None)
@@ -1755,6 +1744,7 @@ def loi_nhuan(request):
     return render(request, 'loi_nhuan.html', {
         'label': label, 'rows': rows, 'summary': summary,
         'price_list': _price_list(), 'stat_months': stat_months,
+        'labor_per_day': round(_labor_per_day()),
     })
 
 
@@ -1781,7 +1771,8 @@ def export_loi_nhuan_excel(request):
     ws.append([label])
     ws.append(["Doanh thu", summary['revenue']])
     ws.append(["Chi phí sơn", summary['paint_cost']])
-    ws.append(["Chi phí nhân công (khoán)", summary['labor']])
+    ws.append([f"Nhân công ({summary.get('work_days', 0)} công × {summary.get('per_day', 0):,}đ)",
+               summary['labor']])
     ws.append(["LỢI NHUẬN", summary['profit']])
     ws.append([])
     ws.append(["Kích thước", "Số tranh", "Giá bán (đ)", "Doanh thu (đ)"])
@@ -1950,27 +1941,19 @@ def _att_calc(rec, cfg):
     return out
 
 
-def _emp_pay(user, **f):
-    """Tiền công 1 nhân viên trong khoảng f (day=.. hoặc month=..): khoán + tăng ca − phạt."""
-    from pha.models import ProductionLog, PourLog, PaintingProduction, Attendance
-    rates = _pay_rates()
+def _emp_cong(user, **f):
+    """Ngày công 1 nhân viên trong khoảng f (day=.. hoặc month=..):
+    số ngày công, tổng giờ làm, giờ tăng ca, số phút đi muộn."""
+    from pha.models import Attendance
     cfg = _att_cfg()
-    pha = ProductionLog.objects.filter(user=user, **f).count()
-    rot_p = rot_c = 0
-    for log in PourLog.objects.filter(user=user, **f):
-        q = max(1, int(log.qty or 1))
-        rot_p += q
-        rot_c += int(log.color_count or 0) * q
-    sx = sum(max(1, int(p.qty or 1)) for p in PaintingProduction.objects.filter(user=user, **f))
-    piece = round(pha * rates['pha'] + rot_p * rates['rot_p']
-                  + rot_c * rates['rot_c'] + sx * rates['sx'])
-    ot = fine = 0
+    days = late_min = 0
+    hours = ot = 0.0
     for r in Attendance.objects.filter(user=user, **f):
         c = _att_calc(r, cfg)
-        ot += c['ot_pay']
-        fine += c['fine']
-    ot, fine = round(ot), round(fine)
-    return {'piece': piece, 'ot': ot, 'fine': fine, 'total': piece + ot - fine}
+        if r.check_in:
+            days += 1
+        hours += c['hours']; ot += c['ot_hours']; late_min += c['late_min']
+    return {'days': days, 'hours': round(hours, 1), 'ot': round(ot, 1), 'late_min': late_min}
 
 
 @csrf_exempt
@@ -2016,13 +1999,18 @@ def cham_cong(request):
             if not rec.check_in:
                 return JsonResponse({'ok': False, 'msg': 'Bạn chưa chấm công VÀO.'})
             rec.check_out = now; rec.ip_out = ip; rec.device_out = device; rec.save()
-            day_s, month_s = now.strftime('%Y-%m-%d'), now.strftime('%Y-%m')
-            dp = _emp_pay(u, day=day_s)
-            mp = _emp_pay(u, month=month_s)
+            month_s = now.strftime('%Y-%m')
+            tc = _att_calc(rec, _att_cfg())  # công hôm nay
+            mc = _emp_cong(u, month=month_s)  # tổng tháng
             return JsonResponse({'ok': True, 'msg': 'Đã chấm công RA lúc ' + _hm(now),
                                  'in': _hm(rec.check_in), 'out': _hm(rec.check_out),
-                                 'pay': {'day': dp, 'month_total': mp['total'],
-                                         'month_label': _fmt_month(month_s), 'time': _hm(now)}})
+                                 'cong': {'time': _hm(now),
+                                          'today_hours': round(tc['hours'], 1),
+                                          'today_ot': round(tc['ot_hours'], 1),
+                                          'today_late': tc['late_min'],
+                                          'month_days': mc['days'], 'month_hours': mc['hours'],
+                                          'month_ot': mc['ot'], 'month_late': mc['late_min'],
+                                          'month_label': _fmt_month(month_s)}})
         return JsonResponse({'ok': False, 'msg': 'Hành động không hợp lệ.'})
 
     today = Attendance.objects.filter(user=request.user.username,

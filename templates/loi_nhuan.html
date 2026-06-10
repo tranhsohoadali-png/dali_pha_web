@@ -21,7 +21,7 @@
     <div class="col-12">
       <details class="card shadow-sm">
         <summary class="card-header fw-semibold" style="cursor:pointer; list-style:none;">
-          <i class="bi bi-tag"></i> Giá bán theo kích thước <span class="text-secondary small fw-normal">(bấm để mở/đóng — đặt giá để tính doanh thu)</span>
+          <i class="bi bi-tag"></i> Giá bán &amp; đơn giá ngày công <span class="text-secondary small fw-normal">(bấm để mở/đóng — đặt giá để tính doanh thu &amp; nhân công)</span>
         </summary>
         <div class="card-body">
           <form method="POST" action="/loi-nhuan" class="row g-2 align-items-end">
@@ -34,8 +34,14 @@
               <input type="number" name="pprice" class="form-control" value="{{ p.price }}" min="0" step="1000">
             </div>
             {% endfor %}
+            <div class="col-12"><hr class="my-2"></div>
+            <div class="col-6 col-md-3">
+              <label class="form-label small mb-1 fw-semibold text-primary">Lương 1 ngày công — đ/ngày</label>
+              <input type="number" name="labor_per_day" class="form-control" value="{{ labor_per_day }}" min="0" step="10000">
+              <div class="form-text">Nhân công = tổng ngày công × đơn giá này.</div>
+            </div>
             <div class="col-12 mt-2">
-              <button class="btn btn-primary fw-semibold"><i class="bi bi-save"></i> Lưu giá bán</button>
+              <button class="btn btn-primary fw-semibold"><i class="bi bi-save"></i> Lưu</button>
             </div>
           </form>
         </div>
@@ -66,7 +72,7 @@
           <div class="row g-2 mb-3">
             <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Doanh thu</div><div class="fs-4 fw-bold text-success" id="sRev">0</div><div class="small text-secondary">đồng</div></div></div>
             <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Chi phí sơn</div><div class="fs-4 fw-bold text-warning" id="sPaint">0</div><div class="small text-secondary">đồng</div></div></div>
-            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Nhân công (khoán)</div><div class="fs-4 fw-bold" style="color:#6610f2" id="sLabor">0</div><div class="small text-secondary">đồng</div></div></div>
+            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Nhân công (ngày công)</div><div class="fs-4 fw-bold" style="color:#6610f2" id="sLabor">0</div><div class="small text-secondary" id="sLaborBreak">đồng</div></div></div>
             <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Lợi nhuận</div><div class="fs-4 fw-bold text-primary" id="sProfit">0</div><div class="small text-secondary">đồng</div></div></div>
           </div>
 
@@ -80,7 +86,7 @@
             </div>
             <div class="col-lg-6"><div style="height:300px"><canvas id="sumChart"></canvas></div></div>
           </div>
-          <div class="form-text">Doanh thu = số tranh sản xuất × giá bán theo khổ. Lợi nhuận = Doanh thu − Chi phí sơn − Nhân công khoán. (Chưa gồm chi phí khác như khung, vận chuyển…)</div>
+          <div class="form-text">Doanh thu = số tranh sản xuất × giá bán theo khổ. Nhân công = tổng ngày công (từ chấm công) × đơn giá 1 công. Lợi nhuận = Doanh thu − Chi phí sơn − Nhân công. (Chưa gồm chi phí khác như khung, vận chuyển…)</div>
         </div>
       </div>
     </div>
@@ -109,6 +115,7 @@
       document.getElementById('sRev').textContent=vnd(sm.revenue);
       document.getElementById('sPaint').textContent=vnd(sm.paint_cost);
       document.getElementById('sLabor').textContent=vnd(sm.labor);
+      document.getElementById('sLaborBreak').textContent=(sm.work_days||0)+' công × '+vnd(sm.per_day)+'đ';
       var pf=document.getElementById('sProfit'); pf.textContent=vnd(sm.profit);
       pf.className='fs-4 fw-bold '+((sm.profit||0)>=0?'text-primary':'text-danger');
       var tb=document.getElementById('revBody');

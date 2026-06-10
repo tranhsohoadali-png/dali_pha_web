@@ -73,17 +73,19 @@
   </div>
 </div>
 
-<!-- Popup lương sau khi Tan làm -->
+<!-- Popup ngày công sau khi Tan làm -->
 <div id="payModal" class="pay-modal">
   <div class="pay-box">
-    <div style="font-size:2.6rem;line-height:1">🎉</div>
+    <div style="font-size:2.6rem;line-height:1">👋</div>
     <div class="text-secondary">Tan làm lúc <b id="payTime">--:--</b></div>
-    <div class="text-secondary small mt-3">Lương hôm nay</div>
-    <div id="payDay" class="fw-bold text-success" style="font-size:2.2rem">0đ</div>
+    <div class="text-secondary small mt-3">Công hôm nay</div>
+    <div id="payDay" class="fw-bold text-success" style="font-size:2.2rem">0 giờ</div>
     <div id="payDayBreak" class="small text-secondary"></div>
     <hr>
-    <div class="text-secondary small">Tổng lương <span id="payMonthLabel">tháng này</span></div>
-    <div id="payMonth" class="fw-bold text-primary" style="font-size:1.7rem">0đ</div>
+    <div class="text-secondary small">Tổng <span id="payMonthLabel">tháng này</span></div>
+    <div id="payMonth" class="fw-bold text-primary" style="font-size:1.5rem">0 ngày công</div>
+    <div id="payMonthBreak" class="small text-secondary"></div>
+    <div class="small text-secondary mt-2"><i class="bi bi-info-circle"></i> Lương do kế toán tính theo ngày công.</div>
     <button id="payOk" class="btn btn-success w-100 mt-3" style="height:50px;font-weight:700">Đóng</button>
   </div>
 </div>
@@ -112,25 +114,27 @@
       toast(res.ok?('✓ '+res.msg):(res.msg||'Lỗi'));
       if(res.in!==undefined) document.getElementById('tIn').textContent=res.in||'--:--';
       if(res.out!==undefined) document.getElementById('tOut').textContent=res.out||'--:--';
-      if(res.ok && res.pay) showPay(res.pay);
+      if(res.ok && res.cong) showPay(res.cong);
     }).catch(function(){ busy=false; btn.disabled=false; toast('Lỗi kết nối'); });
   }
   document.getElementById('btnIn').addEventListener('click', function(){ punch('in', this); });
   document.getElementById('btnOut').addEventListener('click', function(){ punch('out', this); });
 
-  // ----- Popup lương khi Tan làm -----
-  function vnd(n){ return Math.round(n||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.') + 'đ'; }
-  function showPay(pay){
-    var d=pay.day||{};
-    document.getElementById('payTime').textContent = pay.time || '';
-    document.getElementById('payDay').textContent = vnd(d.total);
-    var parts=[];
-    if(d.piece) parts.push('khoán '+vnd(d.piece));
-    if(d.ot) parts.push('tăng ca '+vnd(d.ot));
-    if(d.fine) parts.push('− phạt '+vnd(d.fine));
-    document.getElementById('payDayBreak').textContent = parts.length ? '('+parts.join(' + ').replace('+ −','−')+')' : '';
-    document.getElementById('payMonthLabel').textContent = pay.month_label || 'tháng này';
-    document.getElementById('payMonth').textContent = vnd(pay.month_total);
+  // ----- Popup ngày công khi Tan làm -----
+  function hgio(n){ n=Math.round((n||0)*10)/10; return (n%1===0? n.toFixed(0): n.toFixed(1))+' giờ'; }
+  function showPay(c){
+    document.getElementById('payTime').textContent = c.time || '';
+    document.getElementById('payDay').textContent = hgio(c.today_hours);
+    var dp=[];
+    if(c.today_ot) dp.push('tăng ca '+hgio(c.today_ot));
+    if(c.today_late) dp.push('đi muộn '+c.today_late+' phút');
+    document.getElementById('payDayBreak').textContent = dp.length ? '('+dp.join(' · ')+')' : '';
+    document.getElementById('payMonthLabel').textContent = c.month_label || 'tháng này';
+    document.getElementById('payMonth').textContent = (c.month_days||0)+' ngày công';
+    var mp=['tổng '+hgio(c.month_hours)];
+    if(c.month_ot) mp.push('tăng ca '+hgio(c.month_ot));
+    if(c.month_late) mp.push('đi muộn '+c.month_late+' phút');
+    document.getElementById('payMonthBreak').textContent = '('+mp.join(' · ')+')';
     document.getElementById('payModal').style.display='flex';
   }
   document.getElementById('payOk').addEventListener('click', function(){ document.getElementById('payModal').style.display='none'; });
