@@ -227,28 +227,38 @@ def normalize_contour(contour):
 
 
 def get_center_poly_from_contours(contours, hierarchy, range_img, img, debug=False):
+    # TỐI ƯU (giữ NGUYÊN kết quả): (1) chỉ mục CON theo CHA dựng 1 lần -> bỏ việc
+    # quét TOÀN BỘ hierarchy mỗi lần tìm anh em (O(n^2) -> O(n) khi ảnh nhiều
+    # mảnh/lỗ, vd chân dung); (2) cache normalize_contour (tolist tốn -> mỗi
+    # contour chỉ chuyển 1 lần). Thứ tự duyệt anh em vẫn theo chỉ số như cũ.
+    from collections import defaultdict
     hierarchy = hierarchy[0]
     contour_parents = {}
     processed = set()
 
+    _norm_cache = {}
+
+    def norm(idx):
+        c = _norm_cache.get(idx)
+        if c is None:
+            c = normalize_contour(contours[idx])
+            _norm_cache[idx] = c
+        return c
+
+    children_of = defaultdict(list)          # cha -> [chỉ số con] (theo thứ tự chỉ số)
+    for _idx in range(len(hierarchy)):
+        children_of[hierarchy[_idx][3]].append(_idx)
+
     def add_sub_to_parent(parent_idx, idx):
         if parent_idx not in contour_parents:
-            contour_parents[parent_idx] = []
-            c_t_parent = normalize_contour(contours[parent_idx])
-            contour_parents[parent_idx].append(c_t_parent)
+            contour_parents[parent_idx] = [norm(parent_idx)]
             processed.add(parent_idx)
         if idx != parent_idx:
-            c_t = normalize_contour(contours[idx])
-            contour_parents[parent_idx].append(c_t)
+            contour_parents[parent_idx].append(norm(idx))
             processed.add(idx)
 
     def get_contour_same_parent_not_processed(parent_idx):
-        output = []
-        for sub, (sub_nxt, sub_prev, sub_first_child, sub_parent) in enumerate(hierarchy):
-            if parent_idx == sub_parent and sub not in processed:
-                c_t = normalize_contour(contours[sub])
-                output.append(c_t)
-        return output
+        return [norm(sub) for sub in children_of[parent_idx] if sub not in processed]
 
     for i, (nxt, prev, first_child, parent) in enumerate(hierarchy):
         if debug:
@@ -259,16 +269,15 @@ def get_center_poly_from_contours(contours, hierarchy, range_img, img, debug=Fal
         if parent == -1:
             add_sub_to_parent(i, i)
             continue
-        c_t = normalize_contour(contours[i])
+        c_t = norm(i)
         if first_child == -1:
             center, dist = polylabelfast(c_t)
             if range_img[int(center[1]), int(center[0])] == 255:
                 add_sub_to_parent(i, i)
             else:
                 add_sub_to_parent(parent, i)
-
-                for sub, (sub_nxt, sub_prev, sub_first_child, sub_parent) in enumerate(hierarchy):
-                    if parent == sub_parent and sub not in processed:
+                for sub in children_of[parent]:
+                    if sub not in processed:
                         add_sub_to_parent(parent, sub)
             continue
 
@@ -276,8 +285,7 @@ def get_center_poly_from_contours(contours, hierarchy, range_img, img, debug=Fal
         if parent in contour_parents:
             group_contour = contour_parents[parent].copy()
         else:
-            c_t_parent = normalize_contour(contours[parent])
-            group_contour = [c_t_parent]
+            group_contour = [norm(parent)]
 
         group_contour += get_contour_same_parent_not_processed(parent)
         merge_parent = merge_contour(group_contour)
@@ -293,8 +301,8 @@ def get_center_poly_from_contours(contours, hierarchy, range_img, img, debug=Fal
         center, dist = polylabelfast(merge_child)
         if range_img[int(center[1]), int(center[0])] == 255:
             add_sub_to_parent(i, first_child)
-            for sub, (sub_nxt, sub_prev, sub_first_child, sub_parent) in enumerate(hierarchy):
-                if i == sub_parent and sub not in processed:
+            for sub in children_of[i]:
+                if sub not in processed:
                     add_sub_to_parent(i, sub)
             continue
 
