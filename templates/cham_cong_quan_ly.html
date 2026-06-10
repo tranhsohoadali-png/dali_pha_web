@@ -218,7 +218,68 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
       </div>
     </div>
   </div>
+
+  <!-- Khoá API kế toán / lương -->
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-key-fill"></i> Khoá API kế toán / lương</div>
+        <div class="card-body">
+          <div class="small text-secondary mb-2">Phần mềm kế toán (<b>ketoan.tranhdali.vn</b>) dùng khoá này để lấy dữ liệu lương. Đặt một chuỗi bí mật mạnh, dùng đúng chuỗi đó ở bên kế toán.</div>
+          <form method="POST" action="/cham-cong-quan-ly" class="row g-2 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_api_key">
+            <div class="col-md-9">
+              <label class="form-label small mb-1">Khoá API</label>
+              <div class="input-group">
+                <input type="text" name="api_key" id="apiKey" class="form-control font-monospace" value="{{ api_key }}" autocomplete="off">
+                <button type="button" id="genKey" class="btn btn-outline-secondary"><i class="bi bi-shuffle"></i> Tạo khoá mạnh</button>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu khoá</button>
+            </div>
+          </form>
+
+          <div class="mt-3 small">
+            <div class="fw-semibold mb-1">Đường dẫn API cho bên kế toán (bấm để sao chép):</div>
+            <div class="input-group input-group-sm mb-1">
+              <span class="input-group-text" style="min-width:88px">Lương</span>
+              <input class="form-control font-monospace copyurl" readonly value="{{ api_base }}/api/luong?key={{ api_key }}&month=2026-06">
+              <button class="btn btn-outline-secondary copybtn" type="button">Sao chép</button>
+            </div>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text" style="min-width:88px">Kế toán</span>
+              <input class="form-control font-monospace copyurl" readonly value="{{ api_base }}/api/ketoan?key={{ api_key }}">
+              <button class="btn btn-outline-secondary copybtn" type="button">Sao chép</button>
+            </div>
+          </div>
+          <div class="form-text text-danger mt-2"><i class="bi bi-exclamation-triangle"></i> Khoá này như mật khẩu — chỉ đưa cho người làm kế toán, đừng để lộ.</div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
+
+<script>
+  // Tạo khoá API ngẫu nhiên mạnh
+  (function(){
+    var gen=document.getElementById('genKey');
+    if(gen) gen.addEventListener('click', function(){
+      var a=new Uint8Array(24); (window.crypto||window.msCrypto).getRandomValues(a);
+      var s=btoa(String.fromCharCode.apply(null,a)).replace(/[+/=]/g,'').slice(0,32);
+      document.getElementById('apiKey').value='dali_'+s;
+    });
+  })();
+  // Sao chép URL
+  document.querySelectorAll('.copybtn').forEach(function(b){
+    b.addEventListener('click', function(){
+      var inp=this.parentNode.querySelector('.copyurl'); inp.select();
+      try{ navigator.clipboard.writeText(inp.value); }catch(e){ document.execCommand('copy'); }
+      var old=this.textContent; this.textContent='Đã chép'; var self=this; setTimeout(function(){ self.textContent=old; },1200);
+    });
+  });
+</script>
 
 <script>
   // Đổi tháng -> tải lại

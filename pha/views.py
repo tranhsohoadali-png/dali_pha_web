@@ -182,6 +182,19 @@ def dashboard(request):
     })
 
 
+def _api_key():
+    """Khoá API kế toán/lương: ưu tiên đặt trong DB (AppSetting, sửa qua web),
+    nếu trống thì dùng biến môi trường KETOAN_API_KEY."""
+    try:
+        from pha.models import AppSetting
+        k = (AppSetting.get('KETOAN_API_KEY', '') or '').strip()
+        if k:
+            return k
+    except Exception:
+        pass
+    return getattr(settings, 'KETOAN_API_KEY', '')
+
+
 @csrf_exempt
 def api_ketoan(request):
     """API đọc dữ liệu cho phần mềm KẾ TOÁN (ketoan.tranhdali.vn).
@@ -201,7 +214,7 @@ def api_ketoan(request):
         return _cors(HttpResponse(status=204))
 
     key = request.GET.get('key', '')
-    if key != getattr(settings, 'KETOAN_API_KEY', ''):
+    if key != _api_key():
         return _cors(JsonResponse({'ok': False, 'error': 'Sai khoá API'}, status=401))
 
     now = _now()
@@ -267,7 +280,7 @@ def api_luong(request):
 
     if request.method == 'OPTIONS':
         return _cors(HttpResponse(status=204))
-    if request.GET.get('key', '') != getattr(settings, 'KETOAN_API_KEY', ''):
+    if request.GET.get('key', '') != _api_key():
         return _cors(JsonResponse({'ok': False, 'error': 'Sai khoá API'}, status=401))
 
     from pha.models import Attendance
@@ -2023,6 +2036,10 @@ def cham_cong_quan_ly(request):
             DeviceBind.objects.filter(username=u).delete()
             messages.info(request, f'Đã reset thiết bị cho "{u}". Lần chấm tiếp theo của họ sẽ gắn với máy mới.')
             return redirect('/cham-cong-quan-ly')
+        if act == 'save_api_key':
+            AppSetting.set('KETOAN_API_KEY', (request.POST.get('api_key') or '').strip())
+            messages.info(request, 'Đã lưu khoá API kế toán/lương.')
+            return redirect('/cham-cong-quan-ly')
 
     now = _now()
     month = request.GET.get('month') or now.strftime('%Y-%m')
@@ -2074,6 +2091,8 @@ def cham_cong_quan_ly(request):
         'months': [{'value': m, 'label': _fmt_month(m)} for m in months],
         'summary': summary, 'totals': totals, 'detail': detail[:300],
         'shared': shared, 'noout': noout[:50], 'bindings': bindings,
+        'api_key': _api_key(),
+        'api_base': request.scheme + '://' + request.get_host(),
     })
 
 
