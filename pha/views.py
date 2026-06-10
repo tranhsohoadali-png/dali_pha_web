@@ -607,6 +607,48 @@ def manifest(request):
     return JsonResponse(data, content_type='application/manifest+json')
 
 
+def manifest_app(request):
+    """Manifest cho APP THỐNG NHẤT (cài màn hình chính, mở /home)."""
+    data = {
+        "name": "DALI Tranh số hoá", "short_name": "DALI",
+        "start_url": "/home", "scope": "/", "display": "standalone", "orientation": "portrait",
+        "background_color": "#ffffff", "theme_color": "#2E7D32",
+        "icons": [
+            {"src": "/media/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "/media/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/media/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ],
+    }
+    return JsonResponse(data, content_type='application/manifest+json')
+
+
+@csrf_exempt
+@login_required(login_url='/login')
+def home(request):
+    """Màn hình APP thống nhất (lưới chức năng theo vai trò). Cài được vào màn hình chính."""
+    if request.user.is_staff:
+        tiles = [
+            {'url': '/', 'icon': 'bi-droplet-half', 'label': 'Công thức pha', 'bg': '#2E7D32'},
+            {'url': '/ma-tranh', 'icon': 'bi-paint-bucket', 'label': 'Rót màu', 'bg': '#6F42C1'},
+            {'url': '/san-xuat', 'icon': 'bi-box2-heart', 'label': 'Sản xuất', 'bg': '#198754'},
+            {'url': '/nang-suat', 'icon': 'bi-people-fill', 'label': 'Năng suất', 'bg': '#0D6EFD'},
+            {'url': '/loi-nhuan', 'icon': 'bi-graph-up-arrow', 'label': 'Lợi nhuận', 'bg': '#FD7E14'},
+            {'url': '/cham-cong-quan-ly', 'icon': 'bi-fingerprint', 'label': 'Chấm công', 'bg': '#20C997'},
+            {'url': '/kho-son', 'icon': 'bi-box-seam', 'label': 'Kho sơn', 'bg': '#8D6E63'},
+            {'url': '/xu-ly-anh', 'icon': 'bi-image', 'label': 'Xử lý ảnh', 'bg': '#E83E8C'},
+            {'url': '/dashboard', 'icon': 'bi-speedometer2', 'label': 'Dashboard', 'bg': '#343A40'},
+            {'url': '/nhan-vien', 'icon': 'bi-people', 'label': 'Nhân viên', 'bg': '#6C757D'},
+            {'url': '/quan-ly', 'icon': 'bi-phone-vibrate', 'label': 'App kho (QL)', 'bg': '#0DCAF0'},
+            {'url': '/cham-cong', 'icon': 'bi-clock', 'label': 'Chấm công của tôi', 'bg': '#0F9D58'},
+        ]
+    else:
+        tiles = [
+            {'url': '/app', 'icon': 'bi-droplet-half', 'label': 'Pha màu & Rót màu', 'bg': '#2E7D32'},
+            {'url': '/cham-cong', 'icon': 'bi-fingerprint', 'label': 'Chấm công', 'bg': '#198754'},
+        ]
+    return render(request, 'home.html', {'tiles': tiles})
+
+
 def service_worker(request):
     js = (
         "const CACHE='pha-v2';\n"

@@ -9,6 +9,8 @@ from pha import learn_lib
 urlpatterns = [
     path('login', views.login_view, name='login'),
     path('logout', views.logout_view, name='logout'),
+    path('home', views.home, name='home_app'),
+    path('manifest-app.webmanifest', views.manifest_app, name='manifest_app'),
     path('nhan-vien', views.nhan_vien, name='nhan_vien'),
     path('kho-son', views.kho_son, name='kho_son'),
     path('dashboard', views.dashboard, name='dashboard'),

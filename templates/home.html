@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2E7D32">
+  <title>DALI</title>
+  <link rel="manifest" href="/manifest-app.webmanifest">
+  <link rel="apple-touch-icon" href="/media/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="DALI">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    body{background:#f4f6f8;padding-bottom:30px}
+    .topbar{background:#2E7D32;color:#fff;padding:.7rem .8rem;padding-top:calc(.7rem + env(safe-area-inset-top))}
+    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+    @media(min-width:560px){.grid{grid-template-columns:repeat(3,1fr)}}
+    @media(min-width:860px){.grid{grid-template-columns:repeat(4,1fr)}}
+    .tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+      text-decoration:none;color:#fff;border-radius:18px;padding:20px 10px;min-height:118px;
+      box-shadow:0 3px 10px rgba(0,0,0,.12);font-weight:700;text-align:center;transition:transform .08s}
+    .tile:active{transform:scale(.96)}
+    .tile i{font-size:2.1rem}
+    .tile span{font-size:1rem;line-height:1.15}
+  </style>
+</head>
+<body>
+<div class="topbar d-flex align-items-center gap-2">
+  <i class="bi bi-droplet-half fs-3"></i>
+  <div class="flex-grow-1">
+    <div class="fw-bold" style="font-size:1.25rem;line-height:1">DALI</div>
+    <div class="small" style="opacity:.85">Xin chào, {{ user.username }}{% if user.is_staff %} · Quản lý{% endif %}</div>
+  </div>
+  <button id="installBtn" class="btn btn-sm btn-light" style="display:none"><i class="bi bi-download"></i> Cài app</button>
+  <a href="/logout" class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-right"></i></a>
+</div>
+
+<div id="iosTip" class="alert alert-info m-2 mb-0 small" style="display:none">
+  <i class="bi bi-phone"></i> Để cài thành app: bấm nút <b>Chia sẻ</b> <i class="bi bi-box-arrow-up"></i> ở Safari → <b>“Thêm vào MH chính”</b>.
+</div>
+
+<div class="p-2 pt-3">
+  <div class="grid">
+    {% for t in tiles %}
+    <a class="tile" href="{{ t.url }}" style="background:{{ t.bg }}">
+      <i class="bi {{ t.icon }}"></i>
+      <span>{{ t.label }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+  if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(function(){}); }
+
+  // Nút cài app (Android/Chrome)
+  var deferred=null;
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); deferred=e; document.getElementById('installBtn').style.display=''; });
+  document.getElementById('installBtn').addEventListener('click', function(){ if(deferred){ deferred.prompt(); deferred=null; this.style.display='none'; } });
+
+  // iOS Safari: không có beforeinstallprompt -> hiện hướng dẫn (nếu chưa ở chế độ app)
+  (function(){
+    var isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+    var standalone=window.navigator.standalone===true || window.matchMedia('(display-mode: standalone)').matches;
+    if(isIOS && !standalone){ document.getElementById('iosTip').style.display=''; }
+  })();
+</script>
+</body>
+</html>
