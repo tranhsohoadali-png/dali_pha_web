@@ -700,15 +700,11 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long
         # ƯU TIÊN MẶT (k-means oversample) — nhưng LÀM PHẲNG (mean-shift) bên trong
         # trước khi k-means để KHÔNG vón cục; mặt giành nhiều màu (môi/mắt/da chi tiết).
         # hifi (GIỮ NÉT CAO): ảnh ĐÃ SẠCH (AI/Illustrator) -> KHÔNG mean-shift để
-        # GIỮ NGUYÊN dải tông mịn (giống Image Trace), chỉ k-means + mượt biên NHẸ.
-        # Thay mean-shift bằng bilateral NHẸ toàn ảnh: khử răng cưa/lấm tấm còn sót
-        # mà KHÔNG làm bệt dải tông (mean-shift sr=32 mới là thủ phạm làm bệt).
-        src_face = src_rgb
-        if hifi:
-            _b = cv2.bilateralFilter(src_rgb[:, :, ::-1].copy(), 7, 35, 35)   # BGR
-            src_face = np.ascontiguousarray(_b[:, :, ::-1])                   # -> RGB
+        # GIỮ NGUYÊN dải tông mịn (giống Image Trace). KHÔNG bilateral toàn ảnh (nó
+        # nhoè mắt/mũi vào da -> MELT ngũ quan); việc làm mềm DA đã có bilateral
+        # riêng (chừa ngũ quan) bên trong _quantize_face_priority.
         face_sm = 0 if hifi else (sm_level if sm_level > 0 else 2)
-        arr = _quantize_face_priority(src_face, target, face_mask, feature_mask, face_sm)
+        arr = _quantize_face_priority(src_rgb, target, face_mask, feature_mask, face_sm)
         ksize_sm = 5 if hifi else 7                         # hifi: mượt biên nhẹ -> giữ chi tiết
     else:
         if sm_level > 0 and not hifi:
