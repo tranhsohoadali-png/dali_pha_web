@@ -87,6 +87,7 @@
             </div>
             {% endif %}
             <button id="sub" class="btn btn-success w-100" disabled><i class="bi bi-magic"></i> Xử lý ảnh</button>
+            <button id="btnFlat" type="button" class="btn btn-primary w-100 mt-2" disabled title="Ảnh đã thiết kế phẳng -> chỉ đánh số + khớp mã DALI. KHÔNG dùng AI, KHÔNG làm phẳng lại (giữ nguyên thiết kế)."><i class="bi bi-123"></i> Đánh số ảnh phẳng (đã thiết kế)</button>
           </form>
         </div>
       </div>
@@ -165,7 +166,23 @@
   dz.addEventListener('drop',ev=>{ if(ev.dataTransfer.files.length){fi.files=ev.dataTransfer.files;onPick();} });
   fi.addEventListener('change',onPick);
   function onPick(){ var f=fi.files[0]; if(!f)return; document.getElementById('sub').disabled=false;
+    var bf=document.getElementById('btnFlat'); if(bf) bf.disabled=false;
     var r=new FileReader(); r.onload=e=>{var p=document.getElementById('preview');p.src=e.target.result;p.hidden=false;}; r.readAsDataURL(f); }
+
+  // ===== Nút "Đánh số ảnh phẳng (đã thiết kế)": 1 lần bấm -> KHÔNG AI, KHÔNG làm phẳng
+  // lại (smooth=0), giữ nhiều màu cho sát thiết kế, gộp đốm li ti -> đánh số + khớp DALI.
+  (function bindFlat(){
+    var bf=document.getElementById('btnFlat'); if(!bf) return;
+    bf.addEventListener('click', function(){
+      if(!fi.files[0]) return;
+      var en=document.getElementById('enhance'); if(en){ en.checked=false;
+        var sw=document.getElementById('styleWrap'); if(sw) sw.classList.add('d-none'); }
+      var sm=document.querySelector('[name="smooth"]'); if(sm) sm.value='0';   // không mean-shift
+      var cl=document.querySelector('[name="color_limit"]'); if(cl && !cl.value) cl.value='48'; // giữ sát màu thiết kế
+      var ma=document.querySelector('[name="min_area"]'); if(ma && !ma.value) ma.value='20';    // dọn đốm răng cưa
+      document.getElementById('up').submit();
+    });
+  })();
 
   function spin(on){ var s=document.getElementById('spin'); s.classList.toggle('d-none',!on); s.classList.toggle('d-flex',on); }
 
