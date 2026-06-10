@@ -24,16 +24,12 @@
           <form method="POST" action="/cham-cong-quan-ly" class="row g-2 align-items-end">
             {% csrf_token %}
             <input type="hidden" name="action" value="save_ips">
-            <div class="col-md-6">
+            <div class="col-md-9">
               <label class="form-label small mb-1">Danh sách IP công ty (cách nhau dấu phẩy). IP đầy đủ <code>113.161.4.20</code> hoặc tiền tố <code>113.161.</code></label>
               <input type="text" name="ips" id="ips" class="form-control" value="{{ ips }}" placeholder="VD: 113.161.4.20, 14.169.">
             </div>
             <div class="col-md-3">
-              <label class="form-label small mb-1">Giờ vào chuẩn (cờ đi muộn)</label>
-              <input type="time" name="work_start" class="form-control" value="{{ work_start }}">
-            </div>
-            <div class="col-md-3">
-              <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu cấu hình</button>
+              <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu IP công ty</button>
             </div>
           </form>
           {% if cur_private %}
@@ -58,14 +54,66 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
     </div>
   </div>
 
+  <!-- Khung giờ & quy định -->
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-clock-history"></i> Khung giờ làm việc &amp; quy định</div>
+        <div class="card-body">
+          <form method="POST" action="/cham-cong-quan-ly" class="row g-3 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_schedule">
+            <div class="col-6 col-md-2">
+              <label class="form-label small mb-1">Giờ vào</label>
+              <input type="time" name="work_start" class="form-control" value="{{ cfg.start }}">
+            </div>
+            <div class="col-6 col-md-2">
+              <label class="form-label small mb-1">Giờ ra</label>
+              <input type="time" name="work_end" class="form-control" value="{{ cfg.end }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small mb-1">Ngày làm việc</label>
+              <div class="d-flex flex-wrap gap-1">
+                {% for d in weekday_opts %}
+                <input type="checkbox" class="btn-check" name="workday" value="{{ d.i }}" id="wd{{ d.i }}" {% if d.on %}checked{% endif %}>
+                <label class="btn btn-sm btn-outline-success" for="wd{{ d.i }}">{{ d.name }}</label>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="col-6 col-md-2">
+              <label class="form-label small mb-1">Trễ cho phép (phút)</label>
+              <input type="number" name="grace" class="form-control" value="{{ cfg.grace }}" min="0">
+            </div>
+            <div class="col-6 col-md-2">
+              <label class="form-label small mb-1">Phạt / phút trễ (đ)</label>
+              <input type="number" name="fine_min" class="form-control" value="{{ cfg.fine_min|floatformat:0 }}" min="0" step="500">
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label small mb-1">Phạt cố định / lần muộn (đ)</label>
+              <input type="number" name="fine_fixed" class="form-control" value="{{ cfg.fine_fixed|floatformat:0 }}" min="0" step="1000">
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label small mb-1">Đơn giá tăng ca (đ/giờ)</label>
+              <input type="number" name="ot_rate" class="form-control" value="{{ cfg.ot_rate|floatformat:0 }}" min="0" step="1000">
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu khung giờ</button>
+            </div>
+          </form>
+          <div class="form-text mt-1">Đi muộn = vào sau (giờ vào + trễ cho phép) → phạt = phút trễ × (đ/phút) + phạt cố định. Tăng ca = làm sau giờ ra; làm ngày nghỉ tính tăng ca toàn bộ.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Cảnh báo bất thường -->
   <div class="row mt-3">
     <div class="col-12">
       <div class="card shadow-sm border-{% if shared or noout %}danger{% else %}success{% endif %}">
         <div class="card-header fw-semibold"><i class="bi bi-shield-exclamation"></i> Cảnh báo bất thường — {{ month_label }}</div>
         <div class="card-body">
-          {% if not shared and not noout and not late %}
-          <div class="text-success"><i class="bi bi-check-circle"></i> Không có bất thường trong tháng này.</div>
+          {% if not shared and not noout %}
+          <div class="text-success"><i class="bi bi-check-circle"></i> Không có bất thường (chấm hộ / quên chấm ra) trong tháng này.</div>
           {% endif %}
 
           {% if shared %}
@@ -76,24 +124,12 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
           </div>
           {% endif %}
 
-          <div class="row g-3">
-            {% if noout %}
-            <div class="col-md-6">
-              <div class="fw-semibold text-warning"><i class="bi bi-box-arrow-right"></i> Quên chấm RA ({{ noout|length }})</div>
-              <table class="table table-sm mb-0"><tbody>
-                {% for r in noout %}<tr><td>{{ r.day }}</td><td>{{ r.user }}</td></tr>{% endfor %}
-              </tbody></table>
-            </div>
-            {% endif %}
-            {% if late %}
-            <div class="col-md-6">
-              <div class="fw-semibold text-secondary"><i class="bi bi-clock"></i> Đi muộn (sau {{ work_start }}) — {{ late|length }}</div>
-              <table class="table table-sm mb-0"><tbody>
-                {% for r in late %}<tr><td>{{ r.day }}</td><td>{{ r.user }}</td><td class="text-end">{{ r.in }}</td></tr>{% endfor %}
-              </tbody></table>
-            </div>
-            {% endif %}
-          </div>
+          {% if noout %}
+          <div class="fw-semibold text-warning"><i class="bi bi-box-arrow-right"></i> Quên chấm RA ({{ noout|length }})</div>
+          <table class="table table-sm mb-0" style="max-width:400px"><tbody>
+            {% for r in noout %}<tr><td>{{ r.day }}</td><td>{{ r.user }}</td></tr>{% endfor %}
+          </tbody></table>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -149,29 +185,34 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
           </span>
         </div>
         <div class="card-body">
-          <div class="row g-3">
-            <div class="col-lg-5">
-              <div class="fw-semibold mb-2">Tổng hợp theo nhân viên</div>
-              <table class="table table-sm">
-                <thead class="table-light"><tr><th>Nhân viên</th><th class="text-center">Ngày công</th><th class="text-end">Tổng giờ</th></tr></thead>
-                <tbody>
-                  {% for s in summary %}<tr><td class="fw-semibold">{{ s.user }}</td><td class="text-center">{{ s.days }}</td><td class="text-end">{{ s.hours }}h</td></tr>
-                  {% empty %}<tr><td colspan="3" class="text-secondary text-center">Chưa có dữ liệu tháng này.</td></tr>{% endfor %}
-                </tbody>
-              </table>
-            </div>
-            <div class="col-lg-7">
-              <div class="fw-semibold mb-2">Chi tiết</div>
-              <div class="table-responsive" style="max-height:480px;overflow:auto">
-                <table class="table table-sm">
-                  <thead class="table-light"><tr><th>Ngày</th><th>Nhân viên</th><th class="text-center">Vào</th><th class="text-center">Ra</th><th class="text-end">Giờ</th></tr></thead>
-                  <tbody>
-                    {% for r in detail %}<tr><td>{{ r.day }}</td><td>{{ r.user }}</td><td class="text-center">{{ r.in|default:"—" }}</td><td class="text-center">{{ r.out|default:"—" }}</td><td class="text-end">{% if r.hours %}{{ r.hours }}h{% else %}—{% endif %}</td></tr>
-                    {% empty %}<tr><td colspan="5" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>{% endfor %}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          <div class="fw-semibold mb-2">Tổng hợp theo nhân viên</div>
+          <div class="table-responsive mb-4">
+            <table class="table table-sm align-middle">
+              <thead class="table-light"><tr><th>Nhân viên</th><th class="text-center">Ngày công</th><th class="text-end">Tổng giờ</th><th class="text-end">Tăng ca</th><th class="text-end">Đi muộn</th><th class="text-end">Phạt (đ)</th><th class="text-end">Tiền OT (đ)</th></tr></thead>
+              <tbody>
+                {% for s in summary %}<tr><td class="fw-semibold">{{ s.user }}</td><td class="text-center">{{ s.days }}</td><td class="text-end">{{ s.hours }}h</td><td class="text-end">{% if s.ot %}{{ s.ot }}h{% else %}—{% endif %}</td><td class="text-end">{% if s.late %}{{ s.late }}'{% else %}—{% endif %}</td><td class="text-end {% if s.fine %}text-danger fw-bold{% endif %}">{{ s.fine|floatformat:0 }}</td><td class="text-end">{{ s.ot_pay|floatformat:0 }}</td></tr>
+                {% empty %}<tr><td colspan="7" class="text-secondary text-center">Chưa có dữ liệu tháng này.</td></tr>{% endfor %}
+              </tbody>
+              {% if summary %}<tfoot class="table-light fw-bold"><tr><td>TỔNG</td><td class="text-center">{{ totals.days }}</td><td class="text-end">{{ totals.hours }}h</td><td class="text-end">{{ totals.ot }}h</td><td class="text-end">{{ totals.late }}'</td><td class="text-end text-danger">{{ totals.fine|floatformat:0 }}</td><td class="text-end">{{ totals.ot_pay|floatformat:0 }}</td></tr></tfoot>{% endif %}
+            </table>
+          </div>
+
+          <div class="fw-semibold mb-2">Chi tiết từng ngày</div>
+          <div class="table-responsive" style="max-height:520px;overflow:auto">
+            <table class="table table-sm">
+              <thead class="table-light position-sticky top-0"><tr><th>Ngày</th><th>Thứ</th><th>Nhân viên</th><th class="text-center">Vào</th><th class="text-center">Ra</th><th class="text-end">Giờ</th><th class="text-end">Muộn</th><th class="text-end">Tăng ca</th><th class="text-end">Phạt</th></tr></thead>
+              <tbody>
+                {% for r in detail %}<tr{% if r.rest %} class="table-warning"{% endif %}>
+                  <td>{{ r.day }}</td><td class="small">{{ r.wd }}{% if r.rest %} <span class="badge text-bg-warning">nghỉ</span>{% endif %}</td>
+                  <td>{{ r.user }}</td><td class="text-center">{{ r.in|default:"—" }}</td><td class="text-center">{{ r.out|default:"—" }}</td>
+                  <td class="text-end">{% if r.hours %}{{ r.hours }}h{% else %}—{% endif %}</td>
+                  <td class="text-end {% if r.late %}text-danger{% endif %}">{% if r.late %}{{ r.late }}'{% else %}—{% endif %}</td>
+                  <td class="text-end">{% if r.ot %}{{ r.ot }}h{% else %}—{% endif %}</td>
+                  <td class="text-end {% if r.fine %}text-danger fw-bold{% endif %}">{% if r.fine %}{{ r.fine|floatformat:0 }}{% else %}—{% endif %}</td>
+                </tr>
+                {% empty %}<tr><td colspan="9" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>{% endfor %}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

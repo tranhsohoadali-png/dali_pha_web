@@ -1797,6 +1797,66 @@ def _att_hours(rec):
     return 0
 
 
+_WEEKDAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']   # 0=T2 .. 6=CN (Python weekday)
+
+
+def _hm_to_min(hhmm):
+    try:
+        h, m = (hhmm or '').split(':')
+        return int(h) * 60 + int(m)
+    except (ValueError, AttributeError):
+        return None
+
+
+def _att_cfg():
+    """Cấu hình khung giờ & quy định chấm công (AppSetting)."""
+    from pha.models import AppSetting
+
+    def num(k, d=0):
+        try:
+            return float((AppSetting.get(k, str(d)) or str(d)).replace(',', '').strip() or d)
+        except (TypeError, ValueError):
+            return float(d)
+    days_raw = AppSetting.get('WORK_DAYS', '0,1,2,3,4,5') or '0,1,2,3,4,5'
+    workdays = set(int(x) for x in days_raw.split(',') if x.strip().isdigit())
+    return {
+        'start': AppSetting.get('WORK_START', '08:00') or '08:00',
+        'end': AppSetting.get('WORK_END', '17:00') or '17:00',
+        'workdays': workdays or {0, 1, 2, 3, 4, 5},
+        'grace': int(num('LATE_GRACE', 0)),
+        'fine_min': num('LATE_FINE_PER_MIN', 0),
+        'fine_fixed': num('LATE_FINE_FIXED', 0),
+        'ot_rate': num('OT_RATE', 0),
+    }
+
+
+def _att_calc(rec, cfg):
+    """Tính cho 1 ngày công: giờ làm, phút đi muộn, giờ tăng ca, tiền phạt, tiền OT."""
+    out = {'hours': _att_hours(rec), 'late_min': 0, 'ot_hours': 0.0,
+           'fine': 0, 'ot_pay': 0, 'workday': True, 'weekday': ''}
+    if not rec.check_in:
+        return out
+    cin = _vn_dt(rec.check_in)
+    wd = cin.weekday()
+    out['weekday'] = _WEEKDAYS[wd]
+    out['workday'] = wd in cfg['workdays']
+    start, end = _hm_to_min(cfg['start']), _hm_to_min(cfg['end'])
+    cin_min = cin.hour * 60 + cin.minute
+    cout = _vn_dt(rec.check_out)
+    cout_min = (cout.hour * 60 + cout.minute) if cout else None
+    if out['workday']:
+        if start is not None and cin_min > start + cfg['grace']:
+            out['late_min'] = cin_min - (start + cfg['grace'])
+            out['fine'] = round(out['late_min'] * cfg['fine_min']
+                                + (cfg['fine_fixed'] if out['late_min'] > 0 else 0))
+        if cout_min is not None and end is not None and cout_min > end:
+            out['ot_hours'] = round((cout_min - end) / 60.0, 2)
+    else:
+        out['ot_hours'] = out['hours']     # làm ngày nghỉ -> tính tăng ca toàn bộ
+    out['ot_pay'] = round(out['ot_hours'] * cfg['ot_rate'])
+    return out
+
+
 @csrf_exempt
 @login_required(login_url='/login')
 def cham_cong(request):
@@ -1866,8 +1926,17 @@ def cham_cong_quan_ly(request):
         act = request.POST.get('action')
         if act == 'save_ips':
             AppSetting.set('ATTENDANCE_IPS', (request.POST.get('ips') or '').strip())
-            AppSetting.set('ATT_WORK_START', (request.POST.get('work_start') or '').strip())
-            messages.info(request, 'Đã lưu cấu hình chấm công.')
+            messages.info(request, 'Đã lưu IP Wifi công ty.')
+            return redirect('/cham-cong-quan-ly')
+        if act == 'save_schedule':
+            AppSetting.set('WORK_START', (request.POST.get('work_start') or '08:00').strip())
+            AppSetting.set('WORK_END', (request.POST.get('work_end') or '17:00').strip())
+            days = [d for d in request.POST.getlist('workday') if d.isdigit()]
+            AppSetting.set('WORK_DAYS', ','.join(days) if days else '0,1,2,3,4,5')
+            for key, fld in (('LATE_GRACE', 'grace'), ('LATE_FINE_PER_MIN', 'fine_min'),
+                             ('LATE_FINE_FIXED', 'fine_fixed'), ('OT_RATE', 'ot_rate')):
+                AppSetting.set(key, (request.POST.get(fld) or '0').replace(',', '').strip() or '0')
+            messages.info(request, 'Đã lưu khung giờ & quy định.')
             return redirect('/cham-cong-quan-ly')
         if act == 'reset_device':
             u = (request.POST.get('user') or '').strip()
@@ -1877,27 +1946,31 @@ def cham_cong_quan_ly(request):
 
     now = _now()
     month = request.GET.get('month') or now.strftime('%Y-%m')
-    work_start = (AppSetting.get('ATT_WORK_START', '') or '').strip()
+    cfg = _att_cfg()
     today_str = now.strftime('%Y-%m-%d')
     summ, detail = {}, []
-    device_users, late, noout = {}, [], []
+    device_users, noout = {}, []
     for r in Attendance.objects.filter(month=month).order_by('-day', 'user'):
-        s = summ.setdefault(r.user, {'user': r.user, 'days': 0, 'hours': 0.0})
+        c = _att_calc(r, cfg)
+        s = summ.setdefault(r.user, {'user': r.user, 'days': 0, 'hours': 0.0,
+                                     'ot': 0.0, 'late': 0, 'fine': 0, 'ot_pay': 0})
         if r.check_in:
             s['days'] += 1
-        s['hours'] += _att_hours(r)
-        detail.append({'day': _fmt_day(r.day), 'user': r.user, 'in': _hm(r.check_in),
-                       'out': _hm(r.check_out), 'hours': _att_hours(r)})
+        s['hours'] += c['hours']; s['ot'] += c['ot_hours']
+        s['late'] += c['late_min']; s['fine'] += c['fine']; s['ot_pay'] += c['ot_pay']
+        detail.append({'day': _fmt_day(r.day), 'wd': c['weekday'], 'user': r.user,
+                       'in': _hm(r.check_in), 'out': _hm(r.check_out), 'hours': c['hours'],
+                       'late': c['late_min'], 'ot': c['ot_hours'], 'fine': c['fine'],
+                       'rest': not c['workday']})
         if r.device_in:
             device_users.setdefault(r.device_in, set()).add(r.user)
-        hm = _hm(r.check_in)
-        if work_start and hm and hm > work_start:
-            late.append({'day': _fmt_day(r.day), 'user': r.user, 'in': hm})
         if r.check_in and not r.check_out and r.day != today_str:
             noout.append({'day': _fmt_day(r.day), 'user': r.user})
     summary = sorted(summ.values(), key=lambda x: -x['hours'])
     for s in summary:
-        s['hours'] = round(s['hours'], 1)
+        s['hours'] = round(s['hours'], 1); s['ot'] = round(s['ot'], 1)
+    totals = {k: round(sum(s[k] for s in summary), 1) if k in ('hours', 'ot')
+              else sum(s[k] for s in summary) for k in ('days', 'hours', 'ot', 'late', 'fine', 'ot_pay')}
     shared = [{'token': tok[:8] + '…', 'users': sorted(us)}
               for tok, us in device_users.items() if len(us) > 1]
     bindings = []
@@ -1911,16 +1984,16 @@ def cham_cong_quan_ly(request):
         or [now.strftime('%Y-%m')]
     cur_ip = _client_ip(request)
     ips_set = bool(_attendance_ips())
+    weekday_opts = [{'i': i, 'name': _WEEKDAYS[i], 'on': (i in cfg['workdays'])} for i in range(7)]
     return render(request, 'cham_cong_quan_ly.html', {
         'ips': AppSetting.get('ATTENDANCE_IPS', ''), 'cur_ip': cur_ip,
         'cur_private': _ip_private(cur_ip),
         'cur_ok': (_ip_allowed(cur_ip) if ips_set else None),
-        'work_start': work_start,
+        'cfg': cfg, 'weekday_opts': weekday_opts,
         'month': month, 'month_label': _fmt_month(month),
         'months': [{'value': m, 'label': _fmt_month(m)} for m in months],
-        'summary': summary, 'detail': detail[:200],
-        'shared': shared, 'late': late[:50], 'noout': noout[:50], 'bindings': bindings,
-        'anomaly_count': len(shared) + len(noout),
+        'summary': summary, 'totals': totals, 'detail': detail[:300],
+        'shared': shared, 'noout': noout[:50], 'bindings': bindings,
     })
 
 
@@ -1936,28 +2009,33 @@ def export_cham_cong_excel(request):
     head_fill = PatternFill('solid', fgColor='198754')
     head_font = Font(bold=True, color='FFFFFF')
     center = Alignment(horizontal='center')
+    cfg = _att_cfg()
     summ = {}
     ws2 = wb.active
     ws2.title = "Chi tiet"
-    ws2.append(["Ngày", "Nhân viên", "Giờ vào", "Giờ ra", "Số giờ"])
+    ws2.append(["Ngày", "Thứ", "Nhân viên", "Giờ vào", "Giờ ra", "Số giờ", "Đi muộn (phút)", "Tăng ca (giờ)", "Phạt (đ)"])
     for c in ws2[1]:
         c.fill = head_fill; c.font = head_font; c.alignment = center
     for r in Attendance.objects.filter(month=month).order_by('day', 'user'):
-        s = summ.setdefault(r.user, {'days': 0, 'hours': 0.0})
+        c = _att_calc(r, cfg)
+        s = summ.setdefault(r.user, {'days': 0, 'hours': 0.0, 'ot': 0.0, 'late': 0, 'fine': 0, 'ot_pay': 0})
         if r.check_in:
             s['days'] += 1
-        s['hours'] += _att_hours(r)
-        ws2.append([_fmt_day(r.day), r.user, _hm(r.check_in), _hm(r.check_out), _att_hours(r)])
-    for col, w in zip('ABCDE', (12, 18, 10, 10, 10)):
+        s['hours'] += c['hours']; s['ot'] += c['ot_hours']
+        s['late'] += c['late_min']; s['fine'] += c['fine']; s['ot_pay'] += c['ot_pay']
+        ws2.append([_fmt_day(r.day), c['weekday'] + (' (nghỉ)' if not c['workday'] else ''),
+                    r.user, _hm(r.check_in), _hm(r.check_out), c['hours'],
+                    c['late_min'], c['ot_hours'], c['fine']])
+    for col, w in zip('ABCDEFGHI', (10, 10, 16, 9, 9, 8, 13, 12, 12)):
         ws2.column_dimensions[col].width = w
     ws = wb.create_sheet("Tong hop", 0)
     ws.append([f"BẢNG CÔNG THÁNG {_fmt_month(month)}"])
-    ws.append(["Nhân viên", "Ngày công", "Tổng giờ"])
+    ws.append(["Nhân viên", "Ngày công", "Tổng giờ", "Tăng ca (giờ)", "Đi muộn (phút)", "Phạt (đ)", "Tiền tăng ca (đ)"])
     for c in ws[2]:
         c.fill = head_fill; c.font = head_font; c.alignment = center
     for u, s in sorted(summ.items(), key=lambda kv: -kv[1]['hours']):
-        ws.append([u, s['days'], round(s['hours'], 1)])
-    for col, w in zip('ABC', (18, 12, 12)):
+        ws.append([u, s['days'], round(s['hours'], 1), round(s['ot'], 1), s['late'], s['fine'], s['ot_pay']])
+    for col, w in zip('ABCDEFG', (18, 11, 11, 13, 14, 12, 16)):
         ws.column_dimensions[col].width = w
     resp = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="bang_cong_{month}.xlsx"'
