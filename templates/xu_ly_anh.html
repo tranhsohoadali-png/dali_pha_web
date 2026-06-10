@@ -161,6 +161,9 @@
                     <input type="range" class="form-range" id="corners" min="0" max="100" value="0" title="0 = giữ góc; cao = bo tròn góc nhọn"></div>
                 </div>
                 <div class="form-text">Chỉ làm mượt ẢNH THIẾT KẾ để xem trước. Bấm "Tải bản in" để xuất theo độ mượt đang chọn.</div>
+                <button id="btnSvg" type="button" class="btn btn-outline-success btn-sm mt-2"><i class="bi bi-bezier"></i> Tải SVG vector (Image Trace)</button>
+                <span id="svgInfo" class="small text-secondary ms-2"></span>
+                <div class="form-text">Trace bản màu hiện tại (đã mượt + đã đổi màu) thành vector SVG — mỗi vùng màu 1 path, phóng to không vỡ. Paths = đơn giản hoá đường · Corners = bo góc.</div>
               </div>
             </div>
             <div class="col"><div class="small text-secondary mb-1">Bản đồ đánh số</div><img id="imgResult" src="#" class="result-img" hidden></div>
@@ -362,6 +365,31 @@
   }
   (function bindAdjust(){ ['paths','corners'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.addEventListener('input', smoothDesign); }); })();
+  // ====== Trace bản màu hiện tại -> SVG vector (Image Trace bằng OpenCV) ======
+  (function bindSvg(){
+    var btn=document.getElementById('btnSvg'); if(!btn) return;
+    btn.addEventListener('click', function(){
+      var cv=document.getElementById('imgDesign');
+      var info=document.getElementById('svgInfo');
+      if(!cv || !cv.width){ info.textContent='Chưa có ảnh thiết kế.'; return; }
+      info.className='small text-secondary ms-2'; info.textContent='Đang trace…'; btn.disabled=true;
+      var data; try{ data=cv.toDataURL('image/png'); }catch(e){ info.textContent='Không đọc được canvas.'; btn.disabled=false; return; }
+      var nm=(document.getElementById('imgName').value||'thiet-ke').trim();
+      var fd=new FormData();
+      fd.append('image_data', data);
+      fd.append('simplify', document.getElementById('paths').value||0);
+      fd.append('round', document.getElementById('corners').value||0);
+      fetch('/anh-design-trace',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(res){
+        btn.disabled=false;
+        if(res && res.ok){
+          info.className='small text-success ms-2';
+          info.innerHTML='✓ '+res.colors+' màu · '+res.paths+' vùng · '+res.w+'×'+res.h;
+          var a=document.createElement('a'); a.href=res.url+'?t='+Date.now(); a.download=nm+'.svg';
+          document.body.appendChild(a); a.click(); a.remove();
+        } else { info.className='small text-danger ms-2'; info.textContent='Lỗi: '+((res&&res.msg)||'không trace được'); }
+      }).catch(function(){ btn.disabled=false; info.className='small text-danger ms-2'; info.textContent='Lỗi kết nối.'; });
+    });
+  })();
   function hx2rgb(h){ h=h.replace('#',''); return {r:parseInt(h.substr(0,2),16),g:parseInt(h.substr(2,2),16),b:parseInt(h.substr(4,2),16)}; }
   function recolorDesign(oldHex,newHex){
     if(!DIMGDATA) return;

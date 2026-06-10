@@ -75,6 +75,7 @@ urlpatterns = [
     path('xu-ly-anh', views.xu_ly_anh, name='xu_ly_anh'),
     path('anh-detect-face', face_api.anh_detect_face, name='anh_detect_face'),
     path('anh-design-smooth', design_edit.design_smooth, name='anh_design_smooth'),
+    path('anh-design-trace', design_edit.design_trace, name='anh_design_trace'),
     path('anh-result', views.anh_result, name='anh_result'),
     path('anh-preset', views.anh_preset, name='anh_preset'),
     path('anh-save-color', views.anh_save_color, name='anh_save_color'),
