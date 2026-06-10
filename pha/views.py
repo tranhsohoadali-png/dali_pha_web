@@ -1696,6 +1696,33 @@ def _ip_allowed(ip):
     return False
 
 
+def _ip_private(ip):
+    """True nếu ip rỗng/nội bộ/localhost -> dấu hiệu nginx CHƯA chuyển IP thật."""
+    if not ip:
+        return True
+    if ip.startswith(('127.', '10.', '192.168.', '169.254.', '::1')):
+        return True
+    if ip.startswith('172.'):
+        try:
+            return 16 <= int(ip.split('.')[1]) <= 31
+        except (IndexError, ValueError):
+            return False
+    return False
+
+
+@csrf_exempt
+@login_required(login_url='/login')
+def cham_cong_ip(request):
+    """Chẩn đoán: server nhận IP nào cho máy bạn (mở trên điện thoại khi ở Wifi công ty)."""
+    ip = _client_ip(request)
+    return JsonResponse({
+        'ip': ip, 'allowed': _ip_allowed(ip), 'configured': bool(_attendance_ips()),
+        'private': _ip_private(ip), 'company_ips': _attendance_ips(),
+        'x_forwarded_for': request.META.get('HTTP_X_FORWARDED_FOR', ''),
+        'remote_addr': request.META.get('REMOTE_ADDR', ''),
+    })
+
+
 def _vn_dt(dt):
     if not dt:
         return None
@@ -1795,8 +1822,12 @@ def cham_cong_quan_ly(request):
         s['hours'] = round(s['hours'], 1)
     months = sorted(set(Attendance.objects.values_list('month', flat=True)), reverse=True) \
         or [now.strftime('%Y-%m')]
+    cur_ip = _client_ip(request)
+    ips_set = bool(_attendance_ips())
     return render(request, 'cham_cong_quan_ly.html', {
-        'ips': AppSetting.get('ATTENDANCE_IPS', ''), 'cur_ip': _client_ip(request),
+        'ips': AppSetting.get('ATTENDANCE_IPS', ''), 'cur_ip': cur_ip,
+        'cur_private': _ip_private(cur_ip),
+        'cur_ok': (_ip_allowed(cur_ip) if ips_set else None),
         'month': month, 'month_label': _fmt_month(month),
         'months': [{'value': m, 'label': _fmt_month(m)} for m in months],
         'summary': summary, 'detail': detail[:200],

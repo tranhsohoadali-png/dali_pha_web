@@ -32,11 +32,23 @@
               <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu IP công ty</button>
             </div>
           </form>
-          <div class="alert alert-secondary mt-3 mb-0 d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-router"></i> IP bạn đang truy cập (mở trang này khi đang ở Wifi công ty rồi bấm “Dùng IP này”): <b id="curIp">{{ cur_ip }}</b></span>
+          {% if cur_private %}
+          <div class="alert alert-danger mt-3 mb-0">
+            <i class="bi bi-exclamation-triangle-fill"></i> <b>nginx CHƯA chuyển IP thật.</b> Server đang nhận IP <b>{{ cur_ip }}</b> (nội bộ/localhost) — chấm công theo Wifi sẽ <b>không chính xác</b>.
+            <div class="small mt-1">Sửa cấu hình nginx (trong khối <code>location</code> proxy) rồi <code>nginx -s reload</code>:</div>
+            <pre class="small mb-0 mt-1 bg-body-secondary p-2 rounded">proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Real-IP $remote_addr;</pre>
+          </div>
+          {% else %}
+          <div class="alert {% if cur_ok %}alert-success{% elif cur_ok == None %}alert-secondary{% else %}alert-warning{% endif %} mt-3 mb-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="bi bi-router"></i> IP bạn đang truy cập: <b id="curIp">{{ cur_ip }}</b>
+              {% if cur_ok %}<span class="badge text-bg-success ms-1"><i class="bi bi-check-lg"></i> KHỚP cấu hình</span>
+              {% elif cur_ok == None %}<span class="text-secondary ms-1">— chưa cấu hình IP nào (đang cho chấm mọi nơi)</span>
+              {% else %}<span class="badge text-bg-warning ms-1">CHƯA khớp — nếu đang ở Wifi công ty, bấm “Dùng IP này” rồi Lưu</span>{% endif %}
+            </span>
             <button id="useIp" type="button" class="btn btn-sm btn-outline-primary">Dùng IP này</button>
           </div>
-          {% if not ips %}<div class="form-text text-danger mt-1"><i class="bi bi-exclamation-triangle"></i> Chưa cấu hình — hiện cho phép chấm công ở mọi mạng. Hãy nhập IP Wifi công ty để khoá.</div>{% endif %}
+          {% endif %}
         </div>
       </div>
     </div>
@@ -95,7 +107,8 @@
     document.getElementById('excelBtn').href = '/cham-cong-excel?month=' + encodeURIComponent(this.value);
   });
   // Dùng IP hiện tại: chèn vào ô IP
-  document.getElementById('useIp').addEventListener('click', function(){
+  var useIpBtn = document.getElementById('useIp');
+  if(useIpBtn) useIpBtn.addEventListener('click', function(){
     var ip = document.getElementById('curIp').textContent.trim();
     var inp = document.getElementById('ips');
     var cur = inp.value.trim();
