@@ -282,6 +282,85 @@ def ketoan_luong_test(request):
 
 
 @csrf_exempt
+def api_xu_ly_anh(request):
+    """API xử lý ảnh cho web bán hàng (tranhdali.vn/thiet-ke).
+    Nhận 1 ảnh (multipart field 'image') + thông số -> chạy tăng cường AI +
+    bản đồ màu ĐỒNG BỘ (đợi xong) -> trả JSON: URL ảnh kết quả + bảng màu.
+    Bảo vệ bằng khoá API: header X-API-Key hoặc ?key= (THIETKE_API_KEY).
+    """
+    from pha.models import AppSetting
+
+    def _cors(resp):
+        resp['Access-Control-Allow-Origin'] = getattr(settings, 'THIETKE_ALLOW_ORIGIN', '*')
+        resp['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        resp['Access-Control-Allow-Headers'] = 'Content-Type, X-API-Key'
+        resp['Cache-Control'] = 'no-store'
+        return resp
+
+    if request.method == 'OPTIONS':
+        return _cors(HttpResponse(status=204))
+    if request.method != 'POST':
+        return _cors(JsonResponse({'ok': False, 'error': 'POST only'}, status=405))
+
+    want_key = (AppSetting.get('THIETKE_API_KEY', '') or getattr(settings, 'THIETKE_API_KEY', '')).strip()
+    got_key = (request.headers.get('X-API-Key') or request.GET.get('key')
+               or request.POST.get('key') or '').strip()
+    if not want_key or got_key != want_key:
+        return _cors(JsonResponse({'ok': False, 'error': 'Sai hoặc thiếu khoá API'}, status=401))
+
+    upload = request.FILES.get('image')
+    if not upload:
+        return _cors(JsonResponse({'ok': False, 'error': 'Thiếu ảnh (field image)'}, status=400))
+
+    from pha.imageproc import process_image, split_list
+
+    enhance = (request.POST.get('enhance', '1') in ('1', 'on', 'true'))
+    preset_key = (request.POST.get('preset') or 'anime').strip()
+    try:
+        color_limit = max(0, min(int(request.POST.get('color_limit') or 0), 60))
+    except ValueError:
+        color_limit = 0
+    size_str = (request.POST.get('print_size') or '40x50').strip()
+    try:
+        dims = [int(x) for x in size_str.lower().replace(' ', '').split('x') if x]
+        print_long_cm = max(dims) if dims else 0
+    except ValueError:
+        print_long_cm = 0
+    ai_prompt, use_refs, preset_face = _resolve_preset_ai(preset_key)
+
+    fss = FileSystemStorage()
+    name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_api_{upload.name}'
+    fss.save(name, upload)
+    rec = ImageResult.objects.create(
+        name=name, status=ImageResult.STATUS_PROCESSING, user='api',
+        params={'enhance': enhance, 'preset': preset_key, 'color_limit': color_limit,
+                'print_size': size_str, 'source': 'thiet-ke'})
+
+    try:
+        # Chạy ĐỒNG BỘ (không qua thread) để trả kết quả ngay cho web bán hàng.
+        process_image(rec.id, name, enhance, None, color_limit, 0, 0,
+                      ai_prompt, use_refs, preset_face, print_long_cm, 2, 2)
+    except Exception as e:
+        return _cors(JsonResponse({'ok': False, 'error': f'Lỗi xử lý: {e}'}, status=500))
+
+    rec.refresh_from_db()
+    _prune_image_results()
+    if rec.status == ImageResult.STATUS_ERROR:
+        return _cors(JsonResponse({'ok': False, 'error': rec.error_message or 'Xử lý thất bại'}, status=500))
+
+    def _u(rel):
+        return request.build_absolute_uri('/media/' + rel) if rel else ''
+    return _cors(JsonResponse({
+        'ok': True, 'status': rec.status, 'id': rec.id,
+        'img_output': _u(rec.name_output),
+        'enhanced': _u(rec.enhanced_name),
+        'original': _u(rec.name),
+        'colors': split_list(10, rec.colors),
+        'warn': rec.error_message or '',
+    }))
+
+
+@csrf_exempt
 def api_ketoan(request):
     """API đọc dữ liệu cho phần mềm KẾ TOÁN (ketoan.tranhdali.vn).
     Trả JSON: chi phí sơn theo tháng, tồn kho sơn, số mẻ pha.

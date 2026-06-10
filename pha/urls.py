@@ -19,6 +19,9 @@ urlpatterns = [
     path('quan-ly-nhap', views.quan_ly_nhap, name='quan_ly_nhap'),
     path('manifest-ql.webmanifest', views.manifest_ql, name='manifest_ql'),
 
+    # API xử lý ảnh cho web bán hàng (tranhdali.vn/thiet-ke)
+    path('api/xu-ly-anh', views.api_xu_ly_anh, name='api_xu_ly_anh'),
+
     # API cho phần mềm kế toán (ketoan.tranhdali.vn)
     path('api/ketoan', views.api_ketoan, name='api_ketoan'),
     path('api/luong', views.api_luong, name='api_luong'),
