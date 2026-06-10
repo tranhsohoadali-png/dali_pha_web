@@ -180,6 +180,25 @@ class PaintingProduction(models.Model):
         return f'{self.day} {self.painting} {self.size} ×{self.qty}'
 
 
+class Attendance(models.Model):
+    """Chấm công: mỗi nhân viên 1 dòng/ngày (giờ vào, giờ ra). Chỉ chấp nhận khi IP
+    mạng trùng Wifi công ty (cấu hình ở AppSetting 'ATTENDANCE_IPS')."""
+    user = models.CharField(max_length=80, db_index=True)
+    day = models.CharField(max_length=10, db_index=True)    # YYYY-MM-DD (giờ VN)
+    month = models.CharField(max_length=7, db_index=True)   # YYYY-MM
+    check_in = models.DateTimeField(null=True, blank=True)
+    check_out = models.DateTimeField(null=True, blank=True)
+    ip_in = models.CharField(max_length=64, blank=True, default='')
+    ip_out = models.CharField(max_length=64, blank=True, default='')
+
+    class Meta:
+        unique_together = ('user', 'day')
+        ordering = ['-day', 'user']
+
+    def __str__(self):
+        return f'{self.day} {self.user}'
+
+
 class PushSubscription(models.Model):
     """Đăng ký Web Push của trình duyệt nhân viên (để đẩy thông báo cả khi tắt app)."""
     username = models.CharField(max_length=80, db_index=True)

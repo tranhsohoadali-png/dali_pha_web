@@ -51,6 +51,11 @@ urlpatterns = [
     path('loi-nhuan', views.loi_nhuan, name='loi_nhuan'),
     path('thong-ke-loi-nhuan', views.thong_ke_loi_nhuan, name='thong_ke_loi_nhuan'),
     path('loi-nhuan-excel', views.export_loi_nhuan_excel, name='loi_nhuan_excel'),
+
+    # Chấm công (theo IP Wifi công ty)
+    path('cham-cong', views.cham_cong, name='cham_cong'),
+    path('cham-cong-quan-ly', views.cham_cong_quan_ly, name='cham_cong_quan_ly'),
+    path('cham-cong-excel', views.export_cham_cong_excel, name='cham_cong_excel'),
     path('quan-ly-giao-rot', views.quan_ly_giao_rot, name='quan_ly_giao_rot'),
     path('push-key', views.push_key, name='push_key'),
     path('push-subscribe', views.push_subscribe, name='push_subscribe'),

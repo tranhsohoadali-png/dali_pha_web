@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quản lý chấm công</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+</head>
+<body class="bg-body-tertiary">
+
+{% include '_nav.html' %}
+
+<div class="container-fluid py-3">
+  {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
+
+  <!-- Cấu hình Wifi công ty -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-wifi"></i> Wifi công ty (IP được phép chấm công)</div>
+        <div class="card-body">
+          <form method="POST" action="/cham-cong-quan-ly" class="row g-2 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_ips">
+            <div class="col-md-8">
+              <label class="form-label small mb-1">Danh sách IP công ty (cách nhau dấu phẩy). Có thể nhập IP đầy đủ <code>113.161.4.20</code> hoặc tiền tố <code>113.161.</code></label>
+              <input type="text" name="ips" id="ips" class="form-control" value="{{ ips }}" placeholder="VD: 113.161.4.20, 14.169.">
+            </div>
+            <div class="col-md-4">
+              <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu IP công ty</button>
+            </div>
+          </form>
+          <div class="alert alert-secondary mt-3 mb-0 d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-router"></i> IP bạn đang truy cập (mở trang này khi đang ở Wifi công ty rồi bấm “Dùng IP này”): <b id="curIp">{{ cur_ip }}</b></span>
+            <button id="useIp" type="button" class="btn btn-sm btn-outline-primary">Dùng IP này</button>
+          </div>
+          {% if not ips %}<div class="form-text text-danger mt-1"><i class="bi bi-exclamation-triangle"></i> Chưa cấu hình — hiện cho phép chấm công ở mọi mạng. Hãy nhập IP Wifi công ty để khoá.</div>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bảng công -->
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <span><i class="bi bi-card-checklist"></i> Bảng công — {{ month_label }}</span>
+          <span class="d-flex gap-2">
+            <select id="monthSel" class="form-select form-select-sm" style="max-width:160px">
+              {% for m in months %}<option value="{{ m.value }}" {% if m.value == month %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
+            </select>
+            <a id="excelBtn" href="/cham-cong-excel?month={{ month }}" class="btn btn-sm btn-success"><i class="bi bi-file-earmark-excel"></i> Xuất Excel</a>
+          </span>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-lg-5">
+              <div class="fw-semibold mb-2">Tổng hợp theo nhân viên</div>
+              <table class="table table-sm">
+                <thead class="table-light"><tr><th>Nhân viên</th><th class="text-center">Ngày công</th><th class="text-end">Tổng giờ</th></tr></thead>
+                <tbody>
+                  {% for s in summary %}<tr><td class="fw-semibold">{{ s.user }}</td><td class="text-center">{{ s.days }}</td><td class="text-end">{{ s.hours }}h</td></tr>
+                  {% empty %}<tr><td colspan="3" class="text-secondary text-center">Chưa có dữ liệu tháng này.</td></tr>{% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div class="col-lg-7">
+              <div class="fw-semibold mb-2">Chi tiết</div>
+              <div class="table-responsive" style="max-height:480px;overflow:auto">
+                <table class="table table-sm">
+                  <thead class="table-light"><tr><th>Ngày</th><th>Nhân viên</th><th class="text-center">Vào</th><th class="text-center">Ra</th><th class="text-end">Giờ</th></tr></thead>
+                  <tbody>
+                    {% for r in detail %}<tr><td>{{ r.day }}</td><td>{{ r.user }}</td><td class="text-center">{{ r.in|default:"—" }}</td><td class="text-center">{{ r.out|default:"—" }}</td><td class="text-end">{% if r.hours %}{{ r.hours }}h{% else %}—{% endif %}</td></tr>
+                    {% empty %}<tr><td colspan="5" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>{% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Đổi tháng -> tải lại
+  document.getElementById('monthSel').addEventListener('change', function(){
+    window.location = '/cham-cong-quan-ly?month=' + encodeURIComponent(this.value);
+  });
+  document.getElementById('monthSel').addEventListener('change', function(){
+    document.getElementById('excelBtn').href = '/cham-cong-excel?month=' + encodeURIComponent(this.value);
+  });
+  // Dùng IP hiện tại: chèn vào ô IP
+  document.getElementById('useIp').addEventListener('click', function(){
+    var ip = document.getElementById('curIp').textContent.trim();
+    var inp = document.getElementById('ips');
+    var cur = inp.value.trim();
+    if(cur.indexOf(ip) === -1){ inp.value = cur ? (cur + ', ' + ip) : ip; }
+    inp.focus();
+  });
+</script>
+</body>
+</html>

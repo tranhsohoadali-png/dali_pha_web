@@ -43,12 +43,16 @@
         <li class="nav-item">
           <a class="nav-link{% if '/nhan-vien' in request.path %} active fw-semibold{% endif %}" href="/nhan-vien"><i class="bi bi-people"></i> Nhân viên</a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link{% if '/cham-cong' in request.path %} active fw-semibold{% endif %}" href="/cham-cong-quan-ly"><i class="bi bi-fingerprint"></i> Chấm công</a>
+        </li>
       </ul>
       <ul class="navbar-nav">
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-person-circle"></i> {{ user.username }}</a>
           <ul class="dropdown-menu dropdown-menu-lg-end">
             <li><a class="dropdown-item" href="/app"><i class="bi bi-phone"></i> App nhân viên (pha + rót)</a></li>
+            <li><a class="dropdown-item" href="/cham-cong"><i class="bi bi-fingerprint"></i> Chấm công</a></li>
             <li><a class="dropdown-item" href="/quan-ly"><i class="bi bi-phone-vibrate"></i> App quản lý</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item text-danger" href="/logout"><i class="bi bi-box-arrow-right"></i> Đăng xuất</a></li>

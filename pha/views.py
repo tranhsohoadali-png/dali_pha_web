@@ -1662,6 +1662,188 @@ def export_loi_nhuan_excel(request):
     return resp
 
 
+# ===================== CHẤM CÔNG (theo IP Wifi công ty) =====================
+def _client_ip(request):
+    """IP thật của máy nhân viên. Sau nginx, lấy entry CUỐI của X-Forwarded-For
+    (do nginx tự thêm = IP thật, chống giả mạo); không có thì REMOTE_ADDR."""
+    xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    if xff:
+        parts = [p.strip() for p in xff.split(',') if p.strip()]
+        if parts:
+            return parts[-1]
+    return request.META.get('REMOTE_ADDR', '') or ''
+
+
+def _attendance_ips():
+    from pha.models import AppSetting
+    raw = (AppSetting.get('ATTENDANCE_IPS', '') or '')
+    return [s.strip() for s in raw.replace('\n', ',').split(',') if s.strip()]
+
+
+def _ip_allowed(ip):
+    """True nếu ip khớp danh sách IP công ty. Mỗi mục: IP đầy đủ (113.161.4.20) hoặc
+    tiền tố theo octet (113.161. hoặc 113.161.4). Chưa cấu hình -> cho phép (để lấy IP)."""
+    allow = _attendance_ips()
+    if not allow:
+        return True
+    for a in allow:
+        if ip == a:
+            return True
+        if a.endswith('.') and ip.startswith(a):
+            return True
+        if ip.startswith(a + '.'):
+            return True
+    return False
+
+
+def _vn_dt(dt):
+    if not dt:
+        return None
+    try:
+        return dt.astimezone(_VN) if _VN else dt
+    except Exception:
+        return dt
+
+
+def _hm(dt):
+    d = _vn_dt(dt)
+    return d.strftime('%H:%M') if d else ''
+
+
+def _fmt_day(d):
+    try:
+        return datetime.strptime(d, '%Y-%m-%d').strftime('%d/%m')
+    except ValueError:
+        return d
+
+
+def _att_hours(rec):
+    if rec.check_in and rec.check_out:
+        h = (rec.check_out - rec.check_in).total_seconds() / 3600.0
+        return round(h, 2) if h > 0 else 0
+    return 0
+
+
+@csrf_exempt
+@login_required(login_url='/login')
+def cham_cong(request):
+    """Trang CHẤM CÔNG cho nhân viên: bấm Vào làm / Tan làm (chỉ khi đúng Wifi công ty)."""
+    from pha.models import Attendance
+    now = _now()
+    ip = _client_ip(request)
+    ip_ok = _ip_allowed(ip)
+    configured = bool(_attendance_ips())
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if not ip_ok:
+            return JsonResponse({'ok': False, 'wifi': False,
+                                 'msg': 'Bạn cần kết nối Wifi công ty để chấm công.', 'ip': ip})
+        rec, _ = Attendance.objects.get_or_create(
+            user=request.user.username, day=now.strftime('%Y-%m-%d'),
+            defaults={'month': now.strftime('%Y-%m')})
+        if action == 'in':
+            if rec.check_in:
+                return JsonResponse({'ok': False, 'msg': 'Bạn đã chấm công VÀO hôm nay rồi.',
+                                     'in': _hm(rec.check_in), 'out': _hm(rec.check_out)})
+            rec.check_in = now; rec.ip_in = ip; rec.save()
+            return JsonResponse({'ok': True, 'msg': 'Đã chấm công VÀO lúc ' + _hm(now),
+                                 'in': _hm(rec.check_in), 'out': _hm(rec.check_out)})
+        if action == 'out':
+            if not rec.check_in:
+                return JsonResponse({'ok': False, 'msg': 'Bạn chưa chấm công VÀO.'})
+            rec.check_out = now; rec.ip_out = ip; rec.save()
+            return JsonResponse({'ok': True, 'msg': 'Đã chấm công RA lúc ' + _hm(now),
+                                 'in': _hm(rec.check_in), 'out': _hm(rec.check_out)})
+        return JsonResponse({'ok': False, 'msg': 'Hành động không hợp lệ.'})
+
+    today = Attendance.objects.filter(user=request.user.username,
+                                      day=now.strftime('%Y-%m-%d')).first()
+    recent = [{'day': _fmt_day(r.day), 'in': _hm(r.check_in), 'out': _hm(r.check_out),
+               'hours': _att_hours(r)}
+              for r in Attendance.objects.filter(user=request.user.username).order_by('-day')[:14]]
+    return render(request, 'cham_cong.html', {
+        'today_in': _hm(today.check_in) if today else '',
+        'today_out': _hm(today.check_out) if today else '',
+        'ip': ip, 'ip_ok': ip_ok, 'configured': configured, 'recent': recent,
+        'today_label': now.strftime('%d/%m/%Y'),
+    })
+
+
+@csrf_exempt
+@staff_required
+def cham_cong_quan_ly(request):
+    """Quản lý CHẤM CÔNG: cấu hình IP Wifi công ty + xem bảng công theo tháng."""
+    from pha.models import Attendance, AppSetting
+    if request.method == 'POST' and request.POST.get('action') == 'save_ips':
+        AppSetting.set('ATTENDANCE_IPS', (request.POST.get('ips') or '').strip())
+        messages.info(request, 'Đã lưu IP Wifi công ty.')
+        return redirect('/cham-cong-quan-ly')
+
+    now = _now()
+    month = request.GET.get('month') or now.strftime('%Y-%m')
+    summ, detail = {}, []
+    for r in Attendance.objects.filter(month=month).order_by('-day', 'user'):
+        s = summ.setdefault(r.user, {'user': r.user, 'days': 0, 'hours': 0.0})
+        if r.check_in:
+            s['days'] += 1
+        s['hours'] += _att_hours(r)
+        detail.append({'day': _fmt_day(r.day), 'user': r.user, 'in': _hm(r.check_in),
+                       'out': _hm(r.check_out), 'hours': _att_hours(r)})
+    summary = sorted(summ.values(), key=lambda x: -x['hours'])
+    for s in summary:
+        s['hours'] = round(s['hours'], 1)
+    months = sorted(set(Attendance.objects.values_list('month', flat=True)), reverse=True) \
+        or [now.strftime('%Y-%m')]
+    return render(request, 'cham_cong_quan_ly.html', {
+        'ips': AppSetting.get('ATTENDANCE_IPS', ''), 'cur_ip': _client_ip(request),
+        'month': month, 'month_label': _fmt_month(month),
+        'months': [{'value': m, 'label': _fmt_month(m)} for m in months],
+        'summary': summary, 'detail': detail[:200],
+    })
+
+
+@csrf_exempt
+@staff_required
+def export_cham_cong_excel(request):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from pha.models import Attendance
+    now = _now()
+    month = request.GET.get('month') or now.strftime('%Y-%m')
+    wb = Workbook()
+    head_fill = PatternFill('solid', fgColor='198754')
+    head_font = Font(bold=True, color='FFFFFF')
+    center = Alignment(horizontal='center')
+    summ = {}
+    ws2 = wb.active
+    ws2.title = "Chi tiet"
+    ws2.append(["Ngày", "Nhân viên", "Giờ vào", "Giờ ra", "Số giờ"])
+    for c in ws2[1]:
+        c.fill = head_fill; c.font = head_font; c.alignment = center
+    for r in Attendance.objects.filter(month=month).order_by('day', 'user'):
+        s = summ.setdefault(r.user, {'days': 0, 'hours': 0.0})
+        if r.check_in:
+            s['days'] += 1
+        s['hours'] += _att_hours(r)
+        ws2.append([_fmt_day(r.day), r.user, _hm(r.check_in), _hm(r.check_out), _att_hours(r)])
+    for col, w in zip('ABCDE', (12, 18, 10, 10, 10)):
+        ws2.column_dimensions[col].width = w
+    ws = wb.create_sheet("Tong hop", 0)
+    ws.append([f"BẢNG CÔNG THÁNG {_fmt_month(month)}"])
+    ws.append(["Nhân viên", "Ngày công", "Tổng giờ"])
+    for c in ws[2]:
+        c.fill = head_fill; c.font = head_font; c.alignment = center
+    for u, s in sorted(summ.items(), key=lambda kv: -kv[1]['hours']):
+        ws.append([u, s['days'], round(s['hours'], 1)])
+    for col, w in zip('ABC', (18, 12, 12)):
+        ws.column_dimensions[col].width = w
+    resp = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = f'attachment; filename="bang_cong_{month}.xlsx"'
+    wb.save(resp)
+    return resp
+
+
 # ===================== XỬ LÝ ẢNH (tab cho chủ) =====================
 def _fmt_name(filename):
     """Tên hiển thị gọn: '18:58 08/06 · Asset 2@4x.png' từ tên file có timestamp."""
