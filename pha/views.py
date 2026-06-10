@@ -252,6 +252,86 @@ def api_ketoan(request):
 
 
 @csrf_exempt
+def api_luong(request):
+    """API LƯƠNG cho phần mềm kế toán (ketoan.tranhdali.vn): mỗi nhân viên/tháng gồm
+    NĂNG SUẤT (lương khoán) + CHẤM CÔNG (ngày công, giờ, tăng ca, đi muộn, phạt).
+    Bảo vệ bằng ?key=KETOAN_API_KEY. Có CORS. ?month=YYYY-MM (mặc định tháng này)."""
+    origin = getattr(settings, 'KETOAN_ALLOW_ORIGIN', '*')
+
+    def _cors(resp):
+        resp['Access-Control-Allow-Origin'] = origin
+        resp['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        resp['Access-Control-Allow-Headers'] = 'Content-Type'
+        resp['Cache-Control'] = 'no-store'
+        return resp
+
+    if request.method == 'OPTIONS':
+        return _cors(HttpResponse(status=204))
+    if request.GET.get('key', '') != getattr(settings, 'KETOAN_API_KEY', ''):
+        return _cors(JsonResponse({'ok': False, 'error': 'Sai khoá API'}, status=401))
+
+    from pha.models import Attendance
+    now = _now()
+    month = request.GET.get('month') or now.strftime('%Y-%m')
+
+    # Năng suất + lương khoán (piece-rate)
+    _, prows, _ptot, rates = _productivity('month', month)
+    pmap = {r['user']: r for r in prows}
+
+    # Chấm công + tăng ca + phạt
+    cfg = _att_cfg()
+    att = {}
+    for r in Attendance.objects.filter(month=month):
+        c = _att_calc(r, cfg)
+        a = att.setdefault(r.user, {'work_days': 0, 'total_hours': 0.0, 'ot_hours': 0.0,
+                                    'ot_pay': 0, 'late_minutes': 0, 'late_fine': 0})
+        if r.check_in:
+            a['work_days'] += 1
+        a['total_hours'] += c['hours']; a['ot_hours'] += c['ot_hours']
+        a['ot_pay'] += c['ot_pay']; a['late_minutes'] += c['late_min']; a['late_fine'] += c['fine']
+
+    users = sorted(set(pmap) | set(att))
+    employees = []
+    for u in users:
+        p = pmap.get(u, {'pha': 0, 'rot_p': 0, 'rot_c': 0, 'sx': 0, 'pay': 0})
+        a = att.get(u, {'work_days': 0, 'total_hours': 0.0, 'ot_hours': 0.0,
+                        'ot_pay': 0, 'late_minutes': 0, 'late_fine': 0})
+        piece_pay = round(p['pay'])
+        suggested = piece_pay + round(a['ot_pay']) - round(a['late_fine'])
+        employees.append({
+            'user': u,
+            'piece': {'pha_batches': p['pha'], 'rot_paintings': p['rot_p'],
+                      'rot_colors': p['rot_c'], 'sx_paintings': p['sx'], 'piece_pay': piece_pay},
+            'attendance': {'work_days': a['work_days'], 'total_hours': round(a['total_hours'], 2),
+                           'ot_hours': round(a['ot_hours'], 2), 'ot_pay': round(a['ot_pay']),
+                           'late_minutes': a['late_minutes'], 'late_fine': round(a['late_fine'])},
+            'suggested_net': suggested,
+        })
+
+    data = {
+        'ok': True, 'source': 'mau.tranhdali.vn',
+        'generated_at': now.strftime('%Y-%m-%d %H:%M'), 'month': month,
+        'note': 'suggested_net = lương khoán + tiền tăng ca − phạt đi muộn '
+                '(CHƯA gồm lương cơ bản/phụ cấp/BHXH — kế toán tự cộng).',
+        'piece_rates': {'pha_per_batch': rates['pha'], 'rot_per_painting': rates['rot_p'],
+                        'rot_per_color': rates['rot_c'], 'sx_per_painting': rates['sx']},
+        'schedule': {'work_start': cfg['start'], 'work_end': cfg['end'],
+                     'work_days': sorted(cfg['workdays']),
+                     'work_days_label': [_WEEKDAYS[i] for i in sorted(cfg['workdays'])],
+                     'late_grace_min': cfg['grace'], 'late_fine_per_min': cfg['fine_min'],
+                     'late_fine_fixed': cfg['fine_fixed'], 'ot_rate_per_hour': cfg['ot_rate']},
+        'employees': employees,
+        'totals': {
+            'piece_pay': sum(e['piece']['piece_pay'] for e in employees),
+            'ot_pay': sum(e['attendance']['ot_pay'] for e in employees),
+            'late_fine': sum(e['attendance']['late_fine'] for e in employees),
+            'suggested_net': sum(e['suggested_net'] for e in employees),
+        },
+    }
+    return _cors(JsonResponse(data))
+
+
+@csrf_exempt
 @staff_required
 def kho_son(request):
     """Quản lý tồn kho màu sơn gốc (chỉ chủ)."""
