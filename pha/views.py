@@ -1960,6 +1960,18 @@ def _fmt_day(d):
         return d
 
 
+def _mk_dt(day_str, hm_str):
+    """Ghép ngày 'YYYY-MM-DD' + giờ 'HH:MM' -> datetime có timezone VN. None nếu giờ trống/sai."""
+    hm = (hm_str or '').strip()
+    if not hm:
+        return None
+    try:
+        d = datetime.strptime((day_str or '').strip() + ' ' + hm, '%Y-%m-%d %H:%M')
+    except ValueError:
+        return None
+    return d.replace(tzinfo=_VN) if _VN else d
+
+
 def _att_hours(rec):
     if rec.check_in and rec.check_out:
         h = (rec.check_out - rec.check_in).total_seconds() / 3600.0
@@ -2152,6 +2164,34 @@ def cham_cong_quan_ly(request):
             AppSetting.set('KETOAN_PULL_KEY', (request.POST.get('ketoan_pull_key') or '').strip())
             messages.info(request, 'Đã lưu kết nối kéo lương từ kế toán.')
             return redirect('/cham-cong-quan-ly')
+        if act == 'save_attendance':
+            au = (request.POST.get('att_user') or '').strip()
+            ad = (request.POST.get('att_day') or '').strip()
+            try:
+                ddmm = datetime.strptime(ad, '%Y-%m-%d')
+            except ValueError:
+                ddmm = None
+            if not au or not ddmm:
+                messages.error(request, 'Cần chọn nhân viên và ngày hợp lệ.')
+                return redirect('/cham-cong-quan-ly')
+            cin = _mk_dt(ad, request.POST.get('att_in'))
+            cout = _mk_dt(ad, request.POST.get('att_out'))
+            if cin and cout and cout <= cin:
+                messages.error(request, 'Giờ ra phải sau giờ vào.')
+                return redirect('/cham-cong-quan-ly?month=' + ad[:7])
+            rec, _c = Attendance.objects.get_or_create(user=au, day=ad, defaults={'month': ad[:7]})
+            rec.month = ad[:7]
+            rec.check_in = cin
+            rec.check_out = cout
+            rec.save()
+            messages.info(request, f'Đã lưu công {au} ngày {ddmm.strftime("%d/%m/%Y")} (sửa thủ công).')
+            return redirect('/cham-cong-quan-ly?month=' + ad[:7])
+        if act == 'delete_attendance':
+            au = (request.POST.get('att_user') or '').strip()
+            ad = (request.POST.get('att_day') or '').strip()
+            Attendance.objects.filter(user=au, day=ad).delete()
+            messages.info(request, f'Đã xoá chấm công {au} ngày {_fmt_day(ad)}.')
+            return redirect('/cham-cong-quan-ly?month=' + (ad[:7] if len(ad) >= 7 else ''))
 
     now = _now()
     month = request.GET.get('month') or now.strftime('%Y-%m')
@@ -2167,7 +2207,7 @@ def cham_cong_quan_ly(request):
             s['days'] += 1
         s['hours'] += c['hours']; s['ot'] += c['ot_hours']
         s['late'] += c['late_min']; s['fine'] += c['fine']; s['ot_pay'] += c['ot_pay']
-        detail.append({'day': _fmt_day(r.day), 'wd': c['weekday'], 'user': r.user,
+        detail.append({'day': _fmt_day(r.day), 'day_iso': r.day, 'wd': c['weekday'], 'user': r.user,
                        'in': _hm(r.check_in), 'out': _hm(r.check_out), 'hours': c['hours'],
                        'late': c['late_min'], 'ot': c['ot_hours'], 'fine': c['fine'],
                        'rest': not c['workday']})
@@ -2194,6 +2234,9 @@ def cham_cong_quan_ly(request):
     cur_ip = _client_ip(request)
     ips_set = bool(_attendance_ips())
     weekday_opts = [{'i': i, 'name': _WEEKDAYS[i], 'on': (i in cfg['workdays'])} for i in range(7)]
+    from django.contrib.auth.models import User as _User
+    emp_users = sorted(set(_User.objects.values_list('username', flat=True))
+                       | set(Attendance.objects.values_list('user', flat=True)))
     return render(request, 'cham_cong_quan_ly.html', {
         'ips': AppSetting.get('ATTENDANCE_IPS', ''), 'cur_ip': cur_ip,
         'cur_private': _ip_private(cur_ip),
@@ -2207,6 +2250,8 @@ def cham_cong_quan_ly(request):
         'api_base': request.scheme + '://' + request.get_host(),
         'ketoan_url': AppSetting.get('KETOAN_SALARY_URL', ''),
         'ketoan_pull_key': AppSetting.get('KETOAN_PULL_KEY', ''),
+        'emp_users': emp_users,
+        'today_iso': now.strftime('%Y-%m-%d'),
     })
 
 

@@ -197,10 +197,41 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
             </table>
           </div>
 
+          <!-- Sửa / thêm công thủ công (quản lý điền bù ngày cũ, kể cả tháng trước) -->
+          <div class="border rounded p-2 mb-3 bg-body-tertiary" id="attEditCard">
+            <div class="fw-semibold mb-2"><i class="bi bi-pencil-square text-primary"></i> Sửa / thêm công thủ công
+              <span class="text-secondary small fw-normal">— điền bù ngày cũ, kể cả tháng trước</span></div>
+            <form method="POST" action="/cham-cong-quan-ly" class="row g-2 align-items-end">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="save_attendance">
+              <div class="col-6 col-md-3">
+                <label class="form-label small mb-1">Nhân viên</label>
+                <input type="text" name="att_user" id="attUser" class="form-control form-control-sm" list="empList" autocomplete="off" placeholder="tên đăng nhập" required>
+                <datalist id="empList">{% for u in emp_users %}<option value="{{ u }}"></option>{% endfor %}</datalist>
+              </div>
+              <div class="col-6 col-md-3">
+                <label class="form-label small mb-1">Ngày</label>
+                <input type="date" name="att_day" id="attDay" class="form-control form-control-sm" max="{{ today_iso }}" required>
+              </div>
+              <div class="col-4 col-md-2">
+                <label class="form-label small mb-1">Giờ vào</label>
+                <input type="time" name="att_in" id="attIn" class="form-control form-control-sm">
+              </div>
+              <div class="col-4 col-md-2">
+                <label class="form-label small mb-1">Giờ ra</label>
+                <input type="time" name="att_out" id="attOut" class="form-control form-control-sm">
+              </div>
+              <div class="col-4 col-md-2">
+                <button class="btn btn-primary btn-sm w-100 fw-semibold"><i class="bi bi-save"></i> Lưu</button>
+              </div>
+            </form>
+            <div class="form-text">Bỏ trống giờ nếu không có. Chọn đúng <b>nhân viên + ngày đã có</b> sẽ <b>ghi đè</b> giờ cũ. Bấm <i class="bi bi-pencil"></i> ở mỗi dòng dưới để sửa nhanh.</div>
+          </div>
+
           <div class="fw-semibold mb-2">Chi tiết từng ngày</div>
           <div class="table-responsive" style="max-height:520px;overflow:auto">
             <table class="table table-sm">
-              <thead class="table-light position-sticky top-0"><tr><th>Ngày</th><th>Thứ</th><th>Nhân viên</th><th class="text-center">Vào</th><th class="text-center">Ra</th><th class="text-end">Giờ</th><th class="text-end">Muộn</th><th class="text-end">Tăng ca</th><th class="text-end">Phạt</th></tr></thead>
+              <thead class="table-light position-sticky top-0"><tr><th>Ngày</th><th>Thứ</th><th>Nhân viên</th><th class="text-center">Vào</th><th class="text-center">Ra</th><th class="text-end">Giờ</th><th class="text-end">Muộn</th><th class="text-end">Tăng ca</th><th class="text-end">Phạt</th><th class="text-end">Sửa</th></tr></thead>
               <tbody>
                 {% for r in detail %}<tr{% if r.rest %} class="table-warning"{% endif %}>
                   <td>{{ r.day }}</td><td class="small">{{ r.wd }}{% if r.rest %} <span class="badge text-bg-warning">nghỉ</span>{% endif %}</td>
@@ -209,8 +240,19 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
                   <td class="text-end {% if r.late %}text-danger{% endif %}">{% if r.late %}{{ r.late }}'{% else %}—{% endif %}</td>
                   <td class="text-end">{% if r.ot %}{{ r.ot }}h{% else %}—{% endif %}</td>
                   <td class="text-end {% if r.fine %}text-danger fw-bold{% endif %}">{% if r.fine %}{{ r.fine|floatformat:0 }}{% else %}—{% endif %}</td>
+                  <td class="text-end text-nowrap">
+                    <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 att-edit"
+                      data-user="{{ r.user }}" data-day="{{ r.day_iso }}" data-in="{{ r.in }}" data-out="{{ r.out }}" title="Sửa giờ"><i class="bi bi-pencil"></i></button>
+                    <form method="POST" action="/cham-cong-quan-ly" class="d-inline" onsubmit="return confirm('Xoá chấm công {{ r.user }} ngày {{ r.day }}?')">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="delete_attendance">
+                      <input type="hidden" name="att_user" value="{{ r.user }}">
+                      <input type="hidden" name="att_day" value="{{ r.day_iso }}">
+                      <button class="btn btn-sm btn-outline-danger py-0 px-1" title="Xoá"><i class="bi bi-trash"></i></button>
+                    </form>
+                  </td>
                 </tr>
-                {% empty %}<tr><td colspan="9" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>{% endfor %}
+                {% empty %}<tr><td colspan="10" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>{% endfor %}
               </tbody>
             </table>
           </div>
@@ -369,6 +411,19 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
     var cur = inp.value.trim();
     if(cur.indexOf(ip) === -1){ inp.value = cur ? (cur + ', ' + ip) : ip; }
     inp.focus();
+  });
+  // Sửa nhanh: bấm bút ở 1 dòng -> đổ vào form sửa/thêm công + cuộn tới
+  document.querySelectorAll('.att-edit').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.getElementById('attUser').value = this.dataset.user || '';
+      document.getElementById('attDay').value  = this.dataset.day  || '';
+      document.getElementById('attIn').value   = (this.dataset.in  || '').replace('—','');
+      document.getElementById('attOut').value  = (this.dataset.out || '').replace('—','');
+      var card = document.getElementById('attEditCard');
+      card.scrollIntoView({behavior:'smooth', block:'center'});
+      card.style.transition='box-shadow .3s'; card.style.boxShadow='0 0 0 3px rgba(13,110,253,.5)';
+      setTimeout(function(){ card.style.boxShadow='none'; }, 1300);
+    });
   });
 </script>
 </body>
