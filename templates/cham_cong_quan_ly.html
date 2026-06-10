@@ -259,6 +259,62 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
       </div>
     </div>
   </div>
+
+  <!-- Kéo lương TỪ kế toán về (hiện ở popup Tan làm) -->
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-cloud-download"></i> Kéo lương từ kế toán (hiện khi nhân viên Tan làm)</div>
+        <div class="card-body">
+          <div class="small text-secondary mb-2">App này gọi sang <b>ketoan.tranhdali.vn</b> để lấy <b>lương ngày công chính xác</b> rồi hiện trong popup khi nhân viên bấm Tan làm. Bên kế toán cần tạo 1 endpoint trả JSON (xem hướng dẫn dưới). Khi chưa nối được, popup tự hiện ngày công như bình thường.</div>
+          <form method="POST" action="/cham-cong-quan-ly" class="row g-2 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_ketoan_pull">
+            <div class="col-md-7">
+              <label class="form-label small mb-1">URL API lương của kế toán</label>
+              <input type="text" name="ketoan_url" class="form-control font-monospace" value="{{ ketoan_url }}" placeholder="https://ketoan.tranhdali.vn/api/luong-nhan-vien" autocomplete="off">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small mb-1">Khoá (key) bên kế toán</label>
+              <input type="text" name="ketoan_pull_key" class="form-control font-monospace" value="{{ ketoan_pull_key }}" autocomplete="off">
+            </div>
+            <div class="col-md-2">
+              <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu</button>
+            </div>
+          </form>
+
+          <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+            <div class="input-group input-group-sm" style="max-width:280px">
+              <span class="input-group-text">Test với NV</span>
+              <input type="text" id="ketoanTestUser" class="form-control" placeholder="tên đăng nhập nhân viên">
+            </div>
+            <button type="button" id="ketoanTestBtn" class="btn btn-sm btn-outline-success"><i class="bi bi-plug"></i> Test kết nối</button>
+            <span id="ketoanTestRes" class="small"></span>
+          </div>
+
+          <details class="mt-3 small">
+            <summary class="fw-semibold" style="cursor:pointer">Hướng dẫn cho bên kế toán cần làm gì (bấm xem)</summary>
+            <div class="mt-2">
+              Bên <b>ketoan.tranhdali.vn</b> tạo 1 endpoint GET. App này sẽ gọi tới:
+              <div class="font-monospace bg-body-tertiary border rounded p-2 my-1" style="word-break:break-all">GET {URL}?key=...&amp;user=&lt;tên đăng nhập&gt;&amp;day=YYYY-MM-DD&amp;month=YYYY-MM</div>
+              Endpoint trả về JSON đúng dạng:
+<pre class="bg-body-tertiary border rounded p-2 mb-1">{
+  "ok": true,
+  "day": 250000,          // lương ngày hôm đó (đồng)
+  "month": 5000000,       // tổng lương tháng tới hiện tại
+  "month_label": "06/2026"
+}</pre>
+              <ul class="mb-0 ps-3">
+                <li>Kiểm tra <code>key</code> khớp khoá đã lưu ở trên; sai thì trả <code>{"ok":false,"error":"sai key"}</code>.</li>
+                <li><code>user</code> = tên đăng nhập nhân viên (giống bên chấm công).</li>
+                <li>Tên trường linh hoạt: chấp nhận <code>day/luong_ngay</code>, <code>month/luong_thang/total</code>.</li>
+              </ul>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -279,6 +335,22 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
       var old=this.textContent; this.textContent='Đã chép'; var self=this; setTimeout(function(){ self.textContent=old; },1200);
     });
   });
+  // Test kéo lương từ kế toán
+  (function(){
+    var btn=document.getElementById('ketoanTestBtn'); if(!btn) return;
+    function vnd(n){ return Math.round(n||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.')+'đ'; }
+    btn.addEventListener('click', function(){
+      var u=(document.getElementById('ketoanTestUser').value||'').trim();
+      var res=document.getElementById('ketoanTestRes');
+      res.className='small text-secondary'; res.textContent='Đang thử…';
+      btn.disabled=true;
+      fetch('/ketoan-luong-test?user='+encodeURIComponent(u)).then(function(r){return r.json();}).then(function(d){
+        btn.disabled=false;
+        if(d.ok){ res.className='small text-success'; res.innerHTML='<i class="bi bi-check-circle"></i> OK — '+d.user+': ngày '+vnd(d.day)+', tháng '+vnd(d.month); }
+        else { res.className='small text-danger'; res.innerHTML='<i class="bi bi-x-circle"></i> '+(d.msg||'Lỗi'); }
+      }).catch(function(){ btn.disabled=false; res.className='small text-danger'; res.textContent='Lỗi kết nối.'; });
+    });
+  })();
 </script>
 
 <script>

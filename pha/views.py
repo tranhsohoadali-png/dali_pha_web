@@ -195,6 +195,92 @@ def _api_key():
     return getattr(settings, 'KETOAN_API_KEY', '')
 
 
+def _ketoan_cfg():
+    """Cấu hình KÉO lương từ phần mềm kế toán (ketoan.tranhdali.vn) về app này."""
+    from pha.models import AppSetting
+    return {
+        'url': (AppSetting.get('KETOAN_SALARY_URL', '') or '').strip(),
+        'key': (AppSetting.get('KETOAN_PULL_KEY', '') or '').strip(),
+    }
+
+
+def _ketoan_salary(username, day, month):
+    """Gọi API của phần mềm kế toán để lấy lương 1 nhân viên (theo ngày công đã setup bên đó).
+
+    Hợp đồng API (ketoan.tranhdali.vn tự code 1 endpoint GET, ví dụ /api/luong-nhan-vien):
+        GET {KETOAN_SALARY_URL}?key=...&user=<username>&day=YYYY-MM-DD&month=YYYY-MM
+        -> {"ok": true, "day": <lương ngày>, "month": <tổng lương tháng>, "month_label": "06/2026"}
+
+    Trả dict {'day','month','month_label'} hoặc None nếu chưa cấu hình / lỗi / hết giờ chờ.
+    Linh hoạt nhận nhiều tên trường (day/day_total/luong_ngay, month/total/luong_thang)."""
+    cfg = _ketoan_cfg()
+    if not cfg['url']:
+        return None
+    import json as _json
+    from urllib.parse import urlencode
+    from urllib.request import urlopen, Request
+    params = {'user': username or '', 'day': day or '', 'month': month or ''}
+    if cfg['key']:
+        params['key'] = cfg['key']
+    sep = '&' if ('?' in cfg['url']) else '?'
+    url = cfg['url'] + sep + urlencode(params)
+    try:
+        req = Request(url, headers={'Accept': 'application/json',
+                                    'User-Agent': 'dali-mau/1.0'})
+        with urlopen(req, timeout=5) as resp:
+            raw = resp.read().decode('utf-8', 'replace')
+        data = _json.loads(raw)
+    except Exception as e:
+        return {'error': str(e)[:140]}
+    if not isinstance(data, dict):
+        return {'error': 'Kế toán trả về không đúng JSON object.'}
+    if data.get('ok') is False:
+        return {'error': str(data.get('error') or data.get('msg') or 'Kế toán báo lỗi.')[:140]}
+
+    def pick(*keys):
+        for k in keys:
+            v = data.get(k)
+            if v is None:
+                continue
+            if isinstance(v, bool):
+                return None
+            if isinstance(v, (int, float)):
+                return float(v)
+            # Chuỗi tiền VND: bỏ 'đ', khoảng trắng và dấu phân cách nghìn (cả , và .)
+            s = str(v).replace('đ', '').replace(' ', '').replace(',', '').replace('.', '').strip()
+            if not s:
+                return None
+            try:
+                return float(s)
+            except ValueError:
+                return None
+        return None
+    d = pick('day', 'day_total', 'today', 'luong_ngay', 'luong_hom_nay')
+    m = pick('month', 'month_total', 'total', 'luong_thang')
+    if d is None and m is None:
+        return {'error': 'Không thấy trường lương (day/month) trong phản hồi.'}
+    return {'day': round(d or 0), 'month': round(m or 0),
+            'month_label': str(data.get('month_label') or '')}
+
+
+@csrf_exempt
+@staff_required
+def ketoan_luong_test(request):
+    """Quản lý bấm Test: thử kéo lương 1 nhân viên từ kế toán để kiểm tra kết nối."""
+    user = (request.GET.get('user') or request.user.username or '').strip()
+    now = _now()
+    res = _ketoan_salary(user, now.strftime('%Y-%m-%d'), now.strftime('%Y-%m'))
+    cfg = _ketoan_cfg()
+    if not cfg['url']:
+        return JsonResponse({'ok': False, 'msg': 'Chưa nhập URL API kế toán.'})
+    if res is None:
+        return JsonResponse({'ok': False, 'msg': 'Chưa cấu hình.'})
+    if 'error' in res:
+        return JsonResponse({'ok': False, 'user': user, 'msg': res['error']})
+    return JsonResponse({'ok': True, 'user': user, 'day': res['day'], 'month': res['month'],
+                         'month_label': res.get('month_label', '')})
+
+
 @csrf_exempt
 def api_ketoan(request):
     """API đọc dữ liệu cho phần mềm KẾ TOÁN (ketoan.tranhdali.vn).
@@ -1999,18 +2085,23 @@ def cham_cong(request):
             if not rec.check_in:
                 return JsonResponse({'ok': False, 'msg': 'Bạn chưa chấm công VÀO.'})
             rec.check_out = now; rec.ip_out = ip; rec.device_out = device; rec.save()
-            month_s = now.strftime('%Y-%m')
+            day_s, month_s = now.strftime('%Y-%m-%d'), now.strftime('%Y-%m')
             tc = _att_calc(rec, _att_cfg())  # công hôm nay
             mc = _emp_cong(u, month=month_s)  # tổng tháng
-            return JsonResponse({'ok': True, 'msg': 'Đã chấm công RA lúc ' + _hm(now),
-                                 'in': _hm(rec.check_in), 'out': _hm(rec.check_out),
-                                 'cong': {'time': _hm(now),
-                                          'today_hours': round(tc['hours'], 1),
-                                          'today_ot': round(tc['ot_hours'], 1),
-                                          'today_late': tc['late_min'],
-                                          'month_days': mc['days'], 'month_hours': mc['hours'],
-                                          'month_ot': mc['ot'], 'month_late': mc['late_min'],
-                                          'month_label': _fmt_month(month_s)}})
+            payload = {'ok': True, 'msg': 'Đã chấm công RA lúc ' + _hm(now),
+                       'in': _hm(rec.check_in), 'out': _hm(rec.check_out),
+                       'cong': {'time': _hm(now),
+                                'today_hours': round(tc['hours'], 1),
+                                'today_ot': round(tc['ot_hours'], 1),
+                                'today_late': tc['late_min'],
+                                'month_days': mc['days'], 'month_hours': mc['hours'],
+                                'month_ot': mc['ot'], 'month_late': mc['late_min'],
+                                'month_label': _fmt_month(month_s)}}
+            # Lương CHÍNH XÁC kéo từ phần mềm kế toán (nếu đã cấu hình + gọi được)
+            sal = _ketoan_salary(u, day_s, month_s)
+            if sal and 'error' not in sal:
+                payload['salary'] = sal
+            return JsonResponse(payload)
         return JsonResponse({'ok': False, 'msg': 'Hành động không hợp lệ.'})
 
     today = Attendance.objects.filter(user=request.user.username,
@@ -2055,6 +2146,11 @@ def cham_cong_quan_ly(request):
         if act == 'save_api_key':
             AppSetting.set('KETOAN_API_KEY', (request.POST.get('api_key') or '').strip())
             messages.info(request, 'Đã lưu khoá API kế toán/lương.')
+            return redirect('/cham-cong-quan-ly')
+        if act == 'save_ketoan_pull':
+            AppSetting.set('KETOAN_SALARY_URL', (request.POST.get('ketoan_url') or '').strip())
+            AppSetting.set('KETOAN_PULL_KEY', (request.POST.get('ketoan_pull_key') or '').strip())
+            messages.info(request, 'Đã lưu kết nối kéo lương từ kế toán.')
             return redirect('/cham-cong-quan-ly')
 
     now = _now()
@@ -2109,6 +2205,8 @@ def cham_cong_quan_ly(request):
         'shared': shared, 'noout': noout[:50], 'bindings': bindings,
         'api_key': _api_key(),
         'api_base': request.scheme + '://' + request.get_host(),
+        'ketoan_url': AppSetting.get('KETOAN_SALARY_URL', ''),
+        'ketoan_pull_key': AppSetting.get('KETOAN_PULL_KEY', ''),
     })
 
 

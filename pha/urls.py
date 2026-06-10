@@ -21,6 +21,7 @@ urlpatterns = [
     # API cho phần mềm kế toán (ketoan.tranhdali.vn)
     path('api/ketoan', views.api_ketoan, name='api_ketoan'),
     path('api/luong', views.api_luong, name='api_luong'),
+    path('ketoan-luong-test', views.ketoan_luong_test, name='ketoan_luong_test'),
 
     path('', views.cong_thuc_mau, name='home'),
     path('cong-thuc-mau', views.cong_thuc_mau, name='cong_thuc_mau'),
