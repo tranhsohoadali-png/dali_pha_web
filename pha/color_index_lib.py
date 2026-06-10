@@ -705,7 +705,7 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long
         # riêng (chừa ngũ quan) bên trong _quantize_face_priority.
         face_sm = 0 if hifi else (sm_level if sm_level > 0 else 2)
         arr = _quantize_face_priority(src_rgb, target, face_mask, feature_mask, face_sm)
-        ksize_sm = 5 if hifi else 7                         # hifi: mượt biên nhẹ -> giữ chi tiết
+        ksize_sm = 3 if hifi else 7                         # hifi: làm mượt RẤT nhẹ -> giữ mặt nét
     else:
         if sm_level > 0 and not hifi:
             sp, sr = {1: (9, 18), 2: (16, 32), 3: (26, 50)}.get(sm_level, (16, 32))
