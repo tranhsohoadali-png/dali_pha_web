@@ -151,7 +151,18 @@
           <div class="row g-2 mb-2">
             <div class="col"><div class="small text-secondary mb-1">Ảnh gốc (đầu vào)</div><img id="imgOrigin" src="{{ file_url }}" class="result-img"></div>
             <div class="col" id="enhancedWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-stars text-warning"></i> Ảnh đã tăng cường (AI)</div><img id="imgEnhanced" src="#" class="result-img"></div>
-            <div class="col" id="designWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-palette-fill text-success"></i> Ảnh thiết kế (bản màu) <span class="text-secondary">· sửa HEX bên phải để đổi màu</span></div><canvas id="imgDesign" class="result-img"></canvas></div>
+            <div class="col" id="designWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-palette-fill text-success"></i> Ảnh thiết kế (bản màu) <span class="text-secondary">· sửa HEX bên phải để đổi màu</span></div><canvas id="imgDesign" class="result-img"></canvas>
+              <div class="border rounded p-2 mt-1">
+                <div class="small fw-semibold mb-1"><i class="bi bi-bezier2 text-success"></i> Mượt nét (như Illustrator Image Trace) — kéo là đổi ngay</div>
+                <div class="row g-2">
+                  <div class="col-6"><label class="form-label small mb-0">Paths (mượt nét): <b id="pathsVal">0</b></label>
+                    <input type="range" class="form-range" id="paths" min="0" max="100" value="0" title="0 = giữ nét gốc; cao = mượt/đơn giản hơn"></div>
+                  <div class="col-6"><label class="form-label small mb-0">Corners (bo góc): <b id="cornersVal">0</b></label>
+                    <input type="range" class="form-range" id="corners" min="0" max="100" value="0" title="0 = giữ góc; cao = bo tròn góc nhọn"></div>
+                </div>
+                <div class="form-text">Chỉ làm mượt ẢNH THIẾT KẾ để xem trước. Bấm "Tải bản in" để xuất theo độ mượt đang chọn.</div>
+              </div>
+            </div>
             <div class="col"><div class="small text-secondary mb-1">Bản đồ đánh số</div><img id="imgResult" src="#" class="result-img" hidden></div>
           </div>
           <div id="paramInfo" class="small text-secondary mb-3 d-none"></div>
@@ -331,6 +342,26 @@
       try{ DIMGDATA=DCTX.getImageData(0,0,DCAN.width,DCAN.height); }catch(e){ DIMGDATA=null; } };
     im.src=url;
   }
+  // ====== Mượt nét ảnh thiết kế (Paths/Corners) — kéo là đổi ngay ======
+  var origDesignUrl='', smTimer=null;
+  function resetAdjust(){ var p=document.getElementById('paths'),c=document.getElementById('corners');
+    if(p){p.value=0;document.getElementById('pathsVal').textContent='0';}
+    if(c){c.value=0;document.getElementById('cornersVal').textContent='0';} }
+  function smoothDesign(){
+    if(!origDesignUrl) return;
+    var p=document.getElementById('paths').value, c=document.getElementById('corners').value;
+    document.getElementById('pathsVal').textContent=p; document.getElementById('cornersVal').textContent=c;
+    clearTimeout(smTimer);
+    smTimer=setTimeout(function(){
+      if(p==0 && c==0){ loadDesign(origDesignUrl); return; }
+      var fd=new FormData(); fd.append('file_url',origDesignUrl); fd.append('paths',p); fd.append('corners',c);
+      fetch('/anh-design-smooth',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(res){
+        if(res && res.ok && res.url) loadDesign(res.url+'?t='+Date.now());
+      }).catch(function(){});
+    }, 220);
+  }
+  (function bindAdjust(){ ['paths','corners'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.addEventListener('input', smoothDesign); }); })();
   function hx2rgb(h){ h=h.replace('#',''); return {r:parseInt(h.substr(0,2),16),g:parseInt(h.substr(2,2),16),b:parseInt(h.substr(4,2),16)}; }
   function recolorDesign(oldHex,newHex){
     if(!DIMGDATA) return;
@@ -384,8 +415,8 @@
       else { ew.hidden=true; }
       // Ảnh thiết kế (bản màu phẳng) - luôn hiện, kể cả khi không dùng AI
       var dw=document.getElementById('designWrap');
-      if(res.design){ dw.hidden=false; loadDesign(res.design); }
-      else { dw.hidden=true; loadDesign(''); }
+      if(res.design){ dw.hidden=false; origDesignUrl=res.design; resetAdjust(); loadDesign(res.design); }
+      else { dw.hidden=true; origDesignUrl=''; loadDesign(''); }
       // Dòng thông số đã dùng (để kiểm tra)
       var p=res.params||{}; var pi=document.getElementById('paramInfo');
       var sm=['Không','Nhẹ','Vừa','Mạnh'][p.smooth||0]||'Không';

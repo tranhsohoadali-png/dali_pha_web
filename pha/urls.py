@@ -5,6 +5,7 @@ from django.views.static import serve as static_serve
 from pha import views
 from pha import face_api
 from pha import learn_lib
+from pha import design_edit
 
 urlpatterns = [
     path('login', views.login_view, name='login'),
@@ -73,6 +74,7 @@ urlpatterns = [
     path('cai-dat-ai', views.cai_dat_ai, name='cai_dat_ai'),
     path('xu-ly-anh', views.xu_ly_anh, name='xu_ly_anh'),
     path('anh-detect-face', face_api.anh_detect_face, name='anh_detect_face'),
+    path('anh-design-smooth', design_edit.design_smooth, name='anh_design_smooth'),
     path('anh-result', views.anh_result, name='anh_result'),
     path('anh-preset', views.anh_preset, name='anh_preset'),
     path('anh-save-color', views.anh_save_color, name='anh_save_color'),
