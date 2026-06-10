@@ -24,12 +24,16 @@
           <form method="POST" action="/cham-cong-quan-ly" class="row g-2 align-items-end">
             {% csrf_token %}
             <input type="hidden" name="action" value="save_ips">
-            <div class="col-md-8">
-              <label class="form-label small mb-1">Danh sách IP công ty (cách nhau dấu phẩy). Có thể nhập IP đầy đủ <code>113.161.4.20</code> hoặc tiền tố <code>113.161.</code></label>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Danh sách IP công ty (cách nhau dấu phẩy). IP đầy đủ <code>113.161.4.20</code> hoặc tiền tố <code>113.161.</code></label>
               <input type="text" name="ips" id="ips" class="form-control" value="{{ ips }}" placeholder="VD: 113.161.4.20, 14.169.">
             </div>
-            <div class="col-md-4">
-              <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu IP công ty</button>
+            <div class="col-md-3">
+              <label class="form-label small mb-1">Giờ vào chuẩn (cờ đi muộn)</label>
+              <input type="time" name="work_start" class="form-control" value="{{ work_start }}">
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu cấu hình</button>
             </div>
           </form>
           {% if cur_private %}
@@ -47,6 +51,83 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
               {% else %}<span class="badge text-bg-warning ms-1">CHƯA khớp — nếu đang ở Wifi công ty, bấm “Dùng IP này” rồi Lưu</span>{% endif %}
             </span>
             <button id="useIp" type="button" class="btn btn-sm btn-outline-primary">Dùng IP này</button>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cảnh báo bất thường -->
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="card shadow-sm border-{% if shared or noout %}danger{% else %}success{% endif %}">
+        <div class="card-header fw-semibold"><i class="bi bi-shield-exclamation"></i> Cảnh báo bất thường — {{ month_label }}</div>
+        <div class="card-body">
+          {% if not shared and not noout and not late %}
+          <div class="text-success"><i class="bi bi-check-circle"></i> Không có bất thường trong tháng này.</div>
+          {% endif %}
+
+          {% if shared %}
+          <div class="alert alert-danger py-2">
+            <b><i class="bi bi-people-fill"></i> 1 thiết bị chấm cho NHIỀU người (nghi chấm hộ):</b>
+            <ul class="mb-0">{% for s in shared %}<li>Máy <code>{{ s.token }}</code>: {{ s.users|join:", " }}</li>{% endfor %}</ul>
+            <div class="small mt-1">→ Reset thiết bị của những người này ở mục bên dưới để buộc gắn lại đúng máy.</div>
+          </div>
+          {% endif %}
+
+          <div class="row g-3">
+            {% if noout %}
+            <div class="col-md-6">
+              <div class="fw-semibold text-warning"><i class="bi bi-box-arrow-right"></i> Quên chấm RA ({{ noout|length }})</div>
+              <table class="table table-sm mb-0"><tbody>
+                {% for r in noout %}<tr><td>{{ r.day }}</td><td>{{ r.user }}</td></tr>{% endfor %}
+              </tbody></table>
+            </div>
+            {% endif %}
+            {% if late %}
+            <div class="col-md-6">
+              <div class="fw-semibold text-secondary"><i class="bi bi-clock"></i> Đi muộn (sau {{ work_start }}) — {{ late|length }}</div>
+              <table class="table table-sm mb-0"><tbody>
+                {% for r in late %}<tr><td>{{ r.day }}</td><td>{{ r.user }}</td><td class="text-end">{{ r.in }}</td></tr>{% endfor %}
+              </tbody></table>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Khoá thiết bị -->
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-phone-flip"></i> Khoá thiết bị (mỗi người 1 máy)</div>
+        <div class="card-body">
+          <div class="small text-secondary mb-2">Lần đầu chấm công, tài khoản sẽ gắn với điện thoại đó. Khi nhân viên <b>đổi máy</b>, bấm <b>Reset</b> để họ gắn lại máy mới.</div>
+          {% if not bindings %}
+          <div class="text-secondary">Chưa có ai chấm công (chưa gắn thiết bị).</div>
+          {% else %}
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead class="table-light"><tr><th>Nhân viên</th><th>Gắn lúc</th><th>Thiết bị</th><th></th></tr></thead>
+              <tbody>
+                {% for b in bindings %}
+                <tr>
+                  <td class="fw-semibold">{{ b.user }}</td>
+                  <td class="small text-secondary">{{ b.when }}</td>
+                  <td class="small text-secondary" style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.ua }}</td>
+                  <td class="text-end">
+                    <form method="POST" action="/cham-cong-quan-ly" class="d-inline" onsubmit="return confirm('Reset thiết bị cho {{ b.user }}? Lần chấm tiếp theo sẽ gắn máy mới.')">{% csrf_token %}
+                      <input type="hidden" name="action" value="reset_device"><input type="hidden" name="user" value="{{ b.user }}">
+                      <button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-arrow-repeat"></i> Reset</button>
+                    </form>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
           </div>
           {% endif %}
         </div>

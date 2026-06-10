@@ -1812,20 +1812,34 @@ def cham_cong(request):
         if not ip_ok:
             return JsonResponse({'ok': False, 'wifi': False,
                                  'msg': 'Bạn cần kết nối Wifi công ty để chấm công.', 'ip': ip})
+        # ----- KHOÁ THIẾT BỊ 1-1 (chống chấm hộ) -----
+        from pha.models import DeviceBind
+        u = request.user.username
+        device = (request.POST.get('device') or '').strip()
+        if not device:
+            return JsonResponse({'ok': False, 'msg': 'Không lấy được mã thiết bị. Tắt chế độ ẩn danh / bật JavaScript rồi thử lại.'})
+        other = DeviceBind.objects.filter(token=device).exclude(username=u).first()
+        if other:
+            return JsonResponse({'ok': False, 'msg': f'Điện thoại này đã gắn với tài khoản "{other.username}". Mỗi máy chỉ chấm công cho 1 người.'})
+        mine = DeviceBind.objects.filter(username=u).first()
+        if mine and mine.token != device:
+            return JsonResponse({'ok': False, 'msg': 'Tài khoản của bạn đã khoá ở một điện thoại khác. Báo quản lý để đổi sang máy này.'})
+        if not mine:
+            DeviceBind.objects.create(username=u, token=device,
+                                      user_agent=(request.META.get('HTTP_USER_AGENT', '') or '')[:200])
         rec, _ = Attendance.objects.get_or_create(
-            user=request.user.username, day=now.strftime('%Y-%m-%d'),
-            defaults={'month': now.strftime('%Y-%m')})
+            user=u, day=now.strftime('%Y-%m-%d'), defaults={'month': now.strftime('%Y-%m')})
         if action == 'in':
             if rec.check_in:
                 return JsonResponse({'ok': False, 'msg': 'Bạn đã chấm công VÀO hôm nay rồi.',
                                      'in': _hm(rec.check_in), 'out': _hm(rec.check_out)})
-            rec.check_in = now; rec.ip_in = ip; rec.save()
+            rec.check_in = now; rec.ip_in = ip; rec.device_in = device; rec.save()
             return JsonResponse({'ok': True, 'msg': 'Đã chấm công VÀO lúc ' + _hm(now),
                                  'in': _hm(rec.check_in), 'out': _hm(rec.check_out)})
         if action == 'out':
             if not rec.check_in:
                 return JsonResponse({'ok': False, 'msg': 'Bạn chưa chấm công VÀO.'})
-            rec.check_out = now; rec.ip_out = ip; rec.save()
+            rec.check_out = now; rec.ip_out = ip; rec.device_out = device; rec.save()
             return JsonResponse({'ok': True, 'msg': 'Đã chấm công RA lúc ' + _hm(now),
                                  'in': _hm(rec.check_in), 'out': _hm(rec.check_out)})
         return JsonResponse({'ok': False, 'msg': 'Hành động không hợp lệ.'})
@@ -1846,16 +1860,27 @@ def cham_cong(request):
 @csrf_exempt
 @staff_required
 def cham_cong_quan_ly(request):
-    """Quản lý CHẤM CÔNG: cấu hình IP Wifi công ty + xem bảng công theo tháng."""
-    from pha.models import Attendance, AppSetting
-    if request.method == 'POST' and request.POST.get('action') == 'save_ips':
-        AppSetting.set('ATTENDANCE_IPS', (request.POST.get('ips') or '').strip())
-        messages.info(request, 'Đã lưu IP Wifi công ty.')
-        return redirect('/cham-cong-quan-ly')
+    """Quản lý CHẤM CÔNG: IP Wifi + bảng công + KHOÁ THIẾT BỊ + CẢNH BÁO bất thường."""
+    from pha.models import Attendance, AppSetting, DeviceBind
+    if request.method == 'POST':
+        act = request.POST.get('action')
+        if act == 'save_ips':
+            AppSetting.set('ATTENDANCE_IPS', (request.POST.get('ips') or '').strip())
+            AppSetting.set('ATT_WORK_START', (request.POST.get('work_start') or '').strip())
+            messages.info(request, 'Đã lưu cấu hình chấm công.')
+            return redirect('/cham-cong-quan-ly')
+        if act == 'reset_device':
+            u = (request.POST.get('user') or '').strip()
+            DeviceBind.objects.filter(username=u).delete()
+            messages.info(request, f'Đã reset thiết bị cho "{u}". Lần chấm tiếp theo của họ sẽ gắn với máy mới.')
+            return redirect('/cham-cong-quan-ly')
 
     now = _now()
     month = request.GET.get('month') or now.strftime('%Y-%m')
+    work_start = (AppSetting.get('ATT_WORK_START', '') or '').strip()
+    today_str = now.strftime('%Y-%m-%d')
     summ, detail = {}, []
+    device_users, late, noout = {}, [], []
     for r in Attendance.objects.filter(month=month).order_by('-day', 'user'):
         s = summ.setdefault(r.user, {'user': r.user, 'days': 0, 'hours': 0.0})
         if r.check_in:
@@ -1863,9 +1888,25 @@ def cham_cong_quan_ly(request):
         s['hours'] += _att_hours(r)
         detail.append({'day': _fmt_day(r.day), 'user': r.user, 'in': _hm(r.check_in),
                        'out': _hm(r.check_out), 'hours': _att_hours(r)})
+        if r.device_in:
+            device_users.setdefault(r.device_in, set()).add(r.user)
+        hm = _hm(r.check_in)
+        if work_start and hm and hm > work_start:
+            late.append({'day': _fmt_day(r.day), 'user': r.user, 'in': hm})
+        if r.check_in and not r.check_out and r.day != today_str:
+            noout.append({'day': _fmt_day(r.day), 'user': r.user})
     summary = sorted(summ.values(), key=lambda x: -x['hours'])
     for s in summary:
         s['hours'] = round(s['hours'], 1)
+    shared = [{'token': tok[:8] + '…', 'users': sorted(us)}
+              for tok, us in device_users.items() if len(us) > 1]
+    bindings = []
+    for b in DeviceBind.objects.all().order_by('username'):
+        try:
+            when = (b.bound_time.astimezone(_VN) if _VN else b.bound_time).strftime('%d/%m %H:%M')
+        except Exception:
+            when = ''
+        bindings.append({'user': b.username, 'when': when, 'ua': (b.user_agent or '')[:70]})
     months = sorted(set(Attendance.objects.values_list('month', flat=True)), reverse=True) \
         or [now.strftime('%Y-%m')]
     cur_ip = _client_ip(request)
@@ -1874,9 +1915,12 @@ def cham_cong_quan_ly(request):
         'ips': AppSetting.get('ATTENDANCE_IPS', ''), 'cur_ip': cur_ip,
         'cur_private': _ip_private(cur_ip),
         'cur_ok': (_ip_allowed(cur_ip) if ips_set else None),
+        'work_start': work_start,
         'month': month, 'month_label': _fmt_month(month),
         'months': [{'value': m, 'label': _fmt_month(m)} for m in months],
         'summary': summary, 'detail': detail[:200],
+        'shared': shared, 'late': late[:50], 'noout': noout[:50], 'bindings': bindings,
+        'anomaly_count': len(shared) + len(noout),
     })
 
 

@@ -190,6 +190,8 @@ class Attendance(models.Model):
     check_out = models.DateTimeField(null=True, blank=True)
     ip_in = models.CharField(max_length=64, blank=True, default='')
     ip_out = models.CharField(max_length=64, blank=True, default='')
+    device_in = models.CharField(max_length=64, blank=True, default='')   # mã thiết bị lúc vào
+    device_out = models.CharField(max_length=64, blank=True, default='')  # mã thiết bị lúc ra
 
     class Meta:
         unique_together = ('user', 'day')
@@ -197,6 +199,17 @@ class Attendance(models.Model):
 
     def __str__(self):
         return f'{self.day} {self.user}'
+
+
+class DeviceBind(models.Model):
+    """Khoá thiết bị: mỗi tài khoản gắn 1 máy (1-1) để chống chấm công hộ."""
+    username = models.CharField(max_length=80, unique=True)
+    token = models.CharField(max_length=64, db_index=True)
+    bound_time = models.DateTimeField(auto_now=True)
+    user_agent = models.CharField(max_length=200, blank=True, default='')
+
+    def __str__(self):
+        return f'{self.username} · {self.token[:10]}'
 
 
 class PushSubscription(models.Model):

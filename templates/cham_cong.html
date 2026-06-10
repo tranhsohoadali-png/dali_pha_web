@@ -79,10 +79,17 @@
   function tick(){ var d=new Date(); document.getElementById('clock').textContent=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)+':'+('0'+d.getSeconds()).slice(-2); }
   tick(); setInterval(tick,1000);
 
+  // Mã thiết bị ổn định (gắn tài khoản với 1 máy -> chống chấm hộ)
+  function deviceId(){
+    var k='dali_device', v=null;
+    try{ v=localStorage.getItem(k); }catch(e){}
+    if(!v){ v=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():('d-'+Date.now()+'-'+Math.random().toString(36).slice(2)); try{localStorage.setItem(k,v);}catch(e){} }
+    return v;
+  }
   var busy=false;
   function punch(action, btn){
     if(busy) return; busy=true; btn.disabled=true;
-    var fd=new FormData(); fd.append('action',action);
+    var fd=new FormData(); fd.append('action',action); fd.append('device', deviceId());
     fetch('/cham-cong',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(res){
       busy=false; btn.disabled=false;
       toast(res.ok?('✓ '+res.msg):(res.msg||'Lỗi'));
