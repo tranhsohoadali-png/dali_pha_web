@@ -667,7 +667,8 @@ def _merge_small_regions(img_rgb, min_area=0, min_radius=5.5, max_pass=6,
 
 
 def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long_cm=0,
-                   bg_radius=None, face_radius=None, feat_radius=None, path_ksize=None):
+                   bg_radius=None, face_radius=None, feat_radius=None, path_ksize=None,
+                   hifi=False):
     """Gom ảnh về tối đa n màu (median-cut) rồi lưu file tạm. Trả (đường_dẫn_tạm).
     smooth (0..3): làm phẳng vùng bằng mean-shift trước khi gom màu — biến ảnh
     màu nước/ảnh chụp (chuyển sắc mượt, nhiều chi tiết) thành các MẢNG ĐẶC sạch,
@@ -698,11 +699,19 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long
     if face_mask is not None:
         # ƯU TIÊN MẶT (k-means oversample) — nhưng LÀM PHẲNG (mean-shift) bên trong
         # trước khi k-means để KHÔNG vón cục; mặt giành nhiều màu (môi/mắt/da chi tiết).
-        face_sm = sm_level if sm_level > 0 else 2          # ảnh chân dung cần phẳng -> tối thiểu Vừa
-        arr = _quantize_face_priority(src_rgb, target, face_mask, feature_mask, face_sm)
-        ksize_sm = 7                                       # làm mượt biên mạnh hơn cho k-means
+        # hifi (GIỮ NÉT CAO): ảnh ĐÃ SẠCH (AI/Illustrator) -> KHÔNG mean-shift để
+        # GIỮ NGUYÊN dải tông mịn (giống Image Trace), chỉ k-means + mượt biên NHẸ.
+        # Thay mean-shift bằng bilateral NHẸ toàn ảnh: khử răng cưa/lấm tấm còn sót
+        # mà KHÔNG làm bệt dải tông (mean-shift sr=32 mới là thủ phạm làm bệt).
+        src_face = src_rgb
+        if hifi:
+            _b = cv2.bilateralFilter(src_rgb[:, :, ::-1].copy(), 7, 35, 35)   # BGR
+            src_face = np.ascontiguousarray(_b[:, :, ::-1])                   # -> RGB
+        face_sm = 0 if hifi else (sm_level if sm_level > 0 else 2)
+        arr = _quantize_face_priority(src_face, target, face_mask, feature_mask, face_sm)
+        ksize_sm = 5 if hifi else 7                         # hifi: mượt biên nhẹ -> giữ chi tiết
     else:
-        if sm_level > 0:
+        if sm_level > 0 and not hifi:
             sp, sr = {1: (9, 18), 2: (16, 32), 3: (26, 50)}.get(sm_level, (16, 32))
             a = src_rgb[:, :, ::-1].copy()                 # RGB -> BGR
             h, w = a.shape[:2]
@@ -862,7 +871,8 @@ def detail_to_params(face_detail=2, scene_detail=2):
 
 def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_out=None,
                 face_priority=True, print_long_cm=0,
-                bg_radius=None, face_radius=None, feat_radius=None, path_ksize=None):
+                bg_radius=None, face_radius=None, feat_radius=None, path_ksize=None,
+                hifi=False):
     """num_colors > 0: gom ảnh về tối đa N màu (để trống = DEFAULT_NUM_COLORS).
     min_area > 0: bỏ các mảng màu nhỏ hơn N pixel (đỡ lấm tấm).
     smooth (0..3): làm phẳng vùng (mean-shift) trước khi gom — dọn ảnh màu nước/chụp.
@@ -877,7 +887,7 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
     work_path = _quantize_file(path, effective_n, smooth=smooth, min_area=min_area,
                                face_priority=face_priority, print_long_cm=print_long_cm,
                                bg_radius=bg_radius, face_radius=face_radius,
-                               feat_radius=feat_radius, path_ksize=path_ksize)
+                               feat_radius=feat_radius, path_ksize=path_ksize, hifi=hifi)
     if design_out:
         try:
             shutil.copyfile(work_path, design_out)   # bản màu phẳng để xem trước
