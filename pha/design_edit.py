@@ -14,29 +14,6 @@ from django.views.decorators.csrf import csrf_exempt
 from pha.views import staff_required
 
 
-def _majority_smooth(arr, ksize):
-    """Làm mượt biên vùng màu bằng LỌC ĐA SỐ (majority): mỗi pixel lấy MÀU chiếm
-    đa số trong cửa sổ ksize -> gộp/bo vùng nhỏ, KHÔNG tạo màu lạ, KHÔNG tăng vùng
-    (khác median-trên-nhãn vốn chèn nhãn lạ ở biên)."""
-    import numpy as np
-    import cv2
-    flat = arr.reshape(-1, 3)
-    colors, inv = np.unique(flat, axis=0, return_inverse=True)
-    if len(colors) < 2 or len(colors) > 300 or ksize < 3:
-        return arr
-    H, W = arr.shape[:2]
-    lbl = inv.reshape(H, W)
-    best = np.zeros((H, W), np.int32)
-    bestc = np.full((H, W), -1.0, np.float32)
-    for ci in range(len(colors)):
-        cnt = cv2.boxFilter((lbl == ci).astype(np.float32), -1, (ksize, ksize),
-                            normalize=False, borderType=cv2.BORDER_REPLICATE)
-        upd = cnt > bestc
-        best[upd] = ci
-        bestc[upd] = cnt[upd]
-    return colors[best.reshape(-1)].reshape(arr.shape)
-
-
 @csrf_exempt
 @staff_required
 def design_smooth(request):
@@ -72,9 +49,9 @@ def design_smooth(request):
         kc = int(round(corners / 100.0 * 11))
         kc = (kc | 1) if kc >= 3 else 0
         if kp:
-            arr = _majority_smooth(arr, kp)
+            arr = cil._majority_smooth(arr, kp)
         if kc:
-            arr = _majority_smooth(arr, kc)
+            arr = cil._majority_smooth(arr, kc)
         out_rel = os.path.splitext(fu)[0] + '_sm.png'
         Image.fromarray(arr).save(os.path.join(settings.MEDIA_ROOT, out_rel))
     except Exception as e:

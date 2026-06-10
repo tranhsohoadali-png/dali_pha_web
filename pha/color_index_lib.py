@@ -666,6 +666,45 @@ def _merge_small_regions(img_rgb, min_area=0, min_radius=5.5, max_pass=6,
     return img
 
 
+def _majority_smooth(img_rgb, ksize):
+    """Làm mượt biên vùng màu bằng LỌC ĐA SỐ: mỗi pixel lấy MÀU chiếm đa số trong
+    cửa sổ ksize -> bo/gộp vùng nhỏ, KHÔNG tạo màu lạ (khác median-trên-nhãn vốn
+    chèn nhãn lạ ở biên). Dùng cho trace kiểu Illustrator + chỉnh Paths/Corners."""
+    if ksize < 3:
+        return img_rgb
+    flat = img_rgb.reshape(-1, 3)
+    colors, inv = np.unique(flat, axis=0, return_inverse=True)
+    if len(colors) < 2 or len(colors) > 300:
+        return img_rgb
+    H, W = img_rgb.shape[:2]
+    lbl = inv.reshape(H, W)
+    best = np.zeros((H, W), np.int32)
+    bestc = np.full((H, W), -1.0, np.float32)
+    for ci in range(len(colors)):
+        cnt = cv2.boxFilter((lbl == ci).astype(np.float32), -1, (ksize, ksize),
+                            normalize=False, borderType=cv2.BORDER_REPLICATE)
+        upd = cnt > bestc
+        best[upd] = ci
+        bestc[upd] = cnt[upd]
+    return colors[best.reshape(-1)].reshape(img_rgb.shape)
+
+
+def _quantize_illustrator(im, target, noise=20, smooth_ks=5):
+    """Trace kiểu ILLUSTRATOR IMAGE TRACE: median-cut TRUNG THỰC -> gộp đốm nhỏ theo
+    DIỆN TÍCH (Noise, không gộp theo bán kính nên KHÔNG melt mắt/mũi) -> làm mượt
+    biên bằng lọc đa số (Paths/Corners). KHÔNG face-priority / mean-shift / bilateral
+    -> giữ trung thực + mặt nét như Image Trace. (im: PIL RGB đã thu nhỏ)."""
+    k_work = min(128, max(int(target) * 5, 64))
+    q = im.quantize(colors=k_work, method=Image.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
+    arr = np.array(q)
+    arr = _reduce_palette_perceptual(arr, target)           # gộp tông gần giống -> ~target màu
+    if noise and noise > 0:                                 # Noise: bỏ đốm < diện tích (an toàn cho ngũ quan)
+        arr = _merge_small_regions(arr, min_area=int(noise), min_radius=0.0, max_pass=4)
+    if smooth_ks and smooth_ks >= 3:                        # Paths/Corners: mượt biên
+        arr = _majority_smooth(arr, int(smooth_ks))
+    return arr
+
+
 def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long_cm=0,
                    bg_radius=None, face_radius=None, feat_radius=None, path_ksize=None,
                    hifi=False):
@@ -681,6 +720,16 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long
         im = im.copy()
         im.thumbnail((WORK_MAX_SIDE, WORK_MAX_SIDE), Resampling.LANCZOS)
     target = max(2, n)
+
+    # GIỮ NÉT CAO (ảnh AI/sạch): TRACE KIỂU ILLUSTRATOR — median-cut trung thực +
+    # gộp đốm theo diện tích + mượt biên. KHÔNG face-priority/mean-shift/bilateral
+    # (chúng làm bệt/melt mặt). Đây là cấu hình "giống Illustrator" người dùng cần.
+    if hifi:
+        arr = _quantize_illustrator(im, target, noise=20, smooth_ks=5)
+        fd, out = tempfile.mkstemp(suffix='.png', prefix='quant_')
+        os.close(fd)
+        Image.fromarray(arr).save(out)
+        return out
 
     # ƯU TIÊN MẶT: phát hiện mặt + ngũ quan để (1) GIỮ NÉT ngũ quan khỏi mean-shift,
     # (2) BẢO VỆ màu mắt/mũi/miệng khi gom. Vẫn dùng LUỒNG MƯỢT (mean-shift + median-cut
