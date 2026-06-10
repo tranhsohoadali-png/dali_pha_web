@@ -32,6 +32,12 @@ KETOAN_API_KEY = env('KETOAN_API_KEY', 'dali-ketoan-2026')
 # Origin được phép gọi API (đặt KETOAN_ALLOW_ORIGIN trên VPS; '*' = mọi nơi).
 KETOAN_ALLOW_ORIGIN = env('KETOAN_ALLOW_ORIGIN', '*')
 
+# ===== Liên kết WEB BÁN HÀNG (tranhdali.vn/thiet-ke) — API xử lý ảnh =====
+# Khoá bí mật để web bán hàng gọi /api/xu-ly-anh. ĐẶT TRÊN VPS bằng biến
+# THIETKE_API_KEY (cùng giá trị nhập ở admin dali-v4). '' = chặn (chưa cấu hình).
+THIETKE_API_KEY = env('THIETKE_API_KEY', '')
+THIETKE_ALLOW_ORIGIN = env('THIETKE_ALLOW_ORIGIN', '*')
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
