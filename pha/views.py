@@ -1950,6 +1950,29 @@ def _att_calc(rec, cfg):
     return out
 
 
+def _emp_pay(user, **f):
+    """Tiền công 1 nhân viên trong khoảng f (day=.. hoặc month=..): khoán + tăng ca − phạt."""
+    from pha.models import ProductionLog, PourLog, PaintingProduction, Attendance
+    rates = _pay_rates()
+    cfg = _att_cfg()
+    pha = ProductionLog.objects.filter(user=user, **f).count()
+    rot_p = rot_c = 0
+    for log in PourLog.objects.filter(user=user, **f):
+        q = max(1, int(log.qty or 1))
+        rot_p += q
+        rot_c += int(log.color_count or 0) * q
+    sx = sum(max(1, int(p.qty or 1)) for p in PaintingProduction.objects.filter(user=user, **f))
+    piece = round(pha * rates['pha'] + rot_p * rates['rot_p']
+                  + rot_c * rates['rot_c'] + sx * rates['sx'])
+    ot = fine = 0
+    for r in Attendance.objects.filter(user=user, **f):
+        c = _att_calc(r, cfg)
+        ot += c['ot_pay']
+        fine += c['fine']
+    ot, fine = round(ot), round(fine)
+    return {'piece': piece, 'ot': ot, 'fine': fine, 'total': piece + ot - fine}
+
+
 @csrf_exempt
 @login_required(login_url='/login')
 def cham_cong(request):
@@ -1993,8 +2016,13 @@ def cham_cong(request):
             if not rec.check_in:
                 return JsonResponse({'ok': False, 'msg': 'Bạn chưa chấm công VÀO.'})
             rec.check_out = now; rec.ip_out = ip; rec.device_out = device; rec.save()
+            day_s, month_s = now.strftime('%Y-%m-%d'), now.strftime('%Y-%m')
+            dp = _emp_pay(u, day=day_s)
+            mp = _emp_pay(u, month=month_s)
             return JsonResponse({'ok': True, 'msg': 'Đã chấm công RA lúc ' + _hm(now),
-                                 'in': _hm(rec.check_in), 'out': _hm(rec.check_out)})
+                                 'in': _hm(rec.check_in), 'out': _hm(rec.check_out),
+                                 'pay': {'day': dp, 'month_total': mp['total'],
+                                         'month_label': _fmt_month(month_s), 'time': _hm(now)}})
         return JsonResponse({'ok': False, 'msg': 'Hành động không hợp lệ.'})
 
     today = Attendance.objects.filter(user=request.user.username,
