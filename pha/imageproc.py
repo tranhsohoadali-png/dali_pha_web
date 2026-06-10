@@ -53,8 +53,7 @@ def create_image_color(color_mapping, hex_list, percentages=None):
 
 
 def process_image(rec_id, name, enhance=False, style_category=None, color_limit=0,
-                  min_area=0, smooth=0, ai_prompt=None, use_refs=False, face_priority=False,
-                  print_long_cm=0, face_detail=2, scene_detail=2):
+                  min_area=0, smooth=0, ai_prompt=None, use_refs=False, print_long_cm=0):
     """Chạy nền: (tùy chọn) tăng cường ảnh bằng AI, rồi xử lý + cập nhật ImageResult.
 
     enhance=True: gọi Google AI làm sạch/nâng cấp ảnh khách trước khi đánh số.
@@ -85,17 +84,9 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
                 warn = 'Bỏ qua tăng cường AI (' + str(e)[:140] + '). Đã xử lý ảnh gốc.'
         design_name = f'{os.path.splitext(name)[0]}_design.png'
         design_path = os.path.join(settings.MEDIA_ROOT, design_name)
-        # Núm DỄ TÔ: map độ chi tiết Mặt/Cảnh -> bán kính gộp vùng + độ mượt viền.
-        from pha.color_index_lib import detail_to_params
-        bg_r, face_r, feat_r, ks = detail_to_params(face_detail, scene_detail)
-        # GIỮ NÉT CAO: nếu AI tăng cường THÀNH CÔNG thì ảnh AI đã là bản thiết kế
-        # sạch/mịn -> quantize nhẹ tay (không mean-shift) để giữ độ mịn như Image Trace.
-        # Tắt bằng env AI_HIFI=0 nếu muốn về cách cũ (mean-shift).
-        hifi = bool(enhance) and not warn and os.environ.get('AI_HIFI', '1') != '0'
         edge_img, color_mapping, percentages = index_color(
             path, debug=False, num_colors=color_limit, min_area=min_area, smooth=smooth,
-            design_out=design_path, face_priority=face_priority, print_long_cm=print_long_cm,
-            bg_radius=bg_r, face_radius=face_r, feat_radius=feat_r, path_ksize=ks, hifi=hifi)
+            design_out=design_path, print_long_cm=print_long_cm)
         dpi = Image.open(path).info.get('dpi', (72, 72))
         name_output = save_img(edge_img, dpi)
         colors = create_image_color(color_mapping, convert_to_hex(color_mapping), percentages)

@@ -49,19 +49,6 @@ DEFAULT_NUM_COLORS = config("DEFAULT_NUM_COLORS", default=24, cast=int)
 DEFAULT_TOLERANCE = config("DEFAULT_TOLERANCE", default=32, cast=int)
 THRESHOLD_PERCENT_COLOR = config("THRESHOLD_PERCENT_COLOR", default=0.0003, cast=float)
 
-# ===== Ưu tiên KHUÔN MẶT cho tranh chân dung =====
-# Dồn nhiều màu vào vùng mặt bằng cách OVERSAMPLE pixel mặt khi xây bảng màu
-# (k-means LAB), giữ chi tiết mắt/mũi/môi (min_radius nhỏ trong mặt) và làm mềm
-# da (bilateral) trước khi gom. Một bảng màu duy nhất -> không seam mặt/nền.
-FACE_PRIORITY = config("FACE_PRIORITY", default=True, cast=bool)
-FACE_OVERSAMPLE = config("FACE_OVERSAMPLE", default=12, cast=int)    # mức ưu tiên màu cho mặt+tóc
-FACE_BILATERAL_D = config("FACE_BILATERAL_D", default=7, cast=int)    # làm mềm da (0 = tắt)
-KMEANS_MAX_SIDE = config("KMEANS_MAX_SIDE", default=900, cast=int)    # downscale CHỈ để xây bảng màu
-FACE_MIN_RADIUS = config("FACE_MIN_RADIUS", default=3.0, cast=float)  # ngưỡng giữ chi tiết trong mặt
-# ----- NGŨ QUAN (mắt/mày/mũi/miệng): giữ nét + dồn thêm màu để mặt sống động -----
-FACE_FEATURE_OVERSAMPLE = config("FACE_FEATURE_OVERSAMPLE", default=13, cast=int)  # dồn THÊM màu cho ngũ quan (0 = tắt)
-FEATURE_MIN_RADIUS = config("FEATURE_MIN_RADIUS", default=2.2, cast=float)         # giữ chi tiết rất nhỏ trong ngũ quan
-FACE_SHARPEN = config("FACE_SHARPEN", default=0.5, cast=float)                     # tăng nét ngũ quan trước khi gom màu (0 = tắt)
 # Màu RỰC (chroma > ngưỡng) như MÔI ĐỎ / tông nổi -> bảo vệ khỏi bị gộp mất khi giảm màu.
 VIVID_CHROMA = config("VIVID_CHROMA", default=55, cast=int)
 FEATURE_PROTECT_SMOOTH = config("FEATURE_PROTECT_SMOOTH", default=True, cast=bool)  # KHÔNG median-smooth làm mất chi tiết ngũ quan
@@ -316,268 +303,10 @@ import threading as _threading
 _tls = _threading.local()
 
 
-def _get_cascades():
-    """Lazy + thread-local (detectMultiScale không reentrant nên không share).
-    Trả 3 cascade khuôn mặt; mắt lấy riêng qua _get_eye_cascade()."""
-    if not hasattr(_tls, 'front'):
-        base = cv2.data.haarcascades
-        _tls.front = cv2.CascadeClassifier(base + 'haarcascade_frontalface_default.xml')
-        _tls.alt2 = cv2.CascadeClassifier(base + 'haarcascade_frontalface_alt2.xml')
-        _tls.profile = cv2.CascadeClassifier(base + 'haarcascade_profileface.xml')
-    return _tls.front, _tls.alt2, _tls.profile
-
-
-def _get_eye_cascade():
-    """Haar mắt (lazy, thread-local). None nếu không nạp được."""
-    if not hasattr(_tls, 'eye'):
-        try:
-            _tls.eye = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
-        except Exception:
-            _tls.eye = None
-    if _tls.eye is None or _tls.eye.empty():
-        return None
-    return _tls.eye
-
-
 # YuNet: nhận diện mặt + 5 ĐIỂM MỐC (2 mắt, mũi, 2 khoé miệng) -> định vị ngũ quan
 # CHÍNH XÁC (tốt hơn Haar nhiều). Model nhỏ (~230KB) kèm trong repo. cv2 cũ (<4.8)
 # có thể không nạp được -> tự fallback sang Haar.
 _YUNET_PATH = os.path.join(os.path.dirname(__file__), 'models_data', 'yunet.onnx')
-
-
-def _get_yunet():
-    if not hasattr(_tls, 'yunet'):
-        _tls.yunet = None
-        try:
-            if os.path.exists(_YUNET_PATH):
-                _tls.yunet = cv2.FaceDetectorYN.create(
-                    _YUNET_PATH, "", (320, 320), 0.6, 0.3, 5000)
-        except Exception:
-            _tls.yunet = None
-    return _tls.yunet
-
-
-def _face_mask_yunet(bgr):
-    """Dùng YuNet landmark -> (face_mask, feature_mask, n) hoặc None nếu không dùng được."""
-    fd = _get_yunet()
-    if fd is None:
-        return None
-    try:
-        import math
-        H, W = bgr.shape[:2]
-        fd.setInputSize((W, H))
-        _, faces = fd.detect(bgr)
-        if faces is None or len(faces) == 0:
-            return None
-        face_mask = np.zeros((H, W), np.uint8)
-        feat = np.zeros((H, W), np.uint8)
-        n = 0
-
-        def _ell(mask, cx, cy, ax, ay):
-            cv2.ellipse(mask, (int(cx), int(cy)), (max(1, int(ax)), max(1, int(ay))),
-                        0, 0, 360, 255, -1)
-
-        for f in faces:
-            if float(f[14]) < 0.6:
-                continue
-            x, y, w, h = float(f[0]), float(f[1]), float(f[2]), float(f[3])
-            rex, rey, lex, ley = float(f[4]), float(f[5]), float(f[6]), float(f[7])
-            nx, ny = float(f[8]), float(f[9])
-            rmx, rmy, lmx, lmy = float(f[10]), float(f[11]), float(f[12]), float(f[13])
-            # face ellipse: nới ôm tóc/cằm như Haar
-            cx = x + w / 2.0
-            x0 = max(0, cx - w * 0.78); x1 = min(W, cx + w * 0.78)
-            y0 = max(0, y - h * 0.5); y1 = min(H, y + h * 1.3)
-            _ell(face_mask, (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2)
-            # khoảng cách 2 mắt làm chuẩn tỉ lệ ngũ quan
-            ed = max(8.0, math.hypot(lex - rex, ley - rey))
-            for ex, ey in ((rex, rey), (lex, ley)):
-                _ell(feat, ex, ey, ed * 0.36, ed * 0.30)               # mắt
-                _ell(feat, ex, ey - ed * 0.30, ed * 0.36, ed * 0.20)   # lông mày (nới lên)
-            _ell(feat, nx, ny, ed * 0.30, ed * 0.36)                   # mũi
-            mcx, mcy = (rmx + lmx) / 2.0, (rmy + lmy) / 2.0
-            mw = max(ed * 0.5, math.hypot(lmx - rmx, lmy - rmy) * 0.8)
-            _ell(feat, mcx, mcy, mw * 0.6, ed * 0.28)                  # miệng
-            n += 1
-        if not n:
-            return None
-        feat = cv2.bitwise_and(feat, face_mask)
-        return face_mask, feat, n
-    except Exception:
-        _tls.yunet = None          # cv2 cũ không chạy được YuNet -> tắt, dùng Haar
-        return None
-
-
-def _face_mask(bgr):
-    """Trả (face_mask, feature_mask, số mặt) hoặc (None, None, 0).
-
-    - face_mask : ellipse phủ mặt + tóc + cằm (để dồn màu, làm mềm da).
-    - feature_mask : NGŨ QUAN (mắt/mày/mũi/miệng) — vùng cần GIỮ NÉT + dồn THÊM màu.
-      ƯU TIÊN YuNet landmark (chính xác); nếu không có thì dò bằng Haar mắt + ước
-      lượng hình học. feature_mask luôn nằm trong face_mask.
-    """
-    yn = _face_mask_yunet(bgr)        # ưu tiên landmark chính xác (YuNet)
-    if yn is not None:
-        return yn
-    try:
-        front, alt2, profile = _get_cascades()
-        gray = cv2.equalizeHist(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY))
-        H, W = gray.shape
-        minsz = (max(24, int(0.06 * min(H, W))),) * 2
-        faces = front.detectMultiScale(gray, 1.1, 5, minSize=minsz)
-        if len(faces) == 0:
-            faces = alt2.detectMultiScale(gray, 1.1, 5, minSize=minsz)
-        if len(faces) == 0:
-            faces = profile.detectMultiScale(gray, 1.1, 5, minSize=minsz)
-        if len(faces) == 0:
-            pf = profile.detectMultiScale(cv2.flip(gray, 1), 1.1, 5, minSize=minsz)
-            faces = [(W - x - w, y, w, h) for (x, y, w, h) in pf]
-        mask = np.zeros((H, W), np.uint8)
-        feat = np.zeros((H, W), np.uint8)
-        eye_cc = _get_eye_cascade()
-        n = 0
-        for (x, y, w, h) in faces:
-            if not (0.6 <= w / float(h) <= 1.7):
-                continue
-            cx = x + w / 2.0
-            # Nới ôm thêm TÓC quanh mặt (hai bên + đỉnh + xuống cổ) nhưng không phình
-            # ra nền (giữ tốc độ + đúng "ưu tiên mặt").
-            x0 = int(max(0, cx - w * 0.78)); x1 = int(min(W, cx + w * 0.78))
-            y0 = int(max(0, y - h * 0.5)); y1 = int(min(H, y + h * 1.3))
-            ctr = ((x0 + x1) // 2, (y0 + y1) // 2)
-            axes = (max(1, (x1 - x0) // 2), max(1, (y1 - y0) // 2))
-            cv2.ellipse(mask, ctr, axes, 0, 0, 360, 255, -1)
-
-            # ----- NGŨ QUAN -----
-            found_eye = False
-            if eye_cc is not None:
-                ry1 = min(H, y + int(0.62 * h))
-                roi = gray[y:ry1, x:min(W, x + w)]
-                try:
-                    eyes = eye_cc.detectMultiScale(roi, 1.1, 6,
-                                                   minSize=(max(8, int(0.10 * w)),) * 2)
-                except Exception:
-                    eyes = []
-                for (ex, ey, ew, eh) in eyes:
-                    gx0 = x + ex; gy0 = y + ey
-                    # mở lên trên để lấy LÔNG MÀY, nới ngang chút cho đủ khoé mắt
-                    fx0 = max(0, gx0 - int(0.10 * ew)); fx1 = min(W, gx0 + ew + int(0.10 * ew))
-                    fy0 = max(0, gy0 - int(0.65 * eh)); fy1 = min(H, gy0 + eh + int(0.20 * eh))
-                    cv2.rectangle(feat, (fx0, fy0), (fx1, fy1), 255, -1)
-                    found_eye = True
-            if not found_eye:
-                # dải MẮT + MÀY ước lượng theo tỉ lệ mặt
-                cv2.rectangle(feat, (int(x + 0.08 * w), int(y + 0.20 * h)),
-                              (int(x + 0.92 * w), int(y + 0.50 * h)), 255, -1)
-            # dải MŨI + MIỆNG (giữa–dưới mặt) — luôn thêm
-            cv2.rectangle(feat, (int(x + 0.22 * w), int(y + 0.55 * h)),
-                          (int(x + 0.78 * w), int(y + 0.88 * h)), 255, -1)
-            n += 1
-        if not n:
-            return None, None, 0
-        feat = cv2.bitwise_and(feat, mask)   # ngũ quan luôn trong mặt
-        return mask, feat, n
-    except Exception:
-        return None, None, 0
-
-
-def count_faces(path, max_side=768):
-    """Đếm số khuôn mặt trong ảnh (dò nhanh trên bản THU NHỎ). Dùng cho auto-gợi-ý
-    preset chân dung khi người dùng chọn ảnh. Trả 0 nếu không có mặt / đọc lỗi."""
-    try:
-        bgr = cv2.imread(path)
-        if bgr is None:
-            return 0
-        h, w = bgr.shape[:2]
-        if max(h, w) > max_side:
-            s = max_side / float(max(h, w))
-            bgr = cv2.resize(bgr, (max(1, int(w * s)), max(1, int(h * s))),
-                             interpolation=cv2.INTER_AREA)
-        _, _, n = _face_mask(bgr)
-        return int(n or 0)
-    except Exception:
-        return 0
-
-
-def _quantize_face_priority(arr_rgb, target, face_mask, feature_mask=None, smooth_level=2):
-    """Xây bảng màu bằng k-means LAB, OVERSAMPLE pixel vùng mặt -> mặt giành nhiều
-    màu hơn. NGŨ QUAN (feature_mask) được ưu tiên MẠNH hơn: KHÔNG làm mềm (giữ nét),
-    TĂNG NÉT (unsharp) và oversample THÊM -> mắt/mũi/miệng có màu riêng, sống động.
-    smooth_level: LÀM PHẲNG (mean-shift) toàn ảnh TRƯỚC k-means -> hết vón cục, mượt.
-    Map TOÀN ẢNH về center gần nhất (đúng K màu) -> không seam."""
-    bgr = arr_rgb[:, :, ::-1].copy()
-    H, W = bgr.shape[:2]
-    # 0) LÀM PHẲNG mean-shift (de-speckle) -> k-means không bị loang/vón cục.
-    if smooth_level and int(smooth_level) > 0:
-        sp, sr = {1: (9, 18), 2: (16, 32), 3: (26, 50)}.get(int(smooth_level), (16, 32))
-        scale = 1.0
-        a = bgr
-        if max(H, W) > 900:
-            scale = 900.0 / max(H, W)
-            a = cv2.resize(bgr, (int(W * scale), int(H * scale)), interpolation=cv2.INTER_AREA)
-        a = cv2.pyrMeanShiftFiltering(a, sp, sr)
-        bgr = cv2.resize(a, (W, H), interpolation=cv2.INTER_NEAREST) if scale != 1.0 else a
-        bgr = np.ascontiguousarray(bgr)
-    # 1) Làm mềm DA: bilateral trên crop mặt, NHƯNG CHỪA ngũ quan (giữ nét mắt/miệng)
-    if FACE_BILATERAL_D > 0:
-        ys, xs = np.where(face_mask > 0)
-        if len(xs):
-            x0, x1, y0, y1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
-            crop = bgr[y0:y1, x0:x1].copy()
-            sm = cv2.bilateralFilter(crop, FACE_BILATERAL_D, 60, 60)
-            m = face_mask[y0:y1, x0:x1] > 0
-            if feature_mask is not None:
-                m &= (feature_mask[y0:y1, x0:x1] == 0)   # không bôi mềm ngũ quan
-            crop[m] = sm[m]
-            bgr[y0:y1, x0:x1] = crop
-    # 2) TĂNG NÉT ngũ quan (unsharp mask) -> iris/môi tách rõ khỏi da khi gom màu
-    if FACE_SHARPEN > 0 and feature_mask is not None and np.any(feature_mask):
-        blur = cv2.GaussianBlur(bgr, (0, 0), 1.0)
-        sharp = cv2.addWeighted(bgr, 1.0 + FACE_SHARPEN, blur, -FACE_SHARPEN, 0)
-        fmm = feature_mask > 0
-        bgr[fmm] = sharp[fmm]
-    # 3) Mẫu huấn luyện bảng màu (downscale cho nhanh), oversample mặt + ngũ quan
-    scale = 1.0
-    if max(H, W) > KMEANS_MAX_SIDE:
-        scale = KMEANS_MAX_SIDE / float(max(H, W))
-    if scale < 1.0:
-        small = cv2.resize(bgr, (int(W * scale), int(H * scale)), interpolation=cv2.INTER_AREA)
-        smask = cv2.resize(face_mask, (small.shape[1], small.shape[0]), interpolation=cv2.INTER_NEAREST)
-        sfeat = (cv2.resize(feature_mask, (small.shape[1], small.shape[0]), interpolation=cv2.INTER_NEAREST)
-                 if feature_mask is not None else None)
-    else:
-        small, smask, sfeat = bgr, face_mask, feature_mask
-    lab_small = cv2.cvtColor(small, cv2.COLOR_BGR2LAB).reshape(-1, 3).astype(np.float32)
-    fm = smask.reshape(-1) > 0
-    bg = lab_small[~fm][::2]                       # giảm bớt mẫu nền
-    fc = lab_small[fm]
-    if len(fc):
-        fc = np.repeat(fc, max(1, FACE_OVERSAMPLE), axis=0)
-    parts = [bg, fc] if len(fc) else [lab_small]
-    if sfeat is not None and FACE_FEATURE_OVERSAMPLE > 0:
-        vc = lab_small[sfeat.reshape(-1) > 0]      # ngũ quan: dồn THÊM màu
-        if len(vc):
-            parts.append(np.repeat(vc, FACE_FEATURE_OVERSAMPLE, axis=0))
-    samples = np.ascontiguousarray(np.vstack(parts), dtype=np.float32)
-    # 4) k-means -> K center (LAB)
-    cv2.setRNGSeed(0)
-    K = max(2, int(target))
-    crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 12, 1.0)
-    _, _, centers = cv2.kmeans(samples, K, None, crit, 1, cv2.KMEANS_PP_CENTERS)
-    centers = centers.astype(np.float32)
-    # 5) Map toàn ảnh (full-res) về center gần nhất
-    full = cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB).reshape(-1, 3).astype(np.float32)
-    best = np.zeros(len(full), np.int32)
-    bestd = ((full - centers[0]) ** 2).sum(1)
-    for ci in range(1, K):
-        d = ((full - centers[ci]) ** 2).sum(1)
-        m = d < bestd
-        best[m] = ci
-        bestd[m] = d[m]
-    centers_bgr = cv2.cvtColor(centers.reshape(1, K, 3).astype(np.uint8),
-                               cv2.COLOR_LAB2BGR).reshape(K, 3)
-    out_bgr = centers_bgr[best].reshape(H, W, 3)
-    return out_bgr[:, :, ::-1]                     # -> RGB
 
 
 def _remove_small_components(mask, min_area):
@@ -666,52 +395,12 @@ def _merge_small_regions(img_rgb, min_area=0, min_radius=5.5, max_pass=6,
     return img
 
 
-def _majority_smooth(img_rgb, ksize):
-    """Làm mượt biên vùng màu bằng LỌC ĐA SỐ: mỗi pixel lấy MÀU chiếm đa số trong
-    cửa sổ ksize -> bo/gộp vùng nhỏ, KHÔNG tạo màu lạ (khác median-trên-nhãn vốn
-    chèn nhãn lạ ở biên). Dùng cho trace kiểu Illustrator + chỉnh Paths/Corners."""
-    if ksize < 3:
-        return img_rgb
-    flat = img_rgb.reshape(-1, 3)
-    colors, inv = np.unique(flat, axis=0, return_inverse=True)
-    if len(colors) < 2 or len(colors) > 300:
-        return img_rgb
-    H, W = img_rgb.shape[:2]
-    lbl = inv.reshape(H, W)
-    best = np.zeros((H, W), np.int32)
-    bestc = np.full((H, W), -1.0, np.float32)
-    for ci in range(len(colors)):
-        cnt = cv2.boxFilter((lbl == ci).astype(np.float32), -1, (ksize, ksize),
-                            normalize=False, borderType=cv2.BORDER_REPLICATE)
-        upd = cnt > bestc
-        best[upd] = ci
-        bestc[upd] = cnt[upd]
-    return colors[best.reshape(-1)].reshape(img_rgb.shape)
-
-
-def _quantize_illustrator(im, target, noise=20, smooth_ks=5):
-    """Trace kiểu ILLUSTRATOR IMAGE TRACE: median-cut TRUNG THỰC -> gộp đốm nhỏ theo
-    DIỆN TÍCH (Noise, không gộp theo bán kính nên KHÔNG melt mắt/mũi) -> làm mượt
-    biên bằng lọc đa số (Paths/Corners). KHÔNG face-priority / mean-shift / bilateral
-    -> giữ trung thực + mặt nét như Image Trace. (im: PIL RGB đã thu nhỏ)."""
-    k_work = min(128, max(int(target) * 5, 64))
-    q = im.quantize(colors=k_work, method=Image.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
-    arr = np.array(q)
-    arr = _reduce_palette_perceptual(arr, target)           # gộp tông gần giống -> ~target màu
-    if noise and noise > 0:                                 # Noise: bỏ đốm < diện tích (an toàn cho ngũ quan)
-        arr = _merge_small_regions(arr, min_area=int(noise), min_radius=0.0, max_pass=4)
-    if smooth_ks and smooth_ks >= 3:                        # Paths/Corners: mượt biên
-        arr = _majority_smooth(arr, int(smooth_ks))
-    return arr
-
-
-def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long_cm=0,
-                   bg_radius=None, face_radius=None, feat_radius=None, path_ksize=None,
-                   hifi=False):
-    """Gom ảnh về tối đa n màu (median-cut) rồi lưu file tạm. Trả (đường_dẫn_tạm).
+def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0):
+    """Gom ảnh về tối đa n màu (median-cut) rồi lưu file tạm. Trả đường_dẫn_tạm.
     smooth (0..3): làm phẳng vùng bằng mean-shift trước khi gom màu — biến ảnh
-    màu nước/ảnh chụp (chuyển sắc mượt, nhiều chi tiết) thành các MẢNG ĐẶC sạch,
-    giống tranh tô màu. Càng cao càng gộp mạnh (ít chi tiết hơn)."""
+    màu nước/ảnh chụp (chuyển sắc mượt) thành các MẢNG ĐẶC sạch, giống tranh tô màu.
+    min_area: gộp mảng nhỏ hơn N px vào hàng xóm. print_long_cm: nhận cho tương
+    thích, không dùng (cỡ số cố định)."""
     import os
     import tempfile
     im = Image.open(path).convert('RGB')
@@ -720,82 +409,34 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long
         im = im.copy()
         im.thumbnail((WORK_MAX_SIDE, WORK_MAX_SIDE), Resampling.LANCZOS)
     target = max(2, n)
-
-    # GIỮ NÉT CAO (ảnh AI/sạch): TRACE KIỂU ILLUSTRATOR — median-cut trung thực +
-    # gộp đốm theo diện tích + mượt biên. KHÔNG face-priority/mean-shift/bilateral
-    # (chúng làm bệt/melt mặt). Đây là cấu hình "giống Illustrator" người dùng cần.
-    if hifi:
-        arr = _quantize_illustrator(im, target, noise=50, smooth_ks=7)
-        fd, out = tempfile.mkstemp(suffix='.png', prefix='quant_')
-        os.close(fd)
-        Image.fromarray(arr).save(out)
-        return out
-
-    # ƯU TIÊN MẶT: phát hiện mặt + ngũ quan để (1) GIỮ NÉT ngũ quan khỏi mean-shift,
-    # (2) BẢO VỆ màu mắt/mũi/miệng khi gom. Vẫn dùng LUỒNG MƯỢT (mean-shift + median-cut
-    # + gộp tông) cho cả ảnh -> mượt như mong muốn, KHÔNG dùng k-means (gây vón cục).
-    face_mask = None
-    feature_mask = None
-    if FACE_PRIORITY and face_priority:
-        try:
-            face_mask, feature_mask, _nf = _face_mask(np.array(im)[:, :, ::-1].copy())
-        except Exception:
-            face_mask = feature_mask = None
-
     src_rgb = np.array(im)
     sm_level = int(smooth) if (smooth and int(smooth) > 0) else 0
 
-    if face_mask is not None:
-        # ƯU TIÊN MẶT (k-means oversample) — nhưng LÀM PHẲNG (mean-shift) bên trong
-        # trước khi k-means để KHÔNG vón cục; mặt giành nhiều màu (môi/mắt/da chi tiết).
-        # hifi (GIỮ NÉT CAO): ảnh ĐÃ SẠCH (AI/Illustrator) -> KHÔNG mean-shift để
-        # GIỮ NGUYÊN dải tông mịn (giống Image Trace). KHÔNG bilateral toàn ảnh (nó
-        # nhoè mắt/mũi vào da -> MELT ngũ quan); việc làm mềm DA đã có bilateral
-        # riêng (chừa ngũ quan) bên trong _quantize_face_priority.
-        face_sm = 0 if hifi else (sm_level if sm_level > 0 else 2)
-        arr = _quantize_face_priority(src_rgb, target, face_mask, feature_mask, face_sm)
-        ksize_sm = 3 if hifi else 7                         # hifi: làm mượt RẤT nhẹ -> giữ mặt nét
-    else:
-        if sm_level > 0 and not hifi:
-            sp, sr = {1: (9, 18), 2: (16, 32), 3: (26, 50)}.get(sm_level, (16, 32))
-            a = src_rgb[:, :, ::-1].copy()                 # RGB -> BGR
-            h, w = a.shape[:2]
-            scale = 1.0
-            if max(h, w) > 900:
-                scale = 900.0 / max(h, w)
-                a = cv2.resize(a, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-            a = cv2.pyrMeanShiftFiltering(a, sp, sr)
-            if scale != 1.0:
-                a = cv2.resize(a, (w, h), interpolation=cv2.INTER_NEAREST)
-            im = Image.fromarray(np.ascontiguousarray(a[:, :, ::-1]))   # BGR -> RGB
-        # Gom DƯ nhiều màu rồi HỢP NHẤT các màu cùng tông (LAB), bảo vệ màu rực.
-        k_work = min(96, max(target * 5, 48))
-        q = im.quantize(colors=k_work, method=Image.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
-        arr = np.array(q)
-        arr = _reduce_palette_perceptual(arr, target)
-        ksize_sm = 5
+    if sm_level > 0:
+        # LÀM PHẲNG (mean-shift) trước khi gom -> dọn ảnh chụp/màu nước cho sạch mảng.
+        sp, sr = {1: (9, 18), 2: (16, 32), 3: (26, 50)}.get(sm_level, (16, 32))
+        a = src_rgb[:, :, ::-1].copy()                 # RGB -> BGR
+        h, w = a.shape[:2]
+        scale = 1.0
+        if max(h, w) > 900:
+            scale = 900.0 / max(h, w)
+            a = cv2.resize(a, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        a = cv2.pyrMeanShiftFiltering(a, sp, sr)
+        if scale != 1.0:
+            a = cv2.resize(a, (w, h), interpolation=cv2.INTER_NEAREST)
+        im = Image.fromarray(np.ascontiguousarray(a[:, :, ::-1]))   # BGR -> RGB
 
-    # GỘP các vùng không đánh được số vào hàng xóm -> hết 'dăm', mọi ô đều numberable.
-    # NÚM DỄ TÔ: bán kính gộp vùng (px). Càng TO = gộp mạnh = ít vùng, dễ tô hơn.
-    #   - bg_radius   : ngưỡng cho NỀN/CẢNH (ngoài mặt).
-    #   - face_radius : ngưỡng trong MẶT (giữ chi tiết da/tóc).
-    #   - feat_radius : ngưỡng NGŨ QUAN (mắt/mũi/môi) — nhỏ nhất.
-    #   - path_ksize  : độ làm mượt PATH/biên (median lớn hơn = viền trơn hơn).
-    # None = giữ mặc định cũ.
-    base_bg = (MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0
-    bg_r = base_bg if bg_radius is None else float(bg_radius)
-    face_r = FACE_MIN_RADIUS if face_radius is None else float(face_radius)
-    feat_r = FEATURE_MIN_RADIUS if feat_radius is None else float(feat_radius)
-    ks = ksize_sm if path_ksize is None else max(3, int(path_ksize) | 1)   # luôn lẻ
-    arr = _merge_small_regions(arr, min_area=min_area, min_radius=bg_r, max_pass=4,
-                               face_mask=face_mask, face_min_radius=face_r,
-                               feature_mask=feature_mask, feature_min_radius=feat_r)
-    # LÀM MƯỢT biên vùng (median trên nhãn màu) -> bỏ răng cưa/mảnh thừa, nét trơn.
-    protect = feature_mask if FEATURE_PROTECT_SMOOTH else None
-    arr = _smooth_boundaries(arr, ksize=ks, protect_mask=protect)
-    arr = _merge_small_regions(arr, min_area=0, min_radius=bg_r, max_pass=2,
-                               face_mask=face_mask, face_min_radius=face_r,
-                               feature_mask=feature_mask, feature_min_radius=feat_r)
+    # Gom DƯ nhiều màu (median-cut) rồi HỢP NHẤT các màu cùng tông (LAB), bảo vệ màu rực.
+    k_work = min(96, max(target * 5, 48))
+    q = im.quantize(colors=k_work, method=Image.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
+    arr = np.array(q)
+    arr = _reduce_palette_perceptual(arr, target)
+
+    # GỘP vùng quá nhỏ vào hàng xóm + LÀM MƯỢT biên -> hết 'dăm', mọi ô đánh số được.
+    min_radius = (MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0
+    arr = _merge_small_regions(arr, min_area=min_area, min_radius=min_radius, max_pass=4)
+    arr = _smooth_boundaries(arr, ksize=5)
+    arr = _merge_small_regions(arr, min_area=0, min_radius=min_radius, max_pass=2)
     fd, out = tempfile.mkstemp(suffix='.png', prefix='quant_')
     os.close(fd)
     Image.fromarray(arr).save(out)
@@ -899,40 +540,18 @@ def _reduce_palette_perceptual(img_rgb, target_n, protect_mask=None):
     return out.reshape(img_rgb.shape)
 
 
-def detail_to_params(face_detail=2, scene_detail=2):
-    """Map 2 núm 'ĐỘ CHI TIẾT / DỄ TÔ' (0 = dễ tô nhất ... 4 = chi tiết nhất) cho
-    MẶT và CẢNH -> (bg_radius, face_radius, feat_radius, path_ksize) cho index_color.
-    Mức thấp = bán kính gộp TO = ít vùng, viền mượt = dễ tô. Cả hai None -> mặc định."""
-    if face_detail is None and scene_detail is None:
-        return None, None, None, None
-    fd = 2 if face_detail is None else max(0, min(4, int(face_detail)))
-    sd = 2 if scene_detail is None else max(0, min(4, int(scene_detail)))
-    bg = {0: 14.0, 1: 11.0, 2: 8.0, 3: 6.0, 4: 4.0}[sd]          # NỀN / CẢNH
-    face = {0: 10.0, 1: 8.0, 2: 6.0, 3: 4.5, 4: 3.0}[fd]         # trong MẶT
-    feat = {0: 6.0, 1: 5.0, 2: 4.0, 3: 3.0, 4: 2.2}[fd]          # NGŨ QUAN
-    ks = {0: 9, 1: 9, 2: 7, 3: 5, 4: 5}[min(fd, sd)]            # độ mượt viền
-    return bg, face, feat, ks
-
-
 def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_out=None,
-                face_priority=True, print_long_cm=0,
-                bg_radius=None, face_radius=None, feat_radius=None, path_ksize=None,
-                hifi=False):
+                print_long_cm=0):
     """num_colors > 0: gom ảnh về tối đa N màu (để trống = DEFAULT_NUM_COLORS).
-    min_area > 0: bỏ các mảng màu nhỏ hơn N pixel (đỡ lấm tấm).
+    min_area > 0: gộp các mảng màu nhỏ hơn N pixel vào hàng xóm (đỡ lấm tấm).
     smooth (0..3): làm phẳng vùng (mean-shift) trước khi gom — dọn ảnh màu nước/chụp.
     design_out: nếu có, lưu ảnh THIẾT KẾ (bản màu phẳng đã gom) ra đường dẫn này.
-    print_long_cm > 0: khổ in cạnh dài (cm) -> cỡ số + ngưỡng đánh số tính theo cm.
-    bg_radius/face_radius/feat_radius: NÚM DỄ TÔ — bán kính gộp vùng (px) cho
-      NỀN / MẶT / NGŨ QUAN (to = gộp mạnh = ít vùng, dễ tô). path_ksize: độ mượt
-      viền (median lớn = path trơn). None = mặc định."""
+    print_long_cm: nhận cho tương thích, không dùng (cỡ số cố định)."""
     import os
     import shutil
     effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
     work_path = _quantize_file(path, effective_n, smooth=smooth, min_area=min_area,
-                               face_priority=face_priority, print_long_cm=print_long_cm,
-                               bg_radius=bg_radius, face_radius=face_radius,
-                               feat_radius=feat_radius, path_ksize=path_ksize, hifi=hifi)
+                               print_long_cm=print_long_cm)
     if design_out:
         try:
             shutil.copyfile(work_path, design_out)   # bản màu phẳng để xem trước

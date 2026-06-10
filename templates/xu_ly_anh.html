@@ -44,15 +44,6 @@
               <input type="hidden" name="base" id="presetBase" value="anime">
             </div>
 
-            <!-- Auto-gợi-ý: ảnh có khuôn mặt -> nên dùng preset Chân dung -->
-            <div id="faceSuggest" class="alert alert-info py-2 px-2 small d-none mb-2">
-              <i class="bi bi-person-check-fill"></i> Phát hiện <b><span id="faceSuggestN">khuôn mặt</span></b> trong ảnh — nên dùng preset <b>Chân dung</b> (giữ mặt, 30–48 màu, ưu tiên khuôn mặt).
-              <div class="mt-1 d-flex gap-1">
-                <button type="button" id="faceSuggestApply" class="btn btn-sm btn-primary py-0 px-2">Áp dụng</button>
-                <button type="button" id="faceSuggestDismiss" class="btn btn-sm btn-outline-secondary py-0 px-2">Bỏ qua</button>
-              </div>
-            </div>
-
             <!-- Tinh chỉnh bản đồ màu (luôn hiện, áp cả khi không dùng AI) -->
             <div class="border rounded p-2 mb-2">
               <div class="small fw-semibold mb-1"><i class="bi bi-sliders text-success"></i> Tinh chỉnh bản đồ màu <span class="text-secondary fw-normal">(preset tự điền, sửa được)</span></div>
@@ -73,35 +64,6 @@
                     <option value="2" selected>Vừa (khuyên dùng)</option>
                     <option value="3">Mạnh (ảnh màu nước/ảnh chụp)</option>
                   </select>
-                </div>
-                <div class="col-6">
-                  <label class="form-label small mb-1"><i class="bi bi-person-bounding-box text-primary"></i> Chi tiết MẶT</label>
-                  <select name="face_detail" class="form-select form-select-sm" title="Vùng mặt: dễ tô = ít ô, to; chi tiết = nhiều ô nhỏ">
-                    <option value="0">Dễ tô nhất</option>
-                    <option value="1">Dễ tô</option>
-                    <option value="2" selected>Vừa</option>
-                    <option value="3">Chi tiết</option>
-                    <option value="4">Chi tiết nhất</option>
-                  </select>
-                </div>
-                <div class="col-6">
-                  <label class="form-label small mb-1"><i class="bi bi-image text-success"></i> Chi tiết CẢNH</label>
-                  <select name="scene_detail" class="form-select form-select-sm" title="Nền/cảnh: dễ tô = ít ô, to; chi tiết = nhiều ô nhỏ">
-                    <option value="0">Dễ tô nhất</option>
-                    <option value="1">Dễ tô</option>
-                    <option value="2" selected>Vừa</option>
-                    <option value="3">Chi tiết</option>
-                    <option value="4">Chi tiết nhất</option>
-                  </select>
-                </div>
-                <div class="col-12">
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="facePriority" name="face_priority" value="1">
-                    <label class="form-check-label small" for="facePriority">
-                      <i class="bi bi-person-bounding-box text-primary"></i> Ưu tiên khuôn mặt (chân dung)
-                      <span class="text-secondary d-block">Dồn nhiều màu cho mặt + giữ chi tiết mắt/mũi/môi. Bật khi ảnh có người; tắt với tranh phong cảnh/đồ vật.</span>
-                    </label>
-                  </div>
                 </div>
               </div>
               <div class="form-text">Số màu = giới hạn số ô tô · Bỏ mảng nhỏ = xoá đốm li ti (vd 30–150) · Đơn giản hoá = gộp vùng cho ảnh mượt/màu nước đỡ chi chít.</div>
@@ -151,21 +113,7 @@
           <div class="row g-2 mb-2">
             <div class="col"><div class="small text-secondary mb-1">Ảnh gốc (đầu vào)</div><img id="imgOrigin" src="{{ file_url }}" class="result-img"></div>
             <div class="col" id="enhancedWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-stars text-warning"></i> Ảnh đã tăng cường (AI)</div><img id="imgEnhanced" src="#" class="result-img"></div>
-            <div class="col" id="designWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-palette-fill text-success"></i> Ảnh thiết kế (bản màu) <span class="text-secondary">· sửa HEX bên phải để đổi màu</span></div><canvas id="imgDesign" class="result-img"></canvas>
-              <div class="border rounded p-2 mt-1">
-                <div class="small fw-semibold mb-1"><i class="bi bi-bezier2 text-success"></i> Mượt nét (như Illustrator Image Trace) — kéo là đổi ngay</div>
-                <div class="row g-2">
-                  <div class="col-6"><label class="form-label small mb-0">Paths (mượt nét): <b id="pathsVal">0</b></label>
-                    <input type="range" class="form-range" id="paths" min="0" max="100" value="0" title="0 = giữ nét gốc; cao = mượt/đơn giản hơn"></div>
-                  <div class="col-6"><label class="form-label small mb-0">Corners (bo góc): <b id="cornersVal">0</b></label>
-                    <input type="range" class="form-range" id="corners" min="0" max="100" value="0" title="0 = giữ góc; cao = bo tròn góc nhọn"></div>
-                </div>
-                <div class="form-text">Chỉ làm mượt ẢNH THIẾT KẾ để xem trước. Bấm "Tải bản in" để xuất theo độ mượt đang chọn.</div>
-                <button id="btnSvg" type="button" class="btn btn-outline-success btn-sm mt-2"><i class="bi bi-bezier"></i> Tải SVG vector (Image Trace)</button>
-                <span id="svgInfo" class="small text-secondary ms-2"></span>
-                <div class="form-text">Trace bản màu hiện tại (đã mượt + đã đổi màu) thành vector SVG — mỗi vùng màu 1 path, phóng to không vỡ. Paths = đơn giản hoá đường · Corners = bo góc.</div>
-              </div>
-            </div>
+            <div class="col" id="designWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-palette-fill text-success"></i> Ảnh thiết kế (bản màu) <span class="text-secondary">· sửa HEX bên phải để đổi màu</span></div><canvas id="imgDesign" class="result-img"></canvas></div>
             <div class="col"><div class="small text-secondary mb-1">Bản đồ đánh số</div><img id="imgResult" src="#" class="result-img" hidden></div>
           </div>
           <div id="paramInfo" class="small text-secondary mb-3 d-none"></div>
@@ -217,35 +165,7 @@
   dz.addEventListener('drop',ev=>{ if(ev.dataTransfer.files.length){fi.files=ev.dataTransfer.files;onPick();} });
   fi.addEventListener('change',onPick);
   function onPick(){ var f=fi.files[0]; if(!f)return; document.getElementById('sub').disabled=false;
-    var r=new FileReader(); r.onload=e=>{var p=document.getElementById('preview');p.src=e.target.result;p.hidden=false;}; r.readAsDataURL(f);
-    detectFaceSuggest(f); }
-
-  // ===== Auto-gợi-ý preset CHÂN DUNG khi ảnh có khuôn mặt =====
-  function faceTargetPreset(){           // preset chân dung để gợi ý (ưu tiên 'photo')
-    if(PRESETS['photo'] && PRESETS['photo'].face_priority) return 'photo';
-    return Object.keys(PRESETS).find(function(k){ return PRESETS[k] && PRESETS[k].face_priority; }) || null;
-  }
-  function detectFaceSuggest(f){
-    var box=document.getElementById('faceSuggest'); if(box) box.classList.add('d-none');
-    if((PRESETS[document.getElementById('presetSel').value]||{}).face_priority) return; // đã chân dung
-    if(!faceTargetPreset()) return;                                  // không có preset chân dung
-    var fd=new FormData(); fd.append('image', f);
-    fetch('/anh-detect-face',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(res){
-      if(!res || !res.face || !box) return;
-      if((PRESETS[document.getElementById('presetSel').value]||{}).face_priority) return; // user đã tự đổi
-      document.getElementById('faceSuggestN').textContent = (res.n>1 ? (res.n+' khuôn mặt') : 'khuôn mặt');
-      box.classList.remove('d-none');
-    }).catch(function(){});
-  }
-  (function bindFaceSuggest(){
-    var ap=document.getElementById('faceSuggestApply'), ds=document.getElementById('faceSuggestDismiss');
-    if(ap) ap.addEventListener('click',function(){
-      var k=faceTargetPreset(); if(!k) return;
-      fillPresetSelect(k); applyPreset(k);
-      document.getElementById('faceSuggest').classList.add('d-none');
-    });
-    if(ds) ds.addEventListener('click',function(){ document.getElementById('faceSuggest').classList.add('d-none'); });
-  })();
+    var r=new FileReader(); r.onload=e=>{var p=document.getElementById('preview');p.src=e.target.result;p.hidden=false;}; r.readAsDataURL(f); }
 
   function spin(on){ var s=document.getElementById('spin'); s.classList.toggle('d-none',!on); s.classList.toggle('d-flex',on); }
 
@@ -264,9 +184,6 @@
     var cl=document.querySelector('[name="color_limit"]'); if(cl) cl.value=p.color_limit||'';
     var ma=document.querySelector('[name="min_area"]'); if(ma) ma.value=p.min_area||'';
     var sm=document.querySelector('[name="smooth"]'); if(sm) sm.value=String(p.smooth||0);
-    var fdt=document.querySelector('[name="face_detail"]'); if(fdt) fdt.value=String(p.face_detail!=null?p.face_detail:2);
-    var sdt=document.querySelector('[name="scene_detail"]'); if(sdt) sdt.value=String(p.scene_detail!=null?p.scene_detail:2);
-    var fp=document.getElementById('facePriority'); if(fp) fp.checked=!!p.face_priority;
     document.getElementById('presetBase').value=p.base||k;
     var en=document.getElementById('enhance');
     if(en){ en.checked=!!p.enhance; var sw=document.getElementById('styleWrap'); if(sw) sw.classList.toggle('d-none',!en.checked); }
@@ -282,10 +199,7 @@
       name:'', color_limit:document.querySelector('[name="color_limit"]').value||'',
       min_area:document.querySelector('[name="min_area"]').value||'',
       smooth:document.querySelector('[name="smooth"]').value||'0',
-      face_detail:document.querySelector('[name="face_detail"]').value||'2',
-      scene_detail:document.querySelector('[name="scene_detail"]').value||'2',
       enhance:(document.getElementById('enhance')&&document.getElementById('enhance').checked)?'1':'0',
-      face_priority:document.getElementById('facePriority').checked?'1':'0',
       base:document.getElementById('presetBase').value||'photo'
     };
   }
@@ -345,51 +259,6 @@
       try{ DIMGDATA=DCTX.getImageData(0,0,DCAN.width,DCAN.height); }catch(e){ DIMGDATA=null; } };
     im.src=url;
   }
-  // ====== Mượt nét ảnh thiết kế (Paths/Corners) — kéo là đổi ngay ======
-  var origDesignUrl='', smTimer=null;
-  function resetAdjust(){ var p=document.getElementById('paths'),c=document.getElementById('corners');
-    if(p){p.value=0;document.getElementById('pathsVal').textContent='0';}
-    if(c){c.value=0;document.getElementById('cornersVal').textContent='0';} }
-  function smoothDesign(){
-    if(!origDesignUrl) return;
-    var p=document.getElementById('paths').value, c=document.getElementById('corners').value;
-    document.getElementById('pathsVal').textContent=p; document.getElementById('cornersVal').textContent=c;
-    clearTimeout(smTimer);
-    smTimer=setTimeout(function(){
-      if(p==0 && c==0){ loadDesign(origDesignUrl); return; }
-      var fd=new FormData(); fd.append('file_url',origDesignUrl); fd.append('paths',p); fd.append('corners',c);
-      fetch('/anh-design-smooth',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(res){
-        if(res && res.ok && res.url) loadDesign(res.url+'?t='+Date.now());
-      }).catch(function(){});
-    }, 220);
-  }
-  (function bindAdjust(){ ['paths','corners'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.addEventListener('input', smoothDesign); }); })();
-  // ====== Trace bản màu hiện tại -> SVG vector (Image Trace bằng OpenCV) ======
-  (function bindSvg(){
-    var btn=document.getElementById('btnSvg'); if(!btn) return;
-    btn.addEventListener('click', function(){
-      var cv=document.getElementById('imgDesign');
-      var info=document.getElementById('svgInfo');
-      if(!cv || !cv.width){ info.textContent='Chưa có ảnh thiết kế.'; return; }
-      info.className='small text-secondary ms-2'; info.textContent='Đang trace…'; btn.disabled=true;
-      var data; try{ data=cv.toDataURL('image/png'); }catch(e){ info.textContent='Không đọc được canvas.'; btn.disabled=false; return; }
-      var nm=(document.getElementById('imgName').value||'thiet-ke').trim();
-      var fd=new FormData();
-      fd.append('image_data', data);
-      fd.append('simplify', document.getElementById('paths').value||0);
-      fd.append('round', document.getElementById('corners').value||0);
-      fetch('/anh-design-trace',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(res){
-        btn.disabled=false;
-        if(res && res.ok){
-          info.className='small text-success ms-2';
-          info.innerHTML='✓ '+res.colors+' màu · '+res.paths+' vùng · '+res.w+'×'+res.h;
-          var a=document.createElement('a'); a.href=res.url+'?t='+Date.now(); a.download=nm+'.svg';
-          document.body.appendChild(a); a.click(); a.remove();
-        } else { info.className='small text-danger ms-2'; info.textContent='Lỗi: '+((res&&res.msg)||'không trace được'); }
-      }).catch(function(){ btn.disabled=false; info.className='small text-danger ms-2'; info.textContent='Lỗi kết nối.'; });
-    });
-  })();
   function hx2rgb(h){ h=h.replace('#',''); return {r:parseInt(h.substr(0,2),16),g:parseInt(h.substr(2,2),16),b:parseInt(h.substr(4,2),16)}; }
   function recolorDesign(oldHex,newHex){
     if(!DIMGDATA) return;
@@ -443,8 +312,8 @@
       else { ew.hidden=true; }
       // Ảnh thiết kế (bản màu phẳng) - luôn hiện, kể cả khi không dùng AI
       var dw=document.getElementById('designWrap');
-      if(res.design){ dw.hidden=false; origDesignUrl=res.design; resetAdjust(); loadDesign(res.design); }
-      else { dw.hidden=true; origDesignUrl=''; loadDesign(''); }
+      if(res.design){ dw.hidden=false; loadDesign(res.design); }
+      else { dw.hidden=true; loadDesign(''); }
       // Dòng thông số đã dùng (để kiểm tra)
       var p=res.params||{}; var pi=document.getElementById('paramInfo');
       var sm=['Không','Nhẹ','Vừa','Mạnh'][p.smooth||0]||'Không';
@@ -453,9 +322,6 @@
             +' · '+(p.min_area?('Bỏ mảng <'+p.min_area+'px'):'Không lọc mảng')
             +(p.print_size?(' · Khổ '+p.print_size):'')
             +' · Đơn giản: '+sm
-            +' · Mặt: '+(dl[p.face_detail!=null?p.face_detail:2])
-            +' · Cảnh: '+(dl[p.scene_detail!=null?p.scene_detail:2])
-            +(p.face_priority?' · Ưu tiên mặt':'')
             +' · AI: '+(p.enhance?'có':'không')+(p.enhance&&p.style_category?(' ('+p.style_category+')'):'');
       pi.innerHTML=t; pi.classList.remove('d-none');
       if(res.warn){ var e=document.getElementById('err'); e.className='alert alert-warning'; e.textContent='⚠️ '+res.warn; }
