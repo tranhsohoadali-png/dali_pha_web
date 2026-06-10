@@ -46,6 +46,11 @@ urlpatterns = [
     path('nang-suat', views.nang_suat, name='nang_suat'),
     path('thong-ke-nang-suat', views.thong_ke_nang_suat, name='thong_ke_nang_suat'),
     path('nang-suat-excel', views.export_nang_suat_excel, name='nang_suat_excel'),
+
+    # Doanh thu - lợi nhuận
+    path('loi-nhuan', views.loi_nhuan, name='loi_nhuan'),
+    path('thong-ke-loi-nhuan', views.thong_ke_loi_nhuan, name='thong_ke_loi_nhuan'),
+    path('loi-nhuan-excel', views.export_loi_nhuan_excel, name='loi_nhuan_excel'),
     path('quan-ly-giao-rot', views.quan_ly_giao_rot, name='quan_ly_giao_rot'),
     path('push-key', views.push_key, name='push_key'),
     path('push-subscribe', views.push_subscribe, name='push_subscribe'),

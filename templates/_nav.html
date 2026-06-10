@@ -32,6 +32,9 @@
           <a class="nav-link{% if '/nang-suat' in request.path %} active fw-semibold{% endif %}" href="/nang-suat"><i class="bi bi-people-fill"></i> Năng suất</a>
         </li>
         <li class="nav-item">
+          <a class="nav-link{% if '/loi-nhuan' in request.path %} active fw-semibold{% endif %}" href="/loi-nhuan"><i class="bi bi-graph-up-arrow"></i> Lợi nhuận</a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link position-relative{% if '/kho-son' in request.path %} active fw-semibold{% endif %}" href="/kho-son"><i class="bi bi-box-seam"></i> Kho sơn{% if nav_low_count %} <span class="badge text-bg-danger">{{ nav_low_count }}</span>{% endif %}</a>
         </li>
         <li class="nav-item">

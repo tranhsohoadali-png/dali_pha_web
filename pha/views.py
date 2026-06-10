@@ -1558,6 +1558,110 @@ def export_nang_suat_excel(request):
     return resp
 
 
+# ===================== DOANH THU – LỢI NHUẬN =====================
+def _price_of(size):
+    from pha.models import AppSetting
+    try:
+        return float((AppSetting.get('PRICE_' + (size or ''), '0') or '0').replace(',', '').strip() or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _price_list():
+    """Danh sách [{size, price}] cho form giá bán: khổ gợi ý + khổ đã có trong dữ liệu SX."""
+    from pha.models import PaintingProduction
+    sizes = list(_paint_sizes())
+    for s in sorted(set(PaintingProduction.objects.exclude(size='').values_list('size', flat=True))):
+        if s not in sizes:
+            sizes.append(s)
+    return [{'size': s, 'price': round(_price_of(s))} for s in sizes]
+
+
+def _profit(range_, month_param):
+    """Doanh thu (SX theo khổ × giá bán) − chi phí sơn − lương khoán = lợi nhuận."""
+    from pha.models import PaintingProduction, ProductionLog
+    label, f = _period_filter(range_, month_param)
+    sizeqty = {}
+    for p in PaintingProduction.objects.filter(**f):
+        sz = (p.size or '').strip() or '(chưa ghi)'
+        sizeqty[sz] = sizeqty.get(sz, 0) + max(1, int(p.qty or 1))
+    rows, revenue = [], 0.0
+    for sz, q in sizeqty.items():
+        price = _price_of(sz)
+        rev = q * price
+        revenue += rev
+        rows.append({'size': sz, 'qty': q, 'price': round(price), 'revenue': round(rev)})
+    rows.sort(key=lambda x: -x['revenue'])
+    paint_cost = ProductionLog.objects.filter(**f).aggregate(s=Sum('cost'))['s'] or 0
+    _, _, totals, _ = _productivity(range_, month_param)
+    labor = totals['pay']
+    summary = {'revenue': round(revenue), 'paint_cost': round(paint_cost),
+               'labor': round(labor), 'profit': round(revenue - paint_cost - labor)}
+    return label, rows, summary
+
+
+@csrf_exempt
+@staff_required
+def loi_nhuan(request):
+    """Báo cáo DOANH THU – LỢI NHUẬN (chỉ quản lý). Cấu hình giá bán theo kích thước."""
+    from pha.models import AppSetting, ProductionLog, PaintingProduction
+    if request.method == 'POST' and request.POST.get('action') == 'save_prices':
+        for sz, pr in zip(request.POST.getlist('psize'), request.POST.getlist('pprice')):
+            sz = (sz or '').strip()
+            if sz:
+                AppSetting.set('PRICE_' + sz, (pr or '0').replace(',', '').strip() or '0')
+        messages.info(request, 'Đã lưu giá bán theo kích thước.')
+        return redirect('/loi-nhuan')
+
+    label, rows, summary = _profit('month', None)
+    months = set(ProductionLog.objects.values_list('month', flat=True))
+    months |= set(PaintingProduction.objects.values_list('month', flat=True))
+    stat_months = [{'value': m, 'label': _fmt_month(m)} for m in sorted(months, reverse=True)]
+    return render(request, 'loi_nhuan.html', {
+        'label': label, 'rows': rows, 'summary': summary,
+        'price_list': _price_list(), 'stat_months': stat_months,
+    })
+
+
+@csrf_exempt
+@staff_required
+def thong_ke_loi_nhuan(request):
+    label, rows, summary = _profit(request.GET.get('range', 'month'), request.GET.get('month'))
+    return JsonResponse({'label': label, 'rows': rows, 'summary': summary})
+
+
+@csrf_exempt
+@staff_required
+def export_loi_nhuan_excel(request):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    label, rows, summary = _profit(request.GET.get('range', 'month'), request.GET.get('month'))
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Loi nhuan"
+    head_fill = PatternFill('solid', fgColor='0D6EFD')
+    head_font = Font(bold=True, color='FFFFFF')
+    center = Alignment(horizontal='center')
+    ws.append(["BÁO CÁO DOANH THU – LỢI NHUẬN"])
+    ws.append([label])
+    ws.append(["Doanh thu", summary['revenue']])
+    ws.append(["Chi phí sơn", summary['paint_cost']])
+    ws.append(["Chi phí nhân công (khoán)", summary['labor']])
+    ws.append(["LỢI NHUẬN", summary['profit']])
+    ws.append([])
+    ws.append(["Kích thước", "Số tranh", "Giá bán (đ)", "Doanh thu (đ)"])
+    for c in ws[8]:
+        c.fill = head_fill; c.font = head_font; c.alignment = center
+    for r in rows:
+        ws.append([r['size'], r['qty'], r['price'], r['revenue']])
+    for col, w in zip('ABCD', (18, 12, 16, 18)):
+        ws.column_dimensions[col].width = w
+    resp = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = 'attachment; filename="loi_nhuan.xlsx"'
+    wb.save(resp)
+    return resp
+
+
 # ===================== XỬ LÝ ẢNH (tab cho chủ) =====================
 def _fmt_name(filename):
     """Tên hiển thị gọn: '18:58 08/06 · Asset 2@4x.png' từ tên file có timestamp."""

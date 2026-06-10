@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Doanh thu – Lợi nhuận</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+</head>
+<body class="bg-body-tertiary">
+
+{% include '_nav.html' %}
+
+<div class="container-fluid py-3">
+  {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
+
+  <!-- Giá bán theo kích thước -->
+  <div class="row">
+    <div class="col-12">
+      <details class="card shadow-sm">
+        <summary class="card-header fw-semibold" style="cursor:pointer; list-style:none;">
+          <i class="bi bi-tag"></i> Giá bán theo kích thước <span class="text-secondary small fw-normal">(bấm để mở/đóng — đặt giá để tính doanh thu)</span>
+        </summary>
+        <div class="card-body">
+          <form method="POST" action="/loi-nhuan" class="row g-2 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_prices">
+            {% for p in price_list %}
+            <div class="col-6 col-md-2">
+              <label class="form-label small mb-1">{{ p.size }} — đ</label>
+              <input type="hidden" name="psize" value="{{ p.size }}">
+              <input type="number" name="pprice" class="form-control" value="{{ p.price }}" min="0" step="1000">
+            </div>
+            {% endfor %}
+            <div class="col-12 mt-2">
+              <button class="btn btn-primary fw-semibold"><i class="bi bi-save"></i> Lưu giá bán</button>
+            </div>
+          </form>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- Báo cáo -->
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-graph-up-arrow"></i> Doanh thu – Lợi nhuận</div>
+        <div class="card-body">
+          <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <div class="btn-group btn-group-sm" role="group">
+              <button type="button" class="btn btn-outline-primary stat-range" data-range="today">Hôm nay</button>
+              <button type="button" class="btn btn-outline-primary stat-range" data-range="week">Tuần này</button>
+              <button type="button" class="btn btn-primary stat-range" data-range="month">Theo tháng</button>
+              <button type="button" class="btn btn-outline-primary stat-range" data-range="all">Tất cả</button>
+            </div>
+            <select id="statMonth" class="form-select form-select-sm" style="max-width:150px;">
+              {% for m in stat_months %}<option value="{{ m.value }}">{{ m.label }}</option>{% endfor %}
+            </select>
+            <button id="statExcel" type="button" class="btn btn-sm btn-success"><i class="bi bi-file-earmark-excel"></i> Xuất Excel</button>
+            <span id="statLabel" class="fw-semibold ms-2">{{ label }}</span>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Doanh thu</div><div class="fs-4 fw-bold text-success" id="sRev">0</div><div class="small text-secondary">đồng</div></div></div>
+            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Chi phí sơn</div><div class="fs-4 fw-bold text-warning" id="sPaint">0</div><div class="small text-secondary">đồng</div></div></div>
+            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Nhân công (khoán)</div><div class="fs-4 fw-bold" style="color:#6610f2" id="sLabor">0</div><div class="small text-secondary">đồng</div></div></div>
+            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Lợi nhuận</div><div class="fs-4 fw-bold text-primary" id="sProfit">0</div><div class="small text-secondary">đồng</div></div></div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-lg-6">
+              <div class="fw-semibold mb-2"><i class="bi bi-rulers"></i> Doanh thu theo kích thước</div>
+              <table class="table table-sm">
+                <thead class="table-light"><tr><th>Kích thước</th><th class="text-end">Số tranh</th><th class="text-end">Giá bán</th><th class="text-end">Doanh thu</th></tr></thead>
+                <tbody id="revBody"><tr><td colspan="4" class="text-secondary text-center py-3">Đang tải…</td></tr></tbody>
+              </table>
+            </div>
+            <div class="col-lg-6"><div style="height:300px"><canvas id="sumChart"></canvas></div></div>
+          </div>
+          <div class="form-text">Doanh thu = số tranh sản xuất × giá bán theo khổ. Lợi nhuận = Doanh thu − Chi phí sơn − Nhân công khoán. (Chưa gồm chi phí khác như khung, vận chuyển…)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function esc(s){ return (s||'').replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function vnd(n){ return Math.round(n||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
+
+  var curRange='month', statMonth=document.getElementById('statMonth'), sumChart=null;
+  function drawSumChart(sm){
+    var cv=document.getElementById('sumChart'); if(!cv||typeof Chart==='undefined') return;
+    var data=[sm.revenue||0, sm.paint_cost||0, sm.labor||0, sm.profit||0];
+    var colors=['#198754','#fd7e14','#6610f2', (sm.profit||0)>=0?'#0d6efd':'#dc3545'];
+    if(sumChart){ sumChart.data.datasets[0].data=data; sumChart.data.datasets[0].backgroundColor=colors; sumChart.update(); return; }
+    sumChart=new Chart(cv,{type:'bar',data:{labels:['Doanh thu','Chi phí sơn','Nhân công','Lợi nhuận'],datasets:[{label:'đồng',data:data,backgroundColor:colors,borderRadius:4}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+  }
+  function loadStats(){
+    var url='/thong-ke-loi-nhuan?range='+curRange;
+    if(curRange==='month'&&statMonth) url+='&month='+encodeURIComponent(statMonth.value||'');
+    fetch(url).then(function(r){return r.json();}).then(function(res){
+      document.getElementById('statLabel').textContent=res.label;
+      var sm=res.summary||{}, rows=res.rows||[];
+      document.getElementById('sRev').textContent=vnd(sm.revenue);
+      document.getElementById('sPaint').textContent=vnd(sm.paint_cost);
+      document.getElementById('sLabor').textContent=vnd(sm.labor);
+      var pf=document.getElementById('sProfit'); pf.textContent=vnd(sm.profit);
+      pf.className='fs-4 fw-bold '+((sm.profit||0)>=0?'text-primary':'text-danger');
+      var tb=document.getElementById('revBody');
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="4" class="text-secondary text-center py-3">Chưa có dữ liệu sản xuất.</td></tr>'; }
+      else tb.innerHTML=rows.map(function(r){
+        return '<tr><td class="fw-semibold">'+esc(r.size)+'</td><td class="text-end">'+r.qty+'</td><td class="text-end">'+vnd(r.price)+'</td><td class="text-end fw-bold text-success">'+vnd(r.revenue)+'</td></tr>';
+      }).join('');
+      drawSumChart(sm);
+    });
+  }
+  document.querySelectorAll('.stat-range').forEach(function(b){
+    b.addEventListener('click', function(){
+      curRange=this.dataset.range;
+      document.querySelectorAll('.stat-range').forEach(function(x){ x.classList.remove('btn-primary'); x.classList.add('btn-outline-primary'); });
+      this.classList.remove('btn-outline-primary'); this.classList.add('btn-primary');
+      if(statMonth) statMonth.style.display=(curRange==='month')?'':'none';
+      loadStats();
+    });
+  });
+  if(statMonth) statMonth.addEventListener('change', loadStats);
+  document.getElementById('statExcel').addEventListener('click', function(){
+    var url='/loi-nhuan-excel?range='+curRange;
+    if(curRange==='month'&&statMonth) url+='&month='+encodeURIComponent(statMonth.value||'');
+    window.location=url;
+  });
+  loadStats();
+</script>
+</body>
+</html>
