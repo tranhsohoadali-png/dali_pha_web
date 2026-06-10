@@ -725,7 +725,7 @@ def _quantize_file(path, n, smooth=0, min_area=0, face_priority=True, print_long
     # gộp đốm theo diện tích + mượt biên. KHÔNG face-priority/mean-shift/bilateral
     # (chúng làm bệt/melt mặt). Đây là cấu hình "giống Illustrator" người dùng cần.
     if hifi:
-        arr = _quantize_illustrator(im, target, noise=20, smooth_ks=5)
+        arr = _quantize_illustrator(im, target, noise=50, smooth_ks=7)
         fd, out = tempfile.mkstemp(suffix='.png', prefix='quant_')
         os.close(fd)
         Image.fromarray(arr).save(out)
