@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Năng suất & lương khoán</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+</head>
+<body class="bg-body-tertiary">
+
+{% include '_nav.html' %}
+
+<div class="container-fluid py-3">
+  {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
+
+  <!-- Đơn giá khoán -->
+  <div class="row">
+    <div class="col-12">
+      <details class="card shadow-sm">
+        <summary class="card-header fw-semibold" style="cursor:pointer; list-style:none;">
+          <i class="bi bi-cash-coin"></i> Đơn giá khoán <span class="text-secondary small fw-normal">(bấm để mở/đóng — đặt 0 cho công đoạn không tính lương)</span>
+        </summary>
+        <div class="card-body">
+          <form method="POST" action="/nang-suat" class="row g-2 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_rates">
+            <div class="col-md-3">
+              <label class="form-label small mb-1">Pha — đ / mẻ</label>
+              <input type="number" name="pay_pha" class="form-control" value="{{ rates.pha|floatformat:0 }}" min="0" step="100">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small mb-1">Rót — đ / tranh</label>
+              <input type="number" name="pay_rot_p" class="form-control" value="{{ rates.rot_p|floatformat:0 }}" min="0" step="100">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small mb-1">Rót — đ / màu</label>
+              <input type="number" name="pay_rot_c" class="form-control" value="{{ rates.rot_c|floatformat:0 }}" min="0" step="100">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small mb-1">Sản xuất — đ / tranh</label>
+              <input type="number" name="pay_sx" class="form-control" value="{{ rates.sx|floatformat:0 }}" min="0" step="100">
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu đơn giá</button>
+            </div>
+          </form>
+          <div class="form-text mt-1">Lương khoán = (số mẻ pha × đơn giá pha) + (tranh rót × đơn giá rót) + (màu rót × đơn giá màu) + (tranh sản xuất × đơn giá SX).</div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- Bảng năng suất / lương khoán -->
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-people-fill"></i> Năng suất &amp; lương khoán theo nhân viên</div>
+        <div class="card-body">
+          <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <div class="btn-group btn-group-sm" role="group">
+              <button type="button" class="btn btn-outline-primary stat-range" data-range="today">Hôm nay</button>
+              <button type="button" class="btn btn-outline-primary stat-range" data-range="week">Tuần này</button>
+              <button type="button" class="btn btn-primary stat-range" data-range="month">Theo tháng</button>
+              <button type="button" class="btn btn-outline-primary stat-range" data-range="all">Tất cả</button>
+            </div>
+            <select id="statMonth" class="form-select form-select-sm" style="max-width:150px;">
+              {% for m in stat_months %}<option value="{{ m.value }}">{{ m.label }}</option>{% endfor %}
+            </select>
+            <button id="statExcel" type="button" class="btn btn-sm btn-success"><i class="bi bi-file-earmark-excel"></i> Xuất Excel</button>
+            <span id="statLabel" class="fw-semibold ms-2">{{ label }}</span>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Tổng lương khoán</div><div class="fs-4 fw-bold text-success" id="tPay">0</div><div class="small text-secondary">đồng</div></div></div>
+            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Số nhân viên</div><div class="fs-4 fw-bold text-primary" id="tUsers">0</div></div></div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-lg-7">
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                  <thead class="table-light"><tr><th>Nhân viên</th><th class="text-end">Mẻ pha</th><th class="text-end">Tranh rót</th><th class="text-end">Màu rót</th><th class="text-end">Tranh SX</th><th class="text-end">Lương khoán</th></tr></thead>
+                  <tbody id="nsBody"><tr><td colspan="6" class="text-secondary text-center py-3">Đang tải…</td></tr></tbody>
+                  <tfoot class="table-light fw-bold"><tr><td>TỔNG</td><td class="text-end" id="fPha">0</td><td class="text-end" id="fRotP">0</td><td class="text-end" id="fRotC">0</td><td class="text-end" id="fSx">0</td><td class="text-end" id="fPay">0</td></tr></tfoot>
+                </table>
+              </div>
+            </div>
+            <div class="col-lg-5"><div style="height:300px"><canvas id="payChart"></canvas></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function esc(s){ return (s||'').replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function vnd(n){ return Math.round(n||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
+
+  var curRange='month', statMonth=document.getElementById('statMonth'), payChart=null;
+  function drawPayChart(rows){
+    var cv=document.getElementById('payChart'); if(!cv||typeof Chart==='undefined') return;
+    var labels=rows.map(function(r){return r.user;}), data=rows.map(function(r){return r.pay;});
+    if(payChart){ payChart.data.labels=labels; payChart.data.datasets[0].data=data; payChart.update(); return; }
+    payChart=new Chart(cv,{type:'bar',data:{labels:labels,datasets:[{label:'Lương khoán (đ)',data:data,backgroundColor:'#198754',borderRadius:4}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:'Lương khoán theo nhân viên'}},scales:{x:{beginAtZero:true}}}});
+  }
+  function loadStats(){
+    var url='/thong-ke-nang-suat?range='+curRange;
+    if(curRange==='month'&&statMonth) url+='&month='+encodeURIComponent(statMonth.value||'');
+    fetch(url).then(function(r){return r.json();}).then(function(res){
+      document.getElementById('statLabel').textContent=res.label;
+      var rows=res.rows||[], t=res.totals||{};
+      document.getElementById('tPay').textContent=vnd(t.pay);
+      document.getElementById('tUsers').textContent=rows.length;
+      var tb=document.getElementById('nsBody');
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="6" class="text-secondary text-center py-3">Chưa có dữ liệu.</td></tr>'; }
+      else tb.innerHTML=rows.map(function(r){
+        return '<tr><td class="fw-semibold">'+esc(r.user)+'</td><td class="text-end">'+r.pha+'</td><td class="text-end">'+r.rot_p+'</td><td class="text-end">'+r.rot_c+'</td><td class="text-end">'+r.sx+'</td><td class="text-end fw-bold text-success">'+vnd(r.pay)+'</td></tr>';
+      }).join('');
+      document.getElementById('fPha').textContent=t.pha||0;
+      document.getElementById('fRotP').textContent=t.rot_p||0;
+      document.getElementById('fRotC').textContent=t.rot_c||0;
+      document.getElementById('fSx').textContent=t.sx||0;
+      document.getElementById('fPay').textContent=vnd(t.pay);
+      drawPayChart(rows);
+    });
+  }
+  document.querySelectorAll('.stat-range').forEach(function(b){
+    b.addEventListener('click', function(){
+      curRange=this.dataset.range;
+      document.querySelectorAll('.stat-range').forEach(function(x){ x.classList.remove('btn-primary'); x.classList.add('btn-outline-primary'); });
+      this.classList.remove('btn-outline-primary'); this.classList.add('btn-primary');
+      if(statMonth) statMonth.style.display=(curRange==='month')?'':'none';
+      loadStats();
+    });
+  });
+  if(statMonth) statMonth.addEventListener('change', loadStats);
+  document.getElementById('statExcel').addEventListener('click', function(){
+    var url='/nang-suat-excel?range='+curRange;
+    if(curRange==='month'&&statMonth) url+='&month='+encodeURIComponent(statMonth.value||'');
+    window.location=url;
+  });
+  loadStats();
+</script>
+</body>
+</html>

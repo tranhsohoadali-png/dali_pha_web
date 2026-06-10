@@ -1432,6 +1432,132 @@ def export_san_xuat_excel(request):
     return resp
 
 
+# ===================== NĂNG SUẤT & LƯƠNG KHOÁN NHÂN VIÊN =====================
+def _period_filter(range_, month_param):
+    """Trả (label, kwargs) lọc theo khoảng cho các model có trường day/month."""
+    now = _now()
+    if range_ == 'week':
+        d = now.date()
+        mon = d - timedelta(days=d.weekday())
+        sun = mon + timedelta(days=6)
+        return (f"Tuần này ({mon.strftime('%d/%m')} – {sun.strftime('%d/%m/%Y')})",
+                {'day__gte': mon.strftime('%Y-%m-%d'), 'day__lte': sun.strftime('%Y-%m-%d')})
+    if range_ == 'month':
+        m = month_param or now.strftime('%Y-%m')
+        return "Tháng " + _fmt_month(m), {'month': m}
+    if range_ == 'all':
+        return "Tất cả", {}
+    return "Hôm nay (" + now.strftime('%d/%m/%Y') + ")", {'day': now.strftime('%Y-%m-%d')}
+
+
+def _pay_rates():
+    """Đơn giá khoán (đồng) lưu trong AppSetting."""
+    from pha.models import AppSetting
+
+    def num(k):
+        try:
+            return float((AppSetting.get(k, '0') or '0').replace(',', '').strip() or 0)
+        except (TypeError, ValueError):
+            return 0.0
+    return {'pha': num('PAY_PHA'), 'rot_p': num('PAY_ROT_P'),
+            'rot_c': num('PAY_ROT_C'), 'sx': num('PAY_SX')}
+
+
+def _productivity(range_, month_param):
+    """Năng suất + lương khoán theo nhân viên trong khoảng. Trả (label, rows, totals, rates)."""
+    from pha.models import ProductionLog, PourLog, PaintingProduction
+    label, f = _period_filter(range_, month_param)
+    acc = {}
+
+    def row(u):
+        key = u or '(không tên)'
+        return acc.setdefault(key, {'user': key, 'pha': 0, 'rot_p': 0, 'rot_c': 0, 'sx': 0})
+
+    for log in ProductionLog.objects.filter(**f):
+        row(log.user)['pha'] += 1
+    for log in PourLog.objects.filter(**f):
+        q = max(1, int(log.qty or 1))
+        r = row(log.user)
+        r['rot_p'] += q
+        r['rot_c'] += int(log.color_count or 0) * q
+    for p in PaintingProduction.objects.filter(**f):
+        row(p.user)['sx'] += max(1, int(p.qty or 1))
+
+    rates = _pay_rates()
+    rows = []
+    for v in acc.values():
+        v['pay'] = round(v['pha'] * rates['pha'] + v['rot_p'] * rates['rot_p']
+                         + v['rot_c'] * rates['rot_c'] + v['sx'] * rates['sx'])
+        rows.append(v)
+    rows.sort(key=lambda x: -x['pay'])
+    totals = {k: sum(r[k] for r in rows) for k in ('pha', 'rot_p', 'rot_c', 'sx', 'pay')}
+    return label, rows, totals, rates
+
+
+@csrf_exempt
+@staff_required
+def nang_suat(request):
+    """Báo cáo NĂNG SUẤT + LƯƠNG KHOÁN theo nhân viên (chỉ quản lý)."""
+    from pha.models import AppSetting, ProductionLog, PourLog, PaintingProduction
+    if request.method == 'POST' and request.POST.get('action') == 'save_rates':
+        for key, fld in (('PAY_PHA', 'pay_pha'), ('PAY_ROT_P', 'pay_rot_p'),
+                         ('PAY_ROT_C', 'pay_rot_c'), ('PAY_SX', 'pay_sx')):
+            val = (request.POST.get(fld) or '0').replace(',', '').strip() or '0'
+            AppSetting.set(key, val)
+        messages.info(request, 'Đã lưu đơn giá khoán.')
+        return redirect('/nang-suat')
+
+    label, rows, totals, rates = _productivity('month', None)
+    months = set(ProductionLog.objects.values_list('month', flat=True))
+    months |= set(PourLog.objects.values_list('month', flat=True))
+    months |= set(PaintingProduction.objects.values_list('month', flat=True))
+    stat_months = [{'value': m, 'label': _fmt_month(m)} for m in sorted(months, reverse=True)]
+    return render(request, 'nang_suat.html', {
+        'label': label, 'rows': rows, 'totals': totals, 'rates': rates,
+        'stat_months': stat_months,
+    })
+
+
+@csrf_exempt
+@staff_required
+def thong_ke_nang_suat(request):
+    label, rows, totals, rates = _productivity(request.GET.get('range', 'month'),
+                                               request.GET.get('month'))
+    return JsonResponse({'label': label, 'rows': rows, 'totals': totals, 'rates': rates})
+
+
+@csrf_exempt
+@staff_required
+def export_nang_suat_excel(request):
+    """Xuất bảng lương khoán / năng suất ra Excel."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    label, rows, totals, rates = _productivity(request.GET.get('range', 'month'),
+                                               request.GET.get('month'))
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Luong khoan"
+    head_fill = PatternFill('solid', fgColor='6610F2')
+    head_font = Font(bold=True, color='FFFFFF')
+    center = Alignment(horizontal='center')
+    ws.append(["BẢNG NĂNG SUẤT & LƯƠNG KHOÁN"])
+    ws.append([label])
+    ws.append([f"Đơn giá: pha {rates['pha']:.0f}đ/mẻ · rót {rates['rot_p']:.0f}đ/tranh · "
+               f"màu rót {rates['rot_c']:.0f}đ/màu · SX {rates['sx']:.0f}đ/tranh"])
+    ws.append(["Nhân viên", "Mẻ pha", "Tranh rót", "Màu rót", "Tranh SX", "Lương khoán (đ)"])
+    for c in ws[4]:
+        c.fill = head_fill; c.font = head_font; c.alignment = center
+    for r in rows:
+        ws.append([r['user'], r['pha'], r['rot_p'], r['rot_c'], r['sx'], r['pay']])
+    ws.append(["TỔNG", totals['pha'], totals['rot_p'], totals['rot_c'], totals['sx'], totals['pay']])
+    for col, w in zip('ABCDEF', (18, 10, 12, 12, 12, 18)):
+        ws.column_dimensions[col].width = w
+    resp = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = 'attachment; filename="luong_khoan.xlsx"'
+    wb.save(resp)
+    return resp
+
+
 # ===================== XỬ LÝ ẢNH (tab cho chủ) =====================
 def _fmt_name(filename):
     """Tên hiển thị gọn: '18:58 08/06 · Asset 2@4x.png' từ tên file có timestamp."""
