@@ -51,9 +51,9 @@
     <div class="fw-bold mb-2" style="font-size:1.15rem"><i class="bi bi-paint-bucket"></i> Giao rót màu</div>
     <input list="paintList" id="rPainting" class="form-control addinp mb-2" placeholder="Mã tranh (gõ/chọn)">
     <div id="rPreview" class="small text-secondary mb-2">Chọn mã tranh để xem ảnh &amp; số màu.</div>
-    <div class="d-flex gap-2 mb-2">
-      <input list="sizeList" id="rSize" class="form-control addinp" placeholder="Kích thước (vd 40x50)">
-      <input id="rQty" type="number" class="form-control addinp" style="max-width:90px" value="1" min="1" inputmode="numeric">
+    <div class="d-flex gap-2 mb-2 align-items-center">
+      <span class="text-secondary small">Số lượng:</span>
+      <input id="rQty" type="number" class="form-control addinp" style="max-width:110px" value="1" min="1" inputmode="numeric">
     </div>
     <select id="rAssignee" class="form-select addinp mb-2">
       <option value="">Giao cho: Mọi người</option>
@@ -204,13 +204,12 @@
     if(!PMAP[code.toLowerCase()]){ toast('Mã tranh chưa có trong danh mục'); return; }
     var b=this; b.disabled=true;
     var fd=new FormData(); fd.append('action','add'); fd.append('painting',code);
-    fd.append('size',document.getElementById('rSize').value||'');
     fd.append('assignee',document.getElementById('rAssignee').value);
     fd.append('qty',document.getElementById('rQty').value||1);
     fd.append('note',document.getElementById('rNote').value||'');
     fetch('/quan-ly-giao-rot',{method:'POST',body:fd,headers:{'X-CSRFToken':csrf()}}).then(r=>r.json()).then(function(res){
       b.disabled=false; toast(res.ok?('✓ '+res.msg):(res.msg||'Lỗi'));
-      if(res.ok){ rPainting.value=''; rNote.value=''; document.getElementById('rSize').value=''; rPreview.textContent='Chọn mã tranh để xem ảnh & số màu.'; loadPending(); }
+      if(res.ok){ rPainting.value=''; rNote.value=''; rPreview.textContent='Chọn mã tranh để xem ảnh & số màu.'; loadPending(); }
     }).catch(function(){ b.disabled=false; toast('Lỗi kết nối'); });
   });
 
@@ -222,7 +221,7 @@
       box.innerHTML=res.rows.map(function(r){
         return '<div class="border rounded p-2 mb-2">'+
           '<div class="d-flex align-items-center gap-2">'+
-            '<b class="flex-grow-1">'+escp(r.painting)+' <span class="text-secondary">×'+r.qty+'</span> '+(r.size?'<span class="badge text-bg-dark">'+escp(r.size)+'</span> ':'')+'<span class="badge text-bg-primary">'+(r.count||0)+' màu</span></b>'+
+            '<b class="flex-grow-1">'+escp(r.painting)+' <span class="text-secondary">×'+r.qty+'</span> <span class="badge text-bg-primary">'+(r.count||0)+' màu</span></b>'+
             (r.image?'<img src="'+r.image+'" class="rounded border zoom-img" style="height:38px;cursor:zoom-in">':'')+
           '</div>'+
           '<div class="small mt-1">'+(r.assignee?'<span class="badge text-bg-info">'+escp(r.assignee)+'</span>':'<span class="text-secondary">Mọi người</span>')+(r.note?' · '+escp(r.note):'')+'</div>'+

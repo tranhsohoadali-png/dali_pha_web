@@ -25,15 +25,11 @@
           <form method="POST" action="/ma-tranh" class="row g-2 align-items-end" id="reqForm">
             {% csrf_token %}
             <input type="hidden" name="action" value="add_request">
-            <div class="col-md-3">
+            <div class="col-md-4">
               <label class="form-label small mb-1">Mã tranh</label>
               <input list="paintList" name="painting" id="reqPainting" class="form-control" placeholder="Chọn / gõ mã tranh" required>
             </div>
-            <div class="col-md-2">
-              <label class="form-label small mb-1">Kích thước</label>
-              <input list="sizeList" name="size" id="reqSize" class="form-control" placeholder="VD: 40x50">
-            </div>
-            <div class="col-md-2">
+            <div class="col-md-3">
               <label class="form-label small mb-1">Giao cho</label>
               <select name="assignee" class="form-select">
                 <option value="">Mọi người</option>
@@ -64,12 +60,11 @@
           {% else %}
           <div class="table-responsive">
             <table class="table table-sm align-middle">
-              <thead class="table-light"><tr><th>Mã tranh</th><th class="text-center">Kích thước</th><th class="text-center">Số màu</th><th>Giao cho</th><th class="text-center">SL</th><th>Ghi chú</th><th></th></tr></thead>
+              <thead class="table-light"><tr><th>Mã tranh</th><th class="text-center">Số màu</th><th>Giao cho</th><th class="text-center">SL</th><th>Ghi chú</th><th></th></tr></thead>
               <tbody>
                 {% for r in pending %}
                 <tr>
                   <td class="fw-semibold text-nowrap">{{ r.painting }}{% if r.image %} <button type="button" class="btn btn-sm btn-outline-info py-0 zoom-btn" title="Xem ảnh mẫu" data-image="{{ r.image }}"><i class="bi bi-image"></i></button>{% endif %}</td>
-                  <td class="text-center">{% if r.size %}<span class="badge text-bg-dark">{{ r.size }}</span>{% else %}<span class="text-secondary">—</span>{% endif %}</td>
                   <td class="text-center text-nowrap"><span class="pcount" data-p="{{ r.painting }}">{{ r.count }}</span> <button type="button" class="btn btn-sm btn-outline-secondary py-0 recount-btn" data-code="{{ r.painting }}" title="Cập nhật số màu từ ảnh mẫu"><i class="bi bi-arrow-repeat"></i></button></td>
                   <td>{% if r.assignee %}<span class="badge text-bg-info">{{ r.assignee }}</span>{% else %}<span class="text-secondary">Mọi người</span>{% endif %}</td>
                   <td class="text-center">{{ r.qty }}</td>
@@ -131,17 +126,6 @@
             <div class="col-4"><div class="border rounded text-center py-2"><div class="text-secondary small">Tổng số màu đã rót</div><div class="fs-4 fw-bold text-warning" id="statColors">{{ stat_agg.colors_total }}</div></div></div>
           </div>
 
-          <div class="fw-semibold mb-2"><i class="bi bi-rulers"></i> Số lượng tranh sản xuất theo kích thước</div>
-          <div class="row g-3 align-items-start mb-3">
-            <div class="col-md-5">
-              <table class="table table-sm mb-0">
-                <thead class="table-light"><tr><th>Kích thước</th><th class="text-end">Số tranh</th><th class="text-end">Số lượt</th></tr></thead>
-                <tbody id="sizeBody"><tr><td colspan="3" class="text-secondary text-center">Chưa có dữ liệu.</td></tr></tbody>
-              </table>
-            </div>
-            <div class="col-md-7"><div style="height:240px"><canvas id="sizeChart"></canvas></div></div>
-          </div>
-
           <div class="small text-secondary mb-1">Biểu đồ theo ngày trong khoảng đang chọn:</div>
           <div style="height:300px"><canvas id="statChart"></canvas></div>
         </div>
@@ -162,8 +146,8 @@
         </div>
         <div class="card-body p-0">
           <table class="table table-sm mb-0 align-middle">
-            <thead class="table-light"><tr><th style="width:130px">Giờ</th><th>Mã tranh</th><th style="width:90px" class="text-center">Kích thước</th><th style="width:60px" class="text-center">SL</th><th style="width:70px" class="text-center">Số màu</th><th>Người rót</th><th style="width:46px"></th></tr></thead>
-            <tbody id="historyBody"><tr><td colspan="7" class="text-secondary text-center py-3">Đang tải…</td></tr></tbody>
+            <thead class="table-light"><tr><th style="width:140px">Giờ</th><th>Mã tranh</th><th style="width:60px" class="text-center">SL</th><th style="width:70px" class="text-center">Số màu</th><th>Người rót</th><th style="width:46px"></th></tr></thead>
+            <tbody id="historyBody"><tr><td colspan="6" class="text-secondary text-center py-3">Đang tải…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -368,28 +352,7 @@
   // ---- Thống kê ----
   var curRange = 'today';
   var statMonth = document.getElementById('statMonth');
-  var statChart = null, sizeChart = null;
-  function renderSizeTable(bySize){
-    var tb = document.getElementById('sizeBody');
-    if(!bySize.length){ tb.innerHTML = '<tr><td colspan="3" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>'; return; }
-    tb.innerHTML = bySize.map(function(u){
-      return '<tr><td class="fw-semibold">'+esc(u.size)+'</td><td class="text-end">'+u.paintings+'</td><td class="text-end">'+u.pours+'</td></tr>';
-    }).join('');
-  }
-  function drawSizeChart(bySize){
-    var cv = document.getElementById('sizeChart');
-    if(!cv || typeof Chart === 'undefined') return;
-    var labels = bySize.map(function(u){ return u.size; });
-    var data = bySize.map(function(u){ return u.paintings; });
-    if(sizeChart){ sizeChart.data.labels=labels; sizeChart.data.datasets[0].data=data; sizeChart.update(); return; }
-    sizeChart = new Chart(cv, {
-      type:'bar',
-      data:{ labels:labels, datasets:[{label:'Số tranh', data:data, backgroundColor:'#198754', borderRadius:4}] },
-      options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{display:false}, title:{display:true,text:'Số tranh theo kích thước'} },
-        scales:{ x:{ beginAtZero:true, ticks:{precision:0} } } }
-    });
-  }
+  var statChart = null;
   function drawStatChart(daily){
     var cv = document.getElementById('statChart');
     if (!cv || typeof Chart === 'undefined') return;
@@ -417,8 +380,6 @@
       document.getElementById('statPours').textContent = res.pours;
       document.getElementById('statPaintings').textContent = res.paintings;
       document.getElementById('statColors').textContent = res.colors_total;
-      renderSizeTable(res.by_size || []);
-      drawSizeChart(res.by_size || []);
       drawStatChart(res.daily || []);
     });
   }
@@ -442,9 +403,9 @@
   function loadHistory(){
     var tb = document.getElementById('historyBody'); if(!tb) return;
     fetch('/lich-su-rot').then(function(r){ return r.json(); }).then(function(res){
-      if (!res.rows || !res.rows.length){ tb.innerHTML = '<tr><td colspan="7" class="text-secondary text-center py-3">Chưa có lượt rót nào.</td></tr>'; return; }
+      if (!res.rows || !res.rows.length){ tb.innerHTML = '<tr><td colspan="6" class="text-secondary text-center py-3">Chưa có lượt rót nào.</td></tr>'; return; }
       tb.innerHTML = res.rows.map(function(x){
-        return '<tr><td>'+x.dt+'</td><td class="fw-semibold">'+esc(x.painting)+'</td><td class="text-center">'+(x.size?'<span class="badge text-bg-dark">'+esc(x.size)+'</span>':'—')+'</td><td class="text-center">'+x.qty+'</td><td class="text-center">'+x.colors+'</td><td>'+esc(x.user||'')+'</td>'+
+        return '<tr><td>'+x.dt+'</td><td class="fw-semibold">'+esc(x.painting)+'</td><td class="text-center">'+x.qty+'</td><td class="text-center">'+x.colors+'</td><td>'+esc(x.user||'')+'</td>'+
           '<td class="text-center"><button class="btn btn-sm btn-outline-danger py-0 histdel" data-id="'+x.id+'" title="Xoá dòng này"><i class="bi bi-x-lg"></i></button></td></tr>';
       }).join('');
     }).catch(function(){});
