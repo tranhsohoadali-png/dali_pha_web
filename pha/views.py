@@ -1713,14 +1713,18 @@ def _ip_private(ip):
 @csrf_exempt
 @login_required(login_url='/login')
 def cham_cong_ip(request):
-    """Chẩn đoán: server nhận IP nào cho máy bạn (mở trên điện thoại khi ở Wifi công ty)."""
+    """Trang kiểm tra: server nhận IP nào cho máy bạn (mở trên điện thoại để kiểm)."""
     ip = _client_ip(request)
-    return JsonResponse({
-        'ip': ip, 'allowed': _ip_allowed(ip), 'configured': bool(_attendance_ips()),
-        'private': _ip_private(ip), 'company_ips': _attendance_ips(),
+    company = _attendance_ips()
+    data = {
+        'ip': ip, 'allowed': _ip_allowed(ip), 'configured': bool(company),
+        'private': _ip_private(ip), 'company_ips': company,
         'x_forwarded_for': request.META.get('HTTP_X_FORWARDED_FOR', ''),
         'remote_addr': request.META.get('REMOTE_ADDR', ''),
-    })
+    }
+    if request.GET.get('json') == '1':
+        return JsonResponse(data)
+    return render(request, 'cham_cong_ip.html', {**data, 'is_staff': request.user.is_staff})
 
 
 def _vn_dt(dt):
@@ -2072,14 +2076,23 @@ def xu_ly_anh(request):
             print_long_cm = max(dims) if dims else 0
         except ValueError:
             print_long_cm = 0
+        # Núm DỄ TÔ (độ chi tiết Mặt/Cảnh): 0 = dễ tô nhất ... 4 = chi tiết nhất.
+        def _lvl(key):
+            try:
+                return max(0, min(4, int(request.POST.get(key))))
+            except (TypeError, ValueError):
+                return 2
+        face_detail = _lvl('face_detail')
+        scene_detail = _lvl('scene_detail')
         rec = ImageResult.objects.create(
             name=name, status=ImageResult.STATUS_PROCESSING, user=request.user.username,
             params={'enhance': enhance, 'color_limit': color_limit, 'min_area': min_area,
                     'smooth': smooth, 'style_category': style_category or '',
-                    'preset': preset_key, 'face_priority': face_priority, 'print_size': size_str})
+                    'preset': preset_key, 'face_priority': face_priority, 'print_size': size_str,
+                    'face_detail': face_detail, 'scene_detail': scene_detail})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
                              color_limit, min_area, smooth, ai_prompt, use_refs, face_priority,
-                             print_long_cm)
+                             print_long_cm, face_detail, scene_detail)
         _prune_image_results()                 # giữ 10 kết quả gần nhất (bộ nhớ tạm)
         ctx = build_ctx()
         ctx['file_url'] = '/media/' + name
