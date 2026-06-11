@@ -169,18 +169,25 @@
     var bf=document.getElementById('btnFlat'); if(bf) bf.disabled=false;
     var r=new FileReader(); r.onload=e=>{var p=document.getElementById('preview');p.src=e.target.result;p.hidden=false;}; r.readAsDataURL(f); }
 
-  // ===== Nút "Đánh số ảnh phẳng (đã thiết kế)": 1 lần bấm -> KHÔNG AI, KHÔNG làm phẳng
-  // lại (smooth=0), giữ nhiều màu cho sát thiết kế, gộp đốm li ti -> đánh số + khớp DALI.
+  // ===== Nút "Đánh số ảnh phẳng (đã thiết kế)": 1 chạm -> gọi API RIÊNG /xu-ly-anh-phang
+  // (backend ÉP: KHÔNG AI, smooth=0, giữ nguyên thiết kế; chỉ gộp đốm + đánh số + khớp DALI)
+  // rồi poll kết quả như luồng thường. Chỉ gửi 2 núm có ý nghĩa: color_limit + min_area.
   (function bindFlat(){
     var bf=document.getElementById('btnFlat'); if(!bf) return;
+    function reEnable(){ bf.disabled=false; document.getElementById('sub').disabled=false; }
     bf.addEventListener('click', function(){
-      if(!fi.files[0]) return;
-      var en=document.getElementById('enhance'); if(en){ en.checked=false;
-        var sw=document.getElementById('styleWrap'); if(sw) sw.classList.add('d-none'); }
-      var sm=document.querySelector('[name="smooth"]'); if(sm) sm.value='0';   // không mean-shift
-      var cl=document.querySelector('[name="color_limit"]'); if(cl && !cl.value) cl.value='48'; // giữ sát màu thiết kế
-      var ma=document.querySelector('[name="min_area"]'); if(ma && !ma.value) ma.value='20';    // dọn đốm răng cưa
-      document.getElementById('up').submit();
+      if(!fi.files[0]){ alert('Hãy chọn ảnh trước.'); return; }
+      var fd=new FormData(); fd.append('image', fi.files[0]);
+      var cl=document.querySelector('[name="color_limit"]'); if(cl && cl.value) fd.append('color_limit', cl.value);
+      var ma=document.querySelector('[name="min_area"]'); if(ma && ma.value) fd.append('min_area', ma.value);
+      bf.disabled=true; document.getElementById('sub').disabled=true; spin(true);
+      fetch('/xu-ly-anh-phang',{method:'POST',body:fd}).then(r=>r.json()).then(function(res){
+        if(!res.ok){ spin(false); reEnable(); alert(res.msg||'Lỗi xử lý ảnh.'); return; }
+        var fu=res.file_url, waited=0;
+        var poll=setInterval(function(){ getResult(fu,
+          function(){ clearInterval(poll); reEnable(); },
+          function(){ waited+=2000; if(waited>300000){ clearInterval(poll); spin(false); reEnable(); } }); },2000);
+      }).catch(function(){ spin(false); reEnable(); alert('Lỗi kết nối.'); });
     });
   })();
 
