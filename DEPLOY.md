@@ -85,6 +85,23 @@ server {
     location /static/ { alias /var/www/dali_pha_web/staticfiles/; }
     location /media/  { alias /var/www/dali_pha_web/media/; }
 
+    # === BẢO MẬT: API KẾ TOÁN chỉ cho gọi từ CÙNG SERVER (localhost) ===
+    # Chỉ khóa 3 endpoint kế toán (lương / chấm công / năng suất).
+    # KHÔNG đụng /api/xu-ly-anh* -> web bán hàng tranhdali.vn vẫn gọi công khai bình thường.
+    # Quản lý bấm "Test"/"Đẩy lại" dùng /ketoan-luong-test, /nang-suat-day-ketoan (không thuộc /api/) nên KHÔNG bị chặn.
+    location ~ ^/api/(luong|ketoan|nang-suat)$ {
+        allow 127.0.0.1;
+        allow ::1;
+        # Nếu ketoan & mau KHÔNG cùng máy, bỏ comment dòng dưới và điền IP server ketoan:
+        # allow <IP_SERVER_KETOAN>;
+        deny all;
+        proxy_pass http://127.0.0.1:8001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:8001;
         proxy_set_header Host $host;
@@ -97,6 +114,10 @@ server {
     }
 }
 ```
+
+> **Cùng server → cho ketoan gọi qua `http://127.0.0.1/...`** (vd `http://127.0.0.1/api/nang-suat?...`),
+> KHÔNG gọi qua `https://mau.tranhdali.vn/...` (đi vòng ra ngoài → nginx thấy IP công khai → bị `deny`).
+> Nếu 2 app khác máy: thêm `allow <IP_SERVER_KETOAN>;` rồi `sudo nginx -t && sudo systemctl reload nginx`.
 ```bash
 sudo ln -s /etc/nginx/sites-available/phaweb /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx

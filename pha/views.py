@@ -967,13 +967,6 @@ def service_worker(request):
     return HttpResponse(js, content_type='application/javascript')
 
 
-def media_icon(request, name):
-    path = os.path.join(settings.MEDIA_ROOT, name)
-    if not os.path.exists(path):
-        raise Http404
-    return FileResponse(open(path, 'rb'), content_type='image/png')
-
-
 @csrf_exempt
 @staff_required
 def dali_colors(request):

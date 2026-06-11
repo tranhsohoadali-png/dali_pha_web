@@ -29,9 +29,7 @@
         <li class="nav-item">
           <a class="nav-link{% if '/san-xuat' in request.path %} active fw-semibold{% endif %}" href="/san-xuat"><i class="bi bi-box2-heart"></i> Sản xuất</a>
         </li>
-        <li class="nav-item">
-          <a class="nav-link{% if '/nang-suat' in request.path %} active fw-semibold{% endif %}" href="/nang-suat"><i class="bi bi-people-fill"></i> Năng suất</a>
-        </li>
+        {# Năng suất đã chuyển sang phần mềm kế toán (ketoan.tranhdali.vn) — ẩn khỏi nav, trang /nang-suat vẫn truy cập được #}
         <li class="nav-item">
           <a class="nav-link{% if '/loi-nhuan' in request.path %} active fw-semibold{% endif %}" href="/loi-nhuan"><i class="bi bi-graph-up-arrow"></i> Lợi nhuận</a>
         </li>
