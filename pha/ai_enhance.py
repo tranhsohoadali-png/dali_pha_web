@@ -19,6 +19,9 @@ from decouple import config
 AI_ENHANCE_MODEL = config("AI_ENHANCE_MODEL", default="gemini-2.5-flash-image")
 # Timeout (mili-giây) cho mỗi lần gọi Google AI -> tránh treo luồng xử lý.
 AI_TIMEOUT_MS = config("AI_TIMEOUT_MS", default=150000, cast=int)
+# Cạnh dài tối đa của ảnh gửi cho AI. Ảnh điện thoại 4000px làm Google xử lý
+# rất lâu -> hay 504 DEADLINE_EXCEEDED; model vẽ lại nên không cần ảnh gốc to.
+AI_MAX_EDGE = config("AI_MAX_EDGE", default=1536, cast=int)
 
 # Prompt mặc định: ĐƠN GIẢN HOÁ ảnh khách thành tranh tô màu (paint-by-numbers),
 # nhưng GIỮ NGUYÊN tuyệt đối chủ thể/bố cục (không được vẽ sang con/vật khác).
@@ -239,6 +242,11 @@ def enhance_image(input_path, output_path, prompt=None, reference_paths=None,
     except Exception as e:
         raise AIEnhanceError(f"Không mở được ảnh gốc: {e}") from e
 
+    # Thu nhỏ trước khi gửi AI: giảm mạnh thời gian xử lý + tỉ lệ 504.
+    if max(src.size) > AI_MAX_EDGE:
+        src = src.copy()
+        src.thumbnail((AI_MAX_EDGE, AI_MAX_EDGE), Image.LANCZOS)
+
     # Nạp ảnh mẫu chỉ khi preset cho phép (use_refs).
     refs = []
     if use_refs:
@@ -275,10 +283,27 @@ def enhance_image(input_path, output_path, prompt=None, reference_paths=None,
             )
         except Exception:
             client = genai.Client(api_key=key)   # SDK cũ không có HttpOptions
-        resp = client.models.generate_content(
-            model=AI_ENHANCE_MODEL,
-            contents=contents,
-        )
+        # Thử tối đa 2 lần: lỗi tạm của Google (504/503/quá tải) hay tự hết
+        # khi gọi lại ngay sau vài giây.
+        import time as _time
+        resp = None
+        for _attempt in (1, 2):
+            try:
+                resp = client.models.generate_content(
+                    model=AI_ENHANCE_MODEL,
+                    contents=contents,
+                )
+                break
+            except Exception as e:  # noqa: PERF203
+                _msg = str(e)
+                _transient = any(t in _msg for t in (
+                    '504', '503', 'DEADLINE', 'imeout', 'UNAVAILABLE', 'overloaded'))
+                if _attempt == 1 and _transient:
+                    _time.sleep(3)
+                    continue
+                raise AIEnhanceError(f"Gọi Google AI thất bại: {e}") from e
+    except AIEnhanceError:
+        raise
     except Exception as e:
         raise AIEnhanceError(f"Gọi Google AI thất bại: {e}") from e
 
