@@ -78,7 +78,8 @@ urlpatterns = [
     path('kho-mau', views.kho_mau, name='kho_mau'),
     path('cai-dat-ai', views.cai_dat_ai, name='cai_dat_ai'),
     path('xu-ly-anh', views.xu_ly_anh, name='xu_ly_anh'),
-    # Đánh số ảnh phẳng (đã thiết kế) — 1 chạm, không AI/không làm phẳng lại (module riêng)
+    # Đánh số ảnh phẳng (đã thiết kế) — TAB RIÊNG + API (module riêng, không AI)
+    path('anh-phang', flat_number.anh_phang, name='anh_phang'),
     path('xu-ly-anh-phang', flat_number.xu_ly_anh_phang, name='xu_ly_anh_phang'),
     path('anh-result', views.anh_result, name='anh_result'),
     path('anh-preset', views.anh_preset, name='anh_preset'),

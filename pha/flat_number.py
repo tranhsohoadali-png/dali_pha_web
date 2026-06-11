@@ -17,6 +17,7 @@ from datetime import datetime
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
 from django.http import JsonResponse
+from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 
 from pha.models import ImageResult
@@ -60,6 +61,18 @@ def process_flat_image(rec_id, name, min_area=0):
         obj.status = ImageResult.STATUS_ERROR
         obj.error_message = str(e)
         obj.save()
+
+
+@staff_required
+def anh_phang(request):
+    """Trang TAB RIÊNG "Đánh số ảnh phẳng" (menu Xử lý ảnh). Chỉ hiển thị: upload
+    + 1 núm min_area + kết quả; xử lý qua /xu-ly-anh-phang. Lịch sử chỉ liệt kê
+    các ca PHẲNG (params.flat=True) cho đỡ lẫn với ca AI."""
+    from pha.views import _fmt_name
+    last = [r for r in ImageResult.objects.all().order_by('-created_time')[:30]
+            if (r.params or {}).get('flat')][:10]
+    return render(request, 'anh_phang.html',
+                  {'last_query': [{'name': _fmt_name(q.name), 'url': q.name} for q in last]})
 
 
 @csrf_exempt
