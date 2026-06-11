@@ -2088,6 +2088,7 @@ def _att_cfg():
         'fine_min': num('LATE_FINE_PER_MIN', 0),
         'fine_fixed': num('LATE_FINE_FIXED', 0),
         'ot_rate': num('OT_RATE', 0),
+        'ot_min': num('OT_MIN_HOURS', 1),   # tăng ca phải đạt ngưỡng này (giờ) mới được tính
     }
 
 
@@ -2114,6 +2115,9 @@ def _att_calc(rec, cfg):
             out['ot_hours'] = round((cout_min - end) / 60.0, 2)
     else:
         out['ot_hours'] = out['hours']     # làm ngày nghỉ -> tính tăng ca toàn bộ
+    # Chỉ tính tăng ca khi đạt ngưỡng tối thiểu (vd 1 giờ) — lố vài phút không tính
+    if out['ot_hours'] < cfg.get('ot_min', 0):
+        out['ot_hours'] = 0.0
     out['ot_pay'] = round(out['ot_hours'] * cfg['ot_rate'])
     return out
 
@@ -2225,7 +2229,8 @@ def cham_cong_quan_ly(request):
             days = [d for d in request.POST.getlist('workday') if d.isdigit()]
             AppSetting.set('WORK_DAYS', ','.join(days) if days else '0,1,2,3,4,5')
             for key, fld in (('LATE_GRACE', 'grace'), ('LATE_FINE_PER_MIN', 'fine_min'),
-                             ('LATE_FINE_FIXED', 'fine_fixed'), ('OT_RATE', 'ot_rate')):
+                             ('LATE_FINE_FIXED', 'fine_fixed'), ('OT_RATE', 'ot_rate'),
+                             ('OT_MIN_HOURS', 'ot_min')):
                 AppSetting.set(key, (request.POST.get(fld) or '0').replace(',', '').strip() or '0')
             messages.info(request, 'Đã lưu khung giờ & quy định.')
             return redirect('/cham-cong-quan-ly')
