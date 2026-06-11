@@ -362,6 +362,40 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
     </div>
   </div>
 
+  <!-- Đẩy năng suất sang kế toán (tự động khi lưu) -->
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-cloud-upload"></i> Đẩy năng suất sang kế toán (tự động)</div>
+        <div class="card-body">
+          <div class="small text-secondary mb-2">Số liệu năng suất (mẻ pha · tranh rót · màu rót · tranh SX) nhập ở mau sẽ <b>tự đẩy sang ketoan.tranhdali.vn</b> ngay khi lưu — gộp theo ngày + nhân viên, kế toán tự cộng "tổng việc". Mã nhân viên = tài khoản đăng nhập (khớp /api/luong).</div>
+          <form method="POST" action="/cham-cong-quan-ly" class="row g-2 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_prod_feed">
+            <div class="col-md-7">
+              <label class="form-label small mb-1">URL endpoint năng suất của kế toán</label>
+              <input type="text" name="prod_url" class="form-control font-monospace" value="{{ prod_url }}" placeholder="http://localhost/api/productivity.php" autocomplete="off">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small mb-1">Khoá (productivity_api_key)</label>
+              <input type="text" name="prod_key" class="form-control font-monospace" value="{{ prod_key }}" autocomplete="off">
+            </div>
+            <div class="col-md-2">
+              <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu</button>
+            </div>
+          </form>
+          <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+            <button type="button" id="prodPushBtn" class="btn btn-sm btn-outline-success"><i class="bi bi-arrow-repeat"></i> Đẩy lại 3 ngày gần nhất</button>
+            <span id="prodPushRes" class="small"></span>
+          </div>
+          <div class="form-text mt-2">Đã tự đẩy mỗi khi lưu. Thêm 1 cron chống sót (phòng khi kế toán offline):
+            <span class="font-monospace" style="word-break:break-all">*/15 * * * * curl -s "{{ api_base2 }}/nang-suat-day-ketoan?key={{ prod_key }}&amp;days=3" &gt;/dev/null</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Nhắc chấm công tự động (Web Push) -->
   <div class="row mt-3">
     <div class="col-lg-7">
@@ -477,6 +511,19 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
     if(cur.indexOf(ip) === -1){ inp.value = cur ? (cur + ', ' + ip) : ip; }
     inp.focus();
   });
+  // Đẩy lại năng suất sang kế toán (quản lý bấm)
+  (function(){
+    var btn=document.getElementById('prodPushBtn'); if(!btn) return;
+    btn.addEventListener('click', function(){
+      var res=document.getElementById('prodPushRes');
+      res.className='small text-secondary'; res.textContent='Đang đẩy…'; btn.disabled=true;
+      fetch('/nang-suat-day-ketoan?days=3').then(function(r){return r.json();}).then(function(d){
+        btn.disabled=false;
+        if(d.ok){ res.className='small text-success'; res.innerHTML='<i class="bi bi-check-circle"></i> Đã đẩy '+(d.pushed||0)+' dòng ('+(d.days?d.days.length:0)+' ngày).'; }
+        else { res.className='small text-danger'; res.innerHTML='<i class="bi bi-x-circle"></i> '+(d.error||'Lỗi'); }
+      }).catch(function(){ btn.disabled=false; res.className='small text-danger'; res.textContent='Lỗi kết nối.'; });
+    });
+  })();
   // Gửi thử nhắc chấm công (quản lý bấm -> push tới những người liên quan)
   document.querySelectorAll('.nudge-test').forEach(function(b){
     b.addEventListener('click', function(){

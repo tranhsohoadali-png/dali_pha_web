@@ -2345,6 +2345,11 @@ def cham_cong_quan_ly(request):
             AppSetting.set('KETOAN_PULL_KEY', (request.POST.get('ketoan_pull_key') or '').strip())
             messages.info(request, 'Đã lưu kết nối kéo lương từ kế toán.')
             return redirect('/cham-cong-quan-ly')
+        if act == 'save_prod_feed':
+            AppSetting.set('KETOAN_PROD_URL', (request.POST.get('prod_url') or '').strip())
+            AppSetting.set('KETOAN_PROD_KEY', (request.POST.get('prod_key') or '').strip())
+            messages.info(request, 'Đã lưu kết nối đẩy năng suất sang kế toán.')
+            return redirect('/cham-cong-quan-ly')
         if act == 'save_attendance':
             au = (request.POST.get('att_user') or '').strip()
             ad = (request.POST.get('att_day') or '').strip()
@@ -2466,6 +2471,8 @@ def cham_cong_quan_ly(request):
         'nudge_key': _nudge_key_for_view(),
         'api_base2': request.scheme + '://' + request.get_host(),
         'holidays': _upcoming_holidays(now, cfg),
+        'prod_url': AppSetting.get('KETOAN_PROD_URL', ''),
+        'prod_key': AppSetting.get('KETOAN_PROD_KEY', ''),
     })
 
 
