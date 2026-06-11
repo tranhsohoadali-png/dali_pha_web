@@ -540,18 +540,61 @@ def _reduce_palette_perceptual(img_rgb, target_n, protect_mask=None):
     return out.reshape(img_rgb.shape)
 
 
-def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_out=None,
-                print_long_cm=0):
-    """num_colors > 0: gom ảnh về tối đa N màu (để trống = DEFAULT_NUM_COLORS).
-    min_area > 0: gộp các mảng màu nhỏ hơn N pixel vào hàng xóm (đỡ lấm tấm).
-    smooth (0..3): làm phẳng vùng (mean-shift) trước khi gom — dọn ảnh màu nước/chụp.
-    design_out: nếu có, lưu ảnh THIẾT KẾ (bản màu phẳng đã gom) ra đường dẫn này.
-    print_long_cm: nhận cho tương thích, không dùng (cỡ số cố định)."""
+def _snap_to_design_palette(img_rgb):
+    """GIỮ NGUYÊN bảng màu THIẾT KẾ (các màu đủ lớn ≥ 0.03% như index_color gốc),
+    chỉ SNAP pixel răng cưa / nhiễu về màu thiết kế gần nhất (RGB Euclid). KHÔNG giảm
+    số màu thiết kế: ảnh vốn đã phẳng (<=256 màu) -> trả NGUYÊN, không đổi 1 pixel.
+    Chỉ ảnh NHIỀU màu (răng cưa / ảnh chụp) mới bị dồn về các màu nổi bật để đánh
+    số được (palette KHÔNG phụ thuộc min_area -> kết quả đơn điệu theo min_area)."""
+    flat = img_rgb.reshape(-1, 3)
+    colors, inv, counts = np.unique(flat, axis=0, return_inverse=True, return_counts=True)
+    if len(colors) <= 256:
+        return img_rgb                                   # đã phẳng -> giữ nguyên 100%
+    total = int(flat.shape[0])
+    thr = max(total * THRESHOLD_PERCENT_COLOR, 1.0)
+    keep = counts >= thr
+    if keep.sum() < 2:                                   # ảnh quá nhiễu: giữ ~64 màu lớn nhất
+        cut = np.sort(counts)[-min(64, len(counts))]
+        keep = counts >= cut
+    keep_colors = colors[keep].astype(np.int32)
+    # Mỗi màu unique -> màu GIỮ gần nhất (RGB Euclid). Chia KHỐI để bó bộ nhớ
+    # (ảnh JPEG nhiễu có thể hàng chục nghìn màu -> ma trận U×K rất lớn).
+    nearest = np.empty(len(colors), dtype=np.int64)
+    src = colors.astype(np.int32)
+    for s in range(0, len(src), 4096):
+        chunk = src[s:s + 4096]
+        d = ((chunk[:, None, :] - keep_colors[None, :, :]) ** 2).sum(2)
+        nearest[s:s + 4096] = d.argmin(1)
+    remap = keep_colors[nearest].astype(np.uint8)
+    return remap[inv].reshape(img_rgb.shape)
+
+
+def _flat_work_file(path, min_area=0):
+    """Chuẩn bị ảnh LÀM VIỆC cho nhánh PHẲNG: thu nhỏ về WORK_MAX_SIDE, GIỮ NGUYÊN
+    bảng màu thiết kế (KHÔNG median-cut, KHÔNG giảm màu). Nếu min_area > 0: dồn răng
+    cưa về bảng màu thiết kế rồi GỘP đốm < min_area px vào hàng xóm (sạch để đánh số).
+    Trả đường dẫn file tạm."""
+    import os
+    import tempfile
+    im = Image.open(path).convert('RGB')
+    if WORK_MAX_SIDE and max(im.size) > WORK_MAX_SIDE:
+        im.thumbnail((WORK_MAX_SIDE, WORK_MAX_SIDE), Resampling.LANCZOS)
+    arr = np.array(im)
+    arr = _snap_to_design_palette(arr)                   # khử răng cưa (ảnh >256 màu); phẳng -> giữ nguyên
+    if min_area and int(min_area) > 0:                   # min_area CHỈ gộp mảng nhỏ, không đụng palette
+        arr = _merge_small_regions(arr, min_area=int(min_area), min_radius=0, max_pass=2)
+    fd, out = tempfile.mkstemp(suffix='.png', prefix='flat_')
+    os.close(fd)
+    Image.fromarray(arr).save(out)
+    return out
+
+
+def _number_work_image(work_path, design_out=None, debug=False):
+    """ĐÁNH SỐ + đếm % trên 1 ảnh LÀM VIỆC đã chuẩn bị — đây là phần index_color GỐC
+    (extract màu -> contour từng màu -> polylabel -> vẽ số). design_out: lưu ảnh work
+    (bản màu phẳng) để xem trước. Xoá file work tạm khi xong."""
     import os
     import shutil
-    effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
-    work_path = _quantize_file(path, effective_n, smooth=smooth, min_area=min_area,
-                               print_long_cm=print_long_cm)
     if design_out:
         try:
             shutil.copyfile(work_path, design_out)   # bản màu phẳng để xem trước
@@ -627,6 +670,28 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
 
     print("Done indexing colors")
     return img_white, color_mapping, percentages
+
+
+def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_out=None,
+                print_long_cm=0):
+    """num_colors > 0: gom ảnh về tối đa N màu (để trống = DEFAULT_NUM_COLORS).
+    min_area > 0: gộp các mảng màu nhỏ hơn N pixel vào hàng xóm (đỡ lấm tấm).
+    smooth (0..3): làm phẳng vùng (mean-shift) trước khi gom — dọn ảnh màu nước/chụp.
+    design_out: nếu có, lưu ảnh THIẾT KẾ (bản màu phẳng đã gom) ra đường dẫn này.
+    print_long_cm: nhận cho tương thích, không dùng (cỡ số cố định)."""
+    effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
+    work_path = _quantize_file(path, effective_n, smooth=smooth, min_area=min_area,
+                               print_long_cm=print_long_cm)
+    return _number_work_image(work_path, design_out=design_out, debug=debug)
+
+
+def index_color_flat(path, min_area=0, design_out=None):
+    """ẢNH ĐÃ THIẾT KẾ PHẲNG: GIỮ NGUYÊN bảng màu thiết kế (KHÔNG quantize / KHÔNG
+    giảm màu) — đúng phần mềm 'index_color' gốc + (tuỳ chọn) gộp đốm < min_area px
+    vào hàng xóm. Chỉ đánh số; khớp mã DALI làm ở bước ngoài (≡ 'django_dali').
+    min_area=0 -> y hệt index_color gốc (chỉ tự lọc màu chiếm < 0.03% diện tích)."""
+    work_path = _flat_work_file(path, min_area=min_area)
+    return _number_work_image(work_path, design_out=design_out)
 
 
 def cal_padding_in_pixel(im_path: str) -> int:

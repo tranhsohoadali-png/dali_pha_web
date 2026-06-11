@@ -94,23 +94,17 @@
       <div class="card shadow-sm mb-3 border-primary">
         <div class="card-header fw-semibold text-bg-primary"><i class="bi bi-123"></i> Đánh số ảnh phẳng (đã thiết kế)</div>
         <div class="card-body">
-          <div class="small text-secondary mb-2">Ảnh ĐÃ thiết kế phẳng (cel / vector / đã làm sẵn) → chỉ <b>đánh số + khớp màu DALI</b>. Không AI, không làm phẳng lại — giữ NGUYÊN thiết kế.</div>
+          <div class="small text-secondary mb-2">Ảnh ĐÃ thiết kế phẳng (cel / vector / đã làm sẵn) → <b>đánh số + khớp màu DALI</b>, GIỮ NGUYÊN màu thiết kế (không AI, không giảm màu).</div>
           <div id="dzFlat" class="dropzone mb-2"><i class="bi bi-image fs-3 text-secondary"></i>
             <div class="small text-secondary">Kéo–thả hoặc bấm chọn ảnh phẳng</div>
             <input id="imageFlat" type="file" accept="image/*" class="d-none"></div>
           <img id="previewFlat" class="img-fluid rounded mb-2" hidden>
-          <div class="row g-2 mb-2">
-            <div class="col-6">
-              <label class="form-label small mb-1">Số màu tối đa</label>
-              <input type="number" id="flatColors" class="form-control form-control-sm" min="2" max="60" placeholder="trống = 48">
-            </div>
-            <div class="col-6">
-              <label class="form-label small mb-1">Bỏ mảng nhỏ hơn (px)</label>
-              <input type="number" id="flatMinArea" class="form-control form-control-sm" min="0" max="100000" placeholder="trống = 20">
-            </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Bỏ mảng nhỏ hơn (px)</label>
+            <input type="number" id="flatMinArea" class="form-control form-control-sm" min="0" max="100000" placeholder="trống = giữ nguyên (vd 20–80 để dọn đốm)">
           </div>
           <button id="btnFlat" type="button" class="btn btn-primary w-100" disabled><i class="bi bi-123"></i> Đánh số ảnh phẳng</button>
-          <div class="form-text">Số màu = giới hạn số ô tô (giữ sát thiết kế) · Bỏ mảng nhỏ = xoá đốm li ti / răng cưa.</div>
+          <div class="form-text">Giữ NGUYÊN bảng màu thiết kế · Bỏ mảng nhỏ = gộp đốm li ti / răng cưa vào màu cạnh bên (để trống = không gộp).</div>
         </div>
       </div>
       <div class="card shadow-sm">
@@ -207,7 +201,6 @@
     bf.addEventListener('click', function(){
       if(!fi2.files[0]){ alert('Hãy chọn ảnh phẳng trước.'); return; }
       var fd=new FormData(); fd.append('image', fi2.files[0]);
-      var cl=document.getElementById('flatColors'); if(cl && cl.value) fd.append('color_limit', cl.value);
       var ma=document.getElementById('flatMinArea'); if(ma && ma.value) fd.append('min_area', ma.value);
       bf.disabled=true; spin(true);
       fetch('/xu-ly-anh-phang',{method:'POST',body:fd}).then(r=>r.json()).then(function(res){
