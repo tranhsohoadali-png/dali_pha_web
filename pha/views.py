@@ -2089,19 +2089,85 @@ def _att_cfg():
         'fine_fixed': num('LATE_FINE_FIXED', 0),
         'ot_rate': num('OT_RATE', 0),
         'ot_min': num('OT_MIN_HOURS', 1),   # tăng ca phải đạt ngưỡng này (giờ) mới được tính
+        'hol_off': {d.strip() for d in (AppSetting.get('HOLIDAYS_OFF', '') or '').split(',') if d.strip()},
+        'hol_extra': _parse_holidays_extra(AppSetting.get('HOLIDAYS_EXTRA', '')),
     }
+
+
+def _parse_holidays_extra(raw):
+    """'YYYY-MM-DD=Tên, YYYY-MM-DD' -> {date: name}. Ngày tự thêm của công ty."""
+    out = {}
+    for item in (raw or '').split(','):
+        item = item.strip()
+        if not item:
+            continue
+        if '=' in item:
+            dd, nm = item.split('=', 1)
+            out[dd.strip()] = nm.strip() or 'Nghỉ lễ'
+        else:
+            out[item] = 'Nghỉ lễ'
+    return out
+
+
+def _holiday_lookup(day, cfg):
+    """Tên ngày lễ của 'YYYY-MM-DD' theo cfg (đã gồm ngày tự thêm/bỏ). '' nếu ngày thường."""
+    if day in cfg.get('hol_off', ()):
+        return ''
+    ex = cfg.get('hol_extra', {})
+    if day in ex:
+        return ex[day]
+    import pha.holidays_vn as _hol
+    return _hol.name_of(day)
+
+
+def _holiday_name(day):
+    """Tên ngày lễ VN của 'YYYY-MM-DD' (dùng ngoài _att_calc). '' nếu ngày thường."""
+    return _holiday_lookup(day, _att_cfg())
+
+
+def _nudge_key_for_view():
+    try:
+        import pha.attend_nudge as _n
+        return _n._nudge_key()
+    except Exception:
+        return ''
+
+
+def _upcoming_holidays(now, cfg, limit=24):
+    """Danh sách ngày nghỉ lễ sắp tới (năm nay + năm sau), đã áp ngày tự thêm/bỏ."""
+    import pha.holidays_vn as _hol
+    today = now.strftime('%Y-%m-%d')
+    merged = {}
+    merged.update(_hol.holidays(now.year))
+    merged.update(_hol.holidays(now.year + 1))
+    merged.update(cfg.get('hol_extra', {}))
+    for d in cfg.get('hol_off', ()):
+        merged.pop(d, None)
+    extra = cfg.get('hol_extra', {})
+    out = []
+    for k, v in sorted(merged.items()):
+        if k < today:
+            continue
+        try:
+            df = datetime.strptime(k, '%Y-%m-%d').strftime('%d/%m/%Y')
+        except ValueError:
+            df = k
+        out.append({'date': k, 'date_fmt': df, 'name': v, 'custom': k in extra})
+    return out[:limit]
 
 
 def _att_calc(rec, cfg):
     """Tính cho 1 ngày công: giờ làm, phút đi muộn, giờ tăng ca, tiền phạt, tiền OT."""
     out = {'hours': _att_hours(rec), 'late_min': 0, 'ot_hours': 0.0,
-           'fine': 0, 'ot_pay': 0, 'workday': True, 'weekday': ''}
+           'fine': 0, 'ot_pay': 0, 'workday': True, 'weekday': '', 'holiday': ''}
     if not rec.check_in:
+        out['holiday'] = _holiday_lookup(rec.day, cfg)
         return out
     cin = _vn_dt(rec.check_in)
     wd = cin.weekday()
     out['weekday'] = _WEEKDAYS[wd]
-    out['workday'] = wd in cfg['workdays']
+    out['holiday'] = _holiday_lookup(rec.day, cfg)
+    out['workday'] = (wd in cfg['workdays']) and not out['holiday']
     start, end = _hm_to_min(cfg['start']), _hm_to_min(cfg['end'])
     cin_min = cin.hour * 60 + cin.minute
     cout = _vn_dt(rec.check_out)
@@ -2174,8 +2240,10 @@ def cham_cong(request):
                 return JsonResponse({'ok': False, 'msg': 'Bạn đã chấm công VÀO hôm nay rồi.',
                                      'in': _hm(rec.check_in), 'out': _hm(rec.check_out)})
             rec.check_in = now; rec.ip_in = ip; rec.device_in = device; rec.save()
+            import pha.motivate as _mot
             return JsonResponse({'ok': True, 'msg': 'Đã chấm công VÀO lúc ' + _hm(now),
-                                 'in': _hm(rec.check_in), 'out': _hm(rec.check_out)})
+                                 'in': _hm(rec.check_in), 'out': _hm(rec.check_out),
+                                 'motivate': _mot.quote_for(now)})
         if action == 'out':
             if not rec.check_in:
                 return JsonResponse({'ok': False, 'msg': 'Bạn chưa chấm công VÀO.'})
@@ -2276,6 +2344,36 @@ def cham_cong_quan_ly(request):
             Attendance.objects.filter(user=au, day=ad).delete()
             messages.info(request, f'Đã xoá chấm công {au} ngày {_fmt_day(ad)}.')
             return redirect('/cham-cong-quan-ly?month=' + (ad[:7] if len(ad) >= 7 else ''))
+        if act == 'add_holiday':
+            d = (request.POST.get('hd_date') or '').strip()
+            nm = (request.POST.get('hd_name') or '').strip() or 'Nghỉ lễ'
+            try:
+                datetime.strptime(d, '%Y-%m-%d'); okd = True
+            except ValueError:
+                okd = False
+            if not okd:
+                messages.error(request, 'Ngày nghỉ không hợp lệ.')
+                return redirect('/cham-cong-quan-ly')
+            ex = _parse_holidays_extra(AppSetting.get('HOLIDAYS_EXTRA', ''))
+            ex[d] = nm
+            AppSetting.set('HOLIDAYS_EXTRA', ', '.join('%s=%s' % (k, v) for k, v in sorted(ex.items())))
+            off = {x.strip() for x in (AppSetting.get('HOLIDAYS_OFF', '') or '').split(',') if x.strip()}
+            off.discard(d)
+            AppSetting.set('HOLIDAYS_OFF', ', '.join(sorted(off)))
+            messages.info(request, f'Đã thêm ngày nghỉ {_fmt_day(d)} ({nm}).')
+            return redirect('/cham-cong-quan-ly')
+        if act == 'del_holiday':
+            d = (request.POST.get('hd_date') or '').strip()
+            ex = _parse_holidays_extra(AppSetting.get('HOLIDAYS_EXTRA', ''))
+            if d in ex:
+                ex.pop(d, None)
+                AppSetting.set('HOLIDAYS_EXTRA', ', '.join('%s=%s' % (k, v) for k, v in sorted(ex.items())))
+            else:
+                off = {x.strip() for x in (AppSetting.get('HOLIDAYS_OFF', '') or '').split(',') if x.strip()}
+                off.add(d)
+                AppSetting.set('HOLIDAYS_OFF', ', '.join(sorted(off)))
+            messages.info(request, f'Đã bỏ ngày nghỉ {_fmt_day(d)} (coi là ngày làm).')
+            return redirect('/cham-cong-quan-ly')
 
     now = _now()
     month = request.GET.get('month') or now.strftime('%Y-%m')
@@ -2294,7 +2392,7 @@ def cham_cong_quan_ly(request):
         detail.append({'day': _fmt_day(r.day), 'day_iso': r.day, 'wd': c['weekday'], 'user': r.user,
                        'in': _hm(r.check_in), 'out': _hm(r.check_out), 'hours': c['hours'],
                        'late': c['late_min'], 'ot': c['ot_hours'], 'fine': c['fine'],
-                       'rest': not c['workday']})
+                       'rest': not c['workday'], 'holiday': c['holiday']})
         if r.device_in:
             device_users.setdefault(r.device_in, set()).add(r.user)
         if r.check_in and not r.check_out and r.day != today_str:
@@ -2336,6 +2434,9 @@ def cham_cong_quan_ly(request):
         'ketoan_pull_key': AppSetting.get('KETOAN_PULL_KEY', ''),
         'emp_users': emp_users,
         'today_iso': now.strftime('%Y-%m-%d'),
+        'nudge_key': _nudge_key_for_view(),
+        'api_base2': request.scheme + '://' + request.get_host(),
+        'holidays': _upcoming_holidays(now, cfg),
     })
 
 

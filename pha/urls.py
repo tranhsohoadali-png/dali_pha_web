@@ -4,6 +4,8 @@ from django.views.static import serve as static_serve
 
 from pha import views
 from pha import learn_lib
+from pha import flat_number
+from pha import attend_nudge
 
 urlpatterns = [
     path('login', views.login_view, name='login'),
@@ -61,6 +63,7 @@ urlpatterns = [
     # Chấm công (theo IP Wifi công ty)
     path('cham-cong', views.cham_cong, name='cham_cong'),
     path('cham-cong-quan-ly', views.cham_cong_quan_ly, name='cham_cong_quan_ly'),
+    path('cham-cong-nhac', attend_nudge.nudge, name='cham_cong_nhac'),
     path('cham-cong-ip', views.cham_cong_ip, name='cham_cong_ip'),
     path('cham-cong-excel', views.export_cham_cong_excel, name='cham_cong_excel'),
     path('quan-ly-giao-rot', views.quan_ly_giao_rot, name='quan_ly_giao_rot'),
@@ -74,6 +77,8 @@ urlpatterns = [
     path('kho-mau', views.kho_mau, name='kho_mau'),
     path('cai-dat-ai', views.cai_dat_ai, name='cai_dat_ai'),
     path('xu-ly-anh', views.xu_ly_anh, name='xu_ly_anh'),
+    # Đánh số ảnh phẳng (đã thiết kế) — 1 chạm, không AI/không làm phẳng lại (module riêng)
+    path('xu-ly-anh-phang', flat_number.xu_ly_anh_phang, name='xu_ly_anh_phang'),
     path('anh-result', views.anh_result, name='anh_result'),
     path('anh-preset', views.anh_preset, name='anh_preset'),
     path('anh-save-color', views.anh_save_color, name='anh_save_color'),

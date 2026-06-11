@@ -105,6 +105,16 @@
   </div>
 </div>
 
+<!-- Popup truyền động lực khi VÀO LÀM (đổi mỗi ngày) -->
+<div id="motiModal" class="pay-modal">
+  <div class="pay-box" style="background:linear-gradient(160deg,#e9fbef,#ffffff)">
+    <div id="motiEmoji" style="font-size:3.4rem;line-height:1.1">🌞</div>
+    <div class="text-secondary small mt-1">Đã chấm công VÀO lúc <b id="motiTime">--:--</b></div>
+    <div id="motiText" class="fw-semibold mt-3" style="font-size:1.2rem;color:#198754">Chúc một ngày tốt lành!</div>
+    <button id="motiOk" class="btn btn-success w-100 mt-4" style="height:50px;font-weight:700">Bắt đầu thôi! 💚</button>
+  </div>
+</div>
+
 <div id="toast" style="position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#212529;color:#fff;padding:12px 18px;border-radius:10px;z-index:1100;display:none;font-size:1.05rem"></div>
 
 <script>
@@ -130,8 +140,18 @@
       if(res.in!==undefined) document.getElementById('tIn').textContent=res.in||'--:--';
       if(res.out!==undefined) document.getElementById('tOut').textContent=res.out||'--:--';
       if(res.ok && res.cong) showPay(res.cong, res.salary);
+      if(res.ok && res.motivate) showMotivate(res.motivate, res.in);
     }).catch(function(){ busy=false; btn.disabled=false; toast('Lỗi kết nối'); });
   }
+  // ----- Popup động lực khi Vào làm -----
+  function showMotivate(m, t){
+    document.getElementById('motiEmoji').textContent = m.emoji || '🌞';
+    document.getElementById('motiText').textContent = m.text || 'Chúc một ngày tốt lành!';
+    document.getElementById('motiTime').textContent = t || '';
+    document.getElementById('motiModal').style.display='flex';
+  }
+  document.getElementById('motiOk').addEventListener('click', function(){ document.getElementById('motiModal').style.display='none'; });
+  document.getElementById('motiModal').addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
   document.getElementById('btnIn').addEventListener('click', function(){ punch('in', this); });
   document.getElementById('btnOut').addEventListener('click', function(){ punch('out', this); });
 

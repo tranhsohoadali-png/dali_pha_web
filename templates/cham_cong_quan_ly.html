@@ -238,7 +238,7 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
               <thead class="table-light position-sticky top-0"><tr><th>Ngày</th><th>Thứ</th><th>Nhân viên</th><th class="text-center">Vào</th><th class="text-center">Ra</th><th class="text-end">Giờ</th><th class="text-end">Muộn</th><th class="text-end">Tăng ca</th><th class="text-end">Phạt</th><th class="text-end">Sửa</th></tr></thead>
               <tbody>
                 {% for r in detail %}<tr{% if r.rest %} class="table-warning"{% endif %}>
-                  <td>{{ r.day }}</td><td class="small">{{ r.wd }}{% if r.rest %} <span class="badge text-bg-warning">nghỉ</span>{% endif %}</td>
+                  <td>{{ r.day }}</td><td class="small">{{ r.wd }}{% if r.holiday %} <span class="badge text-bg-danger" title="{{ r.holiday }}">lễ</span>{% elif r.rest %} <span class="badge text-bg-warning">nghỉ</span>{% endif %}</td>
                   <td>{{ r.user }}</td><td class="text-center">{{ r.in|default:"—" }}</td><td class="text-center">{{ r.out|default:"—" }}</td>
                   <td class="text-end">{% if r.hours %}{{ r.hours }}h{% else %}—{% endif %}</td>
                   <td class="text-end {% if r.late %}text-danger{% endif %}">{% if r.late %}{{ r.late }}'{% else %}—{% endif %}</td>
@@ -361,6 +361,67 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
       </div>
     </div>
   </div>
+
+  <!-- Nhắc chấm công tự động (Web Push) -->
+  <div class="row mt-3">
+    <div class="col-lg-7">
+      <div class="card shadow-sm h-100">
+        <div class="card-header fw-semibold"><i class="bi bi-alarm"></i> Nhắc chấm công tự động</div>
+        <div class="card-body">
+          <div class="small text-secondary mb-2">Tự nhắc nhân viên (qua thông báo đẩy) bấm <b>VÀO LÀM</b> đầu giờ và <b>TAN LÀM</b> cuối giờ — tránh quên chấm công. Bỏ qua cuối tuần &amp; ngày lễ. Mỗi người chỉ nhắc 1 lần/ngày mỗi loại.</div>
+          <div class="fw-semibold small mb-1">Đặt 1 dòng cron trên VPS (chạy trong giờ hành chính):</div>
+          <div class="input-group input-group-sm mb-2">
+            <input class="form-control font-monospace copyurl" readonly value='*/10 6-20 * * * curl -s "{{ api_base2 }}/cham-cong-nhac?key={{ nudge_key }}" >/dev/null'>
+            <button class="btn btn-outline-secondary copybtn" type="button">Sao chép</button>
+          </div>
+          <div class="d-flex flex-wrap gap-2 align-items-center">
+            <button type="button" class="btn btn-sm btn-outline-success nudge-test" data-event="in"><i class="bi bi-box-arrow-in-right"></i> Gửi thử nhắc VÀO</button>
+            <button type="button" class="btn btn-sm btn-outline-primary nudge-test" data-event="out"><i class="bi bi-box-arrow-right"></i> Gửi thử nhắc RA</button>
+            <span id="nudgeRes" class="small"></span>
+          </div>
+          <div class="form-text mt-2"><i class="bi bi-exclamation-triangle text-warning"></i> Cần máy chủ đã cài <code>pywebpush</code> và nhân viên đã bật thông báo trong app. Nhắc VÀO gửi cho người chưa chấm vào; nhắc RA gửi cho người đã vào mà chưa ra.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ngày nghỉ lễ Việt Nam -->
+    <div class="col-lg-5">
+      <div class="card shadow-sm h-100">
+        <div class="card-header fw-semibold"><i class="bi bi-calendar2-heart"></i> Ngày nghỉ lễ Việt Nam <span class="text-secondary small fw-normal">(tự cập nhật theo năm)</span></div>
+        <div class="card-body">
+          <div class="small text-secondary mb-2">Tự tính lễ dương + âm (Tết, Giỗ Tổ…). Ngày lễ được tính như ngày nghỉ (làm = tăng ca, không phạt muộn) và không gửi nhắc.</div>
+          <div class="table-responsive mb-2" style="max-height:240px;overflow:auto">
+            <table class="table table-sm mb-0">
+              <tbody>
+                {% for h in holidays %}
+                <tr>
+                  <td class="text-nowrap small">{{ h.date_fmt }}</td>
+                  <td class="small">{{ h.name }}{% if h.custom %} <span class="badge text-bg-info">tự thêm</span>{% endif %}</td>
+                  <td class="text-end">
+                    <form method="POST" action="/cham-cong-quan-ly" class="d-inline" onsubmit="return confirm('Bỏ ngày nghỉ {{ h.date_fmt }}? (coi là ngày làm bình thường)')">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="del_holiday">
+                      <input type="hidden" name="hd_date" value="{{ h.date }}">
+                      <button class="btn btn-sm btn-outline-danger py-0 px-1" title="Bỏ ngày này"><i class="bi bi-x"></i></button>
+                    </form>
+                  </td>
+                </tr>
+                {% empty %}<tr><td class="text-secondary small">Không có ngày lễ sắp tới.</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <form method="POST" action="/cham-cong-quan-ly" class="row g-1 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add_holiday">
+            <div class="col-5"><label class="form-label small mb-0">Thêm ngày</label><input type="date" name="hd_date" class="form-control form-control-sm" required></div>
+            <div class="col-5"><label class="form-label small mb-0">Tên</label><input type="text" name="hd_name" class="form-control form-control-sm" placeholder="VD: Nghỉ bù"></div>
+            <div class="col-2"><button class="btn btn-sm btn-success w-100"><i class="bi bi-plus-lg"></i></button></div>
+          </form>
+          <div class="form-text">Dùng để thêm ngày nghỉ bù / nghỉ riêng của công ty, hoặc bỏ ngày lễ nếu vẫn đi làm.</div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -415,6 +476,18 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
     var cur = inp.value.trim();
     if(cur.indexOf(ip) === -1){ inp.value = cur ? (cur + ', ' + ip) : ip; }
     inp.focus();
+  });
+  // Gửi thử nhắc chấm công (quản lý bấm -> push tới những người liên quan)
+  document.querySelectorAll('.nudge-test').forEach(function(b){
+    b.addEventListener('click', function(){
+      var ev=this.dataset.event, res=document.getElementById('nudgeRes');
+      res.className='small text-secondary'; res.textContent='Đang gửi…'; this.disabled=true; var self=this;
+      fetch('/cham-cong-nhac?event='+ev+'&force=1').then(function(r){return r.json();}).then(function(d){
+        self.disabled=false;
+        if(d.ok){ res.className='small text-success'; res.innerHTML='<i class="bi bi-check-circle"></i> Đã gửi '+(ev==='in'?'nhắc VÀO':'nhắc RA')+': '+((ev==='in'?d.sent_in:d.sent_out)||0)+' người (trên '+(d.subscribers||0)+' đăng ký).'; }
+        else { res.className='small text-danger'; res.innerHTML='<i class="bi bi-x-circle"></i> '+(d.error||'Lỗi'); }
+      }).catch(function(){ self.disabled=false; res.className='small text-danger'; res.textContent='Lỗi kết nối.'; });
+    });
   });
   // Sửa nhanh: bấm bút ở 1 dòng -> đổ vào form sửa/thêm công + cuộn tới
   document.querySelectorAll('.att-edit').forEach(function(b){
