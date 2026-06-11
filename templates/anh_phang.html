@@ -26,17 +26,13 @@
       <div class="card shadow-sm mb-3 border-primary">
         <div class="card-header fw-semibold text-bg-primary"><i class="bi bi-123"></i> Đánh số ảnh phẳng (đã thiết kế)</div>
         <div class="card-body">
-          <div class="small text-secondary mb-2">Ảnh ĐÃ thiết kế phẳng (cel / vector / đã làm sẵn) → <b>đánh số + khớp màu DALI</b>, GIỮ NGUYÊN màu thiết kế (không AI, không giảm màu).</div>
+          <div class="small text-secondary mb-2">Ảnh ĐÃ thiết kế phẳng (cel / vector / đã làm sẵn) → <b>đánh số + khớp màu DALI</b>. GIỮ NGUYÊN 100% ảnh đưa vào — không AI, không giảm màu, không gộp mảng.</div>
           <div id="dzFlat" class="dropzone mb-2"><i class="bi bi-image fs-3 text-secondary"></i>
             <div class="small text-secondary">Kéo–thả hoặc bấm chọn ảnh phẳng</div>
             <input id="imageFlat" type="file" accept="image/*" class="d-none"></div>
           <img id="previewFlat" class="img-fluid rounded mb-2" hidden>
-          <div class="mb-2">
-            <label class="form-label small mb-1">Bỏ mảng nhỏ hơn (px)</label>
-            <input type="number" id="flatMinArea" class="form-control form-control-sm" min="0" max="100000" placeholder="trống = giữ nguyên (vd 20–80 để dọn đốm)">
-          </div>
           <button id="btnFlat" type="button" class="btn btn-primary w-100" disabled><i class="bi bi-123"></i> Đánh số ảnh phẳng</button>
-          <div class="form-text">Giữ NGUYÊN bảng màu thiết kế · Bỏ mảng nhỏ = gộp đốm li ti / răng cưa vào màu cạnh bên (để trống = không gộp).</div>
+          <div class="form-text">Chỉ 1 nút — đánh số y như phần mềm index_color gốc + khớp mã DALI.</div>
         </div>
       </div>
       <div class="card shadow-sm">
@@ -109,7 +105,7 @@
   var curUrl = "";
   function spin(on){ var s=document.getElementById('spin'); s.classList.toggle('d-none',!on); s.classList.toggle('d-flex',on); }
 
-  // ===== Tải ảnh phẳng: dropzone + 1 núm "Bỏ mảng nhỏ hơn" -> /xu-ly-anh-phang =====
+  // ===== Tải ảnh phẳng: chỉ dropzone + nút bấm (không núm) -> /xu-ly-anh-phang =====
   (function flatSection(){
     var dz2=document.getElementById('dzFlat'), fi2=document.getElementById('imageFlat'),
         bf=document.getElementById('btnFlat');
@@ -123,7 +119,6 @@
     bf.addEventListener('click', function(){
       if(!fi2.files[0]){ alert('Hãy chọn ảnh phẳng trước.'); return; }
       var fd=new FormData(); fd.append('image', fi2.files[0]);
-      var ma=document.getElementById('flatMinArea'); if(ma && ma.value) fd.append('min_area', ma.value);
       bf.disabled=true; spin(true);
       fetch('/xu-ly-anh-phang',{method:'POST',body:fd}).then(r=>r.json()).then(function(res){
         if(!res.ok){ spin(false); bf.disabled=false; alert(res.msg||'Lỗi xử lý ảnh.'); return; }
@@ -223,9 +218,8 @@
       if(res.design){ dw.hidden=false; loadDesign(res.design); }
       else { dw.hidden=true; loadDesign(''); }
       // Dòng thông số đã dùng
-      var p=res.params||{}; var pi=document.getElementById('paramInfo');
-      pi.innerHTML='<i class="bi bi-sliders"></i> Giữ nguyên màu thiết kế (không AI) · '
-        +(p.min_area?('Bỏ mảng <'+p.min_area+'px'):'Không gộp đốm');
+      var pi=document.getElementById('paramInfo');
+      pi.innerHTML='<i class="bi bi-sliders"></i> Giữ nguyên 100% ảnh đưa vào (không AI, không giảm màu, không gộp mảng)';
       pi.classList.remove('d-none');
       if(res.warn){ var e=document.getElementById('err'); e.className='alert alert-warning'; e.textContent='⚠️ '+res.warn; }
       ['btnPrint','dXlsx','dLegend','dCsv','btnLearn'].forEach(id=>document.getElementById(id).hidden=false);
