@@ -294,13 +294,19 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
               <input class="form-control font-monospace copyurl" readonly value="{{ api_base }}/api/luong?key={{ api_key }}&month=2026-06">
               <button class="btn btn-outline-secondary copybtn" type="button">Sao chép</button>
             </div>
-            <div class="input-group input-group-sm">
+            <div class="input-group input-group-sm mb-1">
               <span class="input-group-text" style="min-width:88px">Kế toán</span>
               <input class="form-control font-monospace copyurl" readonly value="{{ api_base }}/api/ketoan?key={{ api_key }}">
               <button class="btn btn-outline-secondary copybtn" type="button">Sao chép</button>
             </div>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text" style="min-width:88px">Năng suất</span>
+              <input class="form-control font-monospace copyurl" readonly value="{{ api_base }}/api/nang-suat?key={{ api_key }}&days=1">
+              <button class="btn btn-outline-secondary copybtn" type="button">Sao chép</button>
+            </div>
           </div>
-          <div class="form-text text-danger mt-2"><i class="bi bi-exclamation-triangle"></i> Khoá này như mật khẩu — chỉ đưa cho người làm kế toán, đừng để lộ.</div>
+          <div class="form-text mt-2"><i class="bi bi-info-circle text-primary"></i> Năng suất dùng <b>CHUNG khoá</b> với Lương/Kế toán — kế toán pull theo ngày (1 NV/1 ngày). Khuyến nghị gửi khoá qua header <span class="font-monospace">X-API-Key</span> thay vì trên URL.</div>
+          <div class="form-text text-danger mt-1"><i class="bi bi-exclamation-triangle"></i> Khoá này như mật khẩu — chỉ đưa cho người làm kế toán, đừng để lộ. Lộ 1 khoá = lộ cả chi phí + lương + chấm công + năng suất.</div>
         </div>
       </div>
     </div>
