@@ -24,7 +24,7 @@
     <!-- Upload + lịch sử -->
     <div class="col-xl-3 col-lg-4">
       <div class="card shadow-sm mb-3">
-        <div class="card-header fw-semibold"><i class="bi bi-cloud-arrow-up"></i> Tải ảnh lên</div>
+        <div class="card-header fw-semibold"><i class="bi bi-stars text-warning"></i> Số hoá ảnh thường (preset · AI)</div>
         <div class="card-body">
           <form id="up" method="POST" action="/xu-ly-anh" enctype="multipart/form-data">
             {% csrf_token %}
@@ -87,8 +87,30 @@
             </div>
             {% endif %}
             <button id="sub" class="btn btn-success w-100" disabled><i class="bi bi-magic"></i> Xử lý ảnh</button>
-            <button id="btnFlat" type="button" class="btn btn-primary w-100 mt-2" disabled title="Ảnh đã thiết kế phẳng -> chỉ đánh số + khớp mã DALI. KHÔNG dùng AI, KHÔNG làm phẳng lại (giữ nguyên thiết kế)."><i class="bi bi-123"></i> Đánh số ảnh phẳng (đã thiết kế)</button>
           </form>
+        </div>
+      </div>
+      <!-- MỤC RIÊNG: ảnh ĐÃ thiết kế phẳng -> chỉ đánh số + khớp màu DALI (không AI) -->
+      <div class="card shadow-sm mb-3 border-primary">
+        <div class="card-header fw-semibold text-bg-primary"><i class="bi bi-123"></i> Đánh số ảnh phẳng (đã thiết kế)</div>
+        <div class="card-body">
+          <div class="small text-secondary mb-2">Ảnh ĐÃ thiết kế phẳng (cel / vector / đã làm sẵn) → chỉ <b>đánh số + khớp màu DALI</b>. Không AI, không làm phẳng lại — giữ NGUYÊN thiết kế.</div>
+          <div id="dzFlat" class="dropzone mb-2"><i class="bi bi-image fs-3 text-secondary"></i>
+            <div class="small text-secondary">Kéo–thả hoặc bấm chọn ảnh phẳng</div>
+            <input id="imageFlat" type="file" accept="image/*" class="d-none"></div>
+          <img id="previewFlat" class="img-fluid rounded mb-2" hidden>
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label class="form-label small mb-1">Số màu tối đa</label>
+              <input type="number" id="flatColors" class="form-control form-control-sm" min="2" max="60" placeholder="trống = 48">
+            </div>
+            <div class="col-6">
+              <label class="form-label small mb-1">Bỏ mảng nhỏ hơn (px)</label>
+              <input type="number" id="flatMinArea" class="form-control form-control-sm" min="0" max="100000" placeholder="trống = 20">
+            </div>
+          </div>
+          <button id="btnFlat" type="button" class="btn btn-primary w-100" disabled><i class="bi bi-123"></i> Đánh số ảnh phẳng</button>
+          <div class="form-text">Số màu = giới hạn số ô tô (giữ sát thiết kế) · Bỏ mảng nhỏ = xoá đốm li ti / răng cưa.</div>
         </div>
       </div>
       <div class="card shadow-sm">
@@ -166,28 +188,35 @@
   dz.addEventListener('drop',ev=>{ if(ev.dataTransfer.files.length){fi.files=ev.dataTransfer.files;onPick();} });
   fi.addEventListener('change',onPick);
   function onPick(){ var f=fi.files[0]; if(!f)return; document.getElementById('sub').disabled=false;
-    var bf=document.getElementById('btnFlat'); if(bf) bf.disabled=false;
     var r=new FileReader(); r.onload=e=>{var p=document.getElementById('preview');p.src=e.target.result;p.hidden=false;}; r.readAsDataURL(f); }
 
-  // ===== Nút "Đánh số ảnh phẳng (đã thiết kế)": 1 chạm -> gọi API RIÊNG /xu-ly-anh-phang
-  // (backend ÉP: KHÔNG AI, smooth=0, giữ nguyên thiết kế; chỉ gộp đốm + đánh số + khớp DALI)
-  // rồi poll kết quả như luồng thường. Chỉ gửi 2 núm có ý nghĩa: color_limit + min_area.
-  (function bindFlat(){
-    var bf=document.getElementById('btnFlat'); if(!bf) return;
-    function reEnable(){ bf.disabled=false; document.getElementById('sub').disabled=false; }
+  // ===== MỤC RIÊNG "Đánh số ảnh phẳng (đã thiết kế)": upload riêng + 2 núm riêng
+  // (flatColors / flatMinArea). Gọi API /xu-ly-anh-phang (backend ÉP: KHÔNG AI, smooth=0,
+  // giữ nguyên thiết kế; chỉ gộp đốm + đánh số + khớp DALI) rồi tái dùng vòng getResult.
+  (function flatSection(){
+    var dz2=document.getElementById('dzFlat'), fi2=document.getElementById('imageFlat'),
+        bf=document.getElementById('btnFlat');
+    if(!dz2 || !fi2 || !bf) return;
+    dz2.addEventListener('click',function(){fi2.click()});
+    ['dragover','dragenter'].forEach(e=>dz2.addEventListener(e,ev=>{ev.preventDefault();dz2.style.borderColor='#0d6efd'}));
+    ['dragleave','drop'].forEach(e=>dz2.addEventListener(e,ev=>{ev.preventDefault();dz2.style.borderColor=''}));
+    dz2.addEventListener('drop',ev=>{ if(ev.dataTransfer.files.length){fi2.files=ev.dataTransfer.files;onPickFlat();} });
+    fi2.addEventListener('change',onPickFlat);
+    function onPickFlat(){ var f=fi2.files[0]; if(!f)return; bf.disabled=false;
+      var r=new FileReader(); r.onload=e=>{var p=document.getElementById('previewFlat');p.src=e.target.result;p.hidden=false;}; r.readAsDataURL(f); }
     bf.addEventListener('click', function(){
-      if(!fi.files[0]){ alert('Hãy chọn ảnh trước.'); return; }
-      var fd=new FormData(); fd.append('image', fi.files[0]);
-      var cl=document.querySelector('[name="color_limit"]'); if(cl && cl.value) fd.append('color_limit', cl.value);
-      var ma=document.querySelector('[name="min_area"]'); if(ma && ma.value) fd.append('min_area', ma.value);
-      bf.disabled=true; document.getElementById('sub').disabled=true; spin(true);
+      if(!fi2.files[0]){ alert('Hãy chọn ảnh phẳng trước.'); return; }
+      var fd=new FormData(); fd.append('image', fi2.files[0]);
+      var cl=document.getElementById('flatColors'); if(cl && cl.value) fd.append('color_limit', cl.value);
+      var ma=document.getElementById('flatMinArea'); if(ma && ma.value) fd.append('min_area', ma.value);
+      bf.disabled=true; spin(true);
       fetch('/xu-ly-anh-phang',{method:'POST',body:fd}).then(r=>r.json()).then(function(res){
-        if(!res.ok){ spin(false); reEnable(); alert(res.msg||'Lỗi xử lý ảnh.'); return; }
+        if(!res.ok){ spin(false); bf.disabled=false; alert(res.msg||'Lỗi xử lý ảnh.'); return; }
         var fu=res.file_url, waited=0;
         var poll=setInterval(function(){ getResult(fu,
-          function(){ clearInterval(poll); reEnable(); },
-          function(){ waited+=2000; if(waited>300000){ clearInterval(poll); spin(false); reEnable(); } }); },2000);
-      }).catch(function(){ spin(false); reEnable(); alert('Lỗi kết nối.'); });
+          function(){ clearInterval(poll); bf.disabled=false; },
+          function(){ waited+=2000; if(waited>300000){ clearInterval(poll); spin(false); bf.disabled=false; } }); },2000);
+      }).catch(function(){ spin(false); bf.disabled=false; alert('Lỗi kết nối.'); });
     });
   })();
 
