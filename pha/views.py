@@ -2395,8 +2395,15 @@ RESULT_CACHE_KEEP = 10
 
 
 def _prune_image_results(keep=RESULT_CACHE_KEEP):
+    # KHÔNG xoá kết quả mới tạo trong 24h (khách /thiet-ke còn đang xem/tải ảnh
+    # qua URL tuyệt đối; xoá sớm sẽ vỡ ảnh dù vừa trả về xong).
+    from django.utils import timezone as _tz
+    cutoff = _tz.now() - timedelta(hours=24)
     old_ids = list(ImageResult.objects.order_by('-created_time')
                    .values_list('id', flat=True)[keep:])
+    if old_ids:
+        old_ids = list(ImageResult.objects.filter(id__in=old_ids, created_time__lt=cutoff)
+                       .values_list('id', flat=True))
     if not old_ids:
         return
     for obj in ImageResult.objects.filter(id__in=old_ids):
@@ -2672,15 +2679,36 @@ def cai_dat_ai(request):
         if action == 'test':
             ok, msg = _test_google_key()
             return JsonResponse({'ok': ok, 'msg': msg})
+        # ---- Khoá API cho web bán hàng (tranhdali.vn/thiet-ke) ----
+        if action == 'save_thietke':
+            k = (request.POST.get('api_key') or '').strip()
+            if not k:
+                return JsonResponse({'ok': False, 'msg': 'Chưa nhập khoá.'})
+            AppSetting.set('THIETKE_API_KEY', k)
+            return JsonResponse({'ok': True, 'msg': 'Đã lưu khoá Thiết kế.', 'masked': _mask_key(k), 'key': k})
+        if action == 'gen_thietke':
+            import secrets
+            k = 'tk_' + secrets.token_urlsafe(24)
+            AppSetting.set('THIETKE_API_KEY', k)
+            return JsonResponse({'ok': True, 'msg': 'Đã tạo & lưu khoá mới.', 'masked': _mask_key(k), 'key': k})
+        if action == 'clear_thietke':
+            AppSetting.objects.filter(key='THIETKE_API_KEY').delete()
+            return JsonResponse({'ok': True, 'msg': 'Đã xoá khoá Thiết kế.'})
         return JsonResponse({'ok': False, 'msg': 'Hành động không hợp lệ.'})
 
     db_key = (AppSetting.get('GOOGLE_API_KEY') or '').strip()
     env_key = os.environ.get('GOOGLE_API_KEY') or os.environ.get('GEMINI_API_KEY') or ''
     cur = db_key or env_key
+    tk_db = (AppSetting.get('THIETKE_API_KEY') or '').strip()
+    tk_env = os.environ.get('THIETKE_API_KEY') or ''
+    tk_cur = tk_db or tk_env
     return render(request, 'cai_dat_ai.html', {
         'has_key': bool(cur),
         'masked': _mask_key(cur),
         'from_env': bool(not db_key and env_key),
+        'tk_has': bool(tk_cur),
+        'tk_masked': _mask_key(tk_cur),
+        'tk_from_env': bool(not tk_db and tk_env),
     })
 
 

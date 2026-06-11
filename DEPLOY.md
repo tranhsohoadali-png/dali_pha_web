@@ -63,7 +63,7 @@ Environment=DJANGO_SECRET_KEY=<chuoi-ngau-nhien-dai>
 Environment=DJANGO_DEBUG=0
 Environment=DJANGO_ALLOWED_HOSTS=mau.tenmien.com
 Environment=DJANGO_CSRF_TRUSTED=https://mau.tenmien.com
-ExecStart=/var/www/dali_pha_web/venv/bin/gunicorn phaweb.wsgi:application --bind 127.0.0.1:8001 --workers 3
+ExecStart=/var/www/dali_pha_web/venv/bin/gunicorn phaweb.wsgi:application --bind 127.0.0.1:8001 --workers 3 --timeout 180 --graceful-timeout 180
 Restart=always
 
 [Install]
@@ -91,6 +91,9 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        # AI xu ly dong bo toi ~150s (mac dinh 60s se 502)
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
     }
 }
 ```

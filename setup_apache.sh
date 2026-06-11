@@ -48,7 +48,7 @@ Environment=DJANGO_SECRET_KEY=$SECRET
 Environment=DJANGO_DEBUG=0
 Environment=DJANGO_ALLOWED_HOSTS=$DOMAIN
 Environment=DJANGO_CSRF_TRUSTED=https://$DOMAIN
-ExecStart=$APP_DIR/venv/bin/gunicorn phaweb.wsgi:application --bind 127.0.0.1:8001 --workers 3
+ExecStart=$APP_DIR/venv/bin/gunicorn phaweb.wsgi:application --bind 127.0.0.1:8001 --workers 3 --timeout 180 --graceful-timeout 180
 Restart=always
 
 [Install]
@@ -64,7 +64,15 @@ cat >/etc/apache2/sites-available/$DOMAIN.conf <<EOF
     ServerName $DOMAIN
     ProxyPreserveHost On
     RequestHeader set X-Forwarded-Proto "https"
-    ProxyPass / http://127.0.0.1:8001/
+    # AI xu ly dong bo toi ~150s -> timeout proxy phai lon hon (mac dinh 60s se 502)
+    ProxyTimeout 180
+    # /media/ (anh ket qua) phuc vu truc tiep tu disk, khong qua gunicorn
+    ProxyPass /media/ !
+    Alias /media/ $APP_DIR/media/
+    <Directory $APP_DIR/media/>
+        Require all granted
+    </Directory>
+    ProxyPass / http://127.0.0.1:8001/ timeout=180
     ProxyPassReverse / http://127.0.0.1:8001/
     ErrorLog \${APACHE_LOG_DIR}/$DOMAIN-error.log
     CustomLog \${APACHE_LOG_DIR}/$DOMAIN-access.log combined

@@ -46,6 +46,33 @@
       </div>
     </div>
   </div>
+
+  <div class="card shadow-sm mt-3">
+    <div class="card-header fw-semibold"><i class="bi bi-link-45deg"></i> Khoá API cho web bán hàng (tranhdali.vn/thiet-ke)</div>
+    <div class="card-body">
+      <div id="tkState" class="alert {% if tk_has %}alert-success{% else %}alert-secondary{% endif %} py-2 d-flex align-items-center">
+        <i class="bi bi-shield-lock me-2"></i>
+        <span id="tkStateText">
+          {% if tk_has %}Đã có khoá: <code id="tkMasked">{{ tk_masked }}</code>{% if tk_from_env %} <span class="badge text-bg-secondary">từ biến môi trường</span>{% endif %}{% else %}Chưa có khoá — web bán hàng chưa gọi được API.{% endif %}
+        </span>
+      </div>
+      <div class="input-group">
+        <input type="text" id="tkKey" class="form-control" placeholder="Dán khoá, hoặc bấm 'Tạo khoá ngẫu nhiên'" autocomplete="off">
+      </div>
+      <div class="d-flex gap-2 mt-2 flex-wrap">
+        <button id="tkSave" class="btn btn-success"><i class="bi bi-save"></i> Lưu</button>
+        <button id="tkGen" class="btn btn-outline-primary"><i class="bi bi-magic"></i> Tạo khoá ngẫu nhiên</button>
+        {% if tk_has %}<button id="tkClear" class="btn btn-outline-danger ms-auto"><i class="bi bi-trash"></i> Xoá</button>{% endif %}
+      </div>
+      <div id="tkMsg" class="mt-3"></div>
+      <hr>
+      <div class="small text-secondary">
+        <i class="bi bi-info-circle"></i> Khoá này phải <b>TRÙNG</b> với khoá nhập ở
+        <b>tranhdali.vn → Admin → Cài đặt → Thiết kế theo yêu cầu</b>.
+        Bấm <b>Tạo khoá ngẫu nhiên</b> để sinh khoá, copy chuỗi hiện ra rồi dán sang admin web bán hàng.
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -98,6 +125,29 @@
   $('#clear').on('click', function(){
     if(!confirm('Xoá khoá đã lưu?')) return;
     post('clear', {}, function(res){ flash(res.msg, res.ok); if(res.ok) setTimeout(function(){location.reload();}, 800); });
+  });
+
+  // ----- Khoá API Thiết kế (web bán hàng) -----
+  function tkFlash(html, ok){ $('#tkMsg').html('<div class="alert '+(ok?'alert-success':'alert-danger')+' py-2 mb-0">'+html+'</div>'); }
+  function tkShow(res){
+    $('#tkState').removeClass('alert-secondary').addClass('alert-success');
+    $('#tkStateText').html('Đã có khoá: <code>'+res.masked+'</code>');
+    if(res.key){ $('#tkKey').val(res.key); tkFlash('Khoá: <code>'+res.key+'</code><br>Copy chuỗi này, dán sang <b>tranhdali.vn → Admin → Cài đặt → Thiết kế theo yêu cầu → Khoá API</b>.', true); }
+    else tkFlash('Đã lưu khoá.', true);
+  }
+  $('#tkSave').on('click', function(){
+    var k = ($('#tkKey').val()||'').trim();
+    if(!k){ tkFlash('Chưa nhập khoá.', false); return; }
+    post('save_thietke', {api_key:k}, function(res){ res.ok ? tkShow(res) : tkFlash(res.msg, false); })
+      .fail(function(){ tkFlash('Không kết nối được máy chủ.', false); });
+  });
+  $('#tkGen').on('click', function(){
+    post('gen_thietke', {}, function(res){ res.ok ? tkShow(res) : tkFlash(res.msg, false); })
+      .fail(function(){ tkFlash('Không kết nối được máy chủ.', false); });
+  });
+  $('#tkClear').on('click', function(){
+    if(!confirm('Xoá khoá Thiết kế?')) return;
+    post('clear_thietke', {}, function(res){ tkFlash(res.msg, res.ok); if(res.ok) setTimeout(function(){location.reload();}, 800); });
   });
 </script>
 </body>
