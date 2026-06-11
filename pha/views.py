@@ -336,22 +336,51 @@ def api_xu_ly_anh(request):
         params={'enhance': enhance, 'preset': preset_key, 'color_limit': color_limit,
                 'print_size': size_str, 'source': 'thiet-ke'})
 
-    try:
-        # Chạy ĐỒNG BỘ (không qua thread) để trả kết quả ngay cho web bán hàng.
-        process_image(rec.id, name, enhance, None, color_limit, 0, 0,
-                      ai_prompt, use_refs, print_long_cm)
-    except Exception as e:
-        return _cors(JsonResponse({'ok': False, 'error': f'Lỗi xử lý: {e}'}, status=500))
-
-    rec.refresh_from_db()
+    # Chạy NỀN (qua thread như luồng nhân viên) rồi trả id ngay — request chỉ
+    # sống ~1-2s nên không dính timeout proxy/nginx/gunicorn nào (AI mất 20-150s).
+    _img_executor.submit(process_image, rec.id, name, enhance, None, color_limit,
+                         0, 0, ai_prompt, use_refs, print_long_cm)
     _prune_image_results()
+    return _cors(JsonResponse({'ok': True, 'status': 'processing', 'id': rec.id}))
+
+
+@csrf_exempt
+def api_xu_ly_anh_status(request):
+    """Tra trạng thái job của /api/xu-ly-anh (id). Cùng khoá API.
+    Trả: processing | error | done (kèm URL ảnh tuyệt đối + bảng màu)."""
+    from pha.models import AppSetting
+    from pha.imageproc import split_list
+
+    def _cors(resp):
+        resp['Access-Control-Allow-Origin'] = getattr(settings, 'THIETKE_ALLOW_ORIGIN', '*')
+        resp['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        resp['Access-Control-Allow-Headers'] = 'Content-Type, X-API-Key'
+        resp['Cache-Control'] = 'no-store'
+        return resp
+
+    if request.method == 'OPTIONS':
+        return _cors(HttpResponse(status=204))
+
+    want_key = (AppSetting.get('THIETKE_API_KEY', '') or getattr(settings, 'THIETKE_API_KEY', '')).strip()
+    got_key = (request.headers.get('X-API-Key') or request.GET.get('key') or '').strip()
+    if not want_key or got_key != want_key:
+        return _cors(JsonResponse({'ok': False, 'error': 'Sai hoặc thiếu khoá API'}, status=401))
+
+    try:
+        rec = ImageResult.objects.get(id=int(request.GET.get('id', 0)))
+    except (ImageResult.DoesNotExist, ValueError, TypeError):
+        return _cors(JsonResponse({'ok': False, 'status': 'error', 'error': 'Không tìm thấy job.'}, status=404))
+
+    if rec.status == ImageResult.STATUS_PROCESSING:
+        return _cors(JsonResponse({'ok': True, 'status': 'processing', 'id': rec.id}))
     if rec.status == ImageResult.STATUS_ERROR:
-        return _cors(JsonResponse({'ok': False, 'error': rec.error_message or 'Xử lý thất bại'}, status=500))
+        return _cors(JsonResponse({'ok': True, 'status': 'error', 'id': rec.id,
+                                   'error': rec.error_message or 'Xử lý thất bại'}))
 
     def _u(rel):
         return request.build_absolute_uri('/media/' + rel) if rel else ''
     return _cors(JsonResponse({
-        'ok': True, 'status': rec.status, 'id': rec.id,
+        'ok': True, 'status': 'done', 'id': rec.id,
         'img_output': _u(rec.name_output),
         'enhanced': _u(rec.enhanced_name),
         'original': _u(rec.name),
