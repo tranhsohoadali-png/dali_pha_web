@@ -542,11 +542,18 @@ def _sweep_dust(lbl, n_colors, dust_area=4):
     return True
 
 
+# Mỗi màu chỉ được GIỮ tối đa chừng này đốm nhỏ tương phản cao. Ngũ quan (mắt,
+# lỗ mũi, viền môi) chỉ vài đốm/màu -> sống; nền nhiễu (bokeh lá cây hàng trăm
+# đốm cùng màu) -> chỉ giữ các đốm to nhất, còn lại gộp -> bản số hết loạn.
+FEATURE_CAP_PER_COLOR = config("FEATURE_CAP_PER_COLOR", default=10, cast=int)
+
+
 def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4):
     """Gộp mảng nhỏ vào hàng xóm NHƯNG GIỮ chi tiết ngũ quan: đốm nhỏ TRÒN có màu
     TƯƠNG PHẢN CAO với xung quanh (lòng trắng mắt, lỗ mũi, viền môi) được GIỮ;
     chỉ gộp bụi thật (rad<1), sliver dẹt (thon dài sát biên) và mảng màu GẦN GIỐNG
-    hàng xóm (deltaE < de_keep). Trả (ảnh, mask các chi tiết đã giữ)."""
+    hàng xóm (deltaE < de_keep). Mỗi màu giữ tối đa FEATURE_CAP_PER_COLOR đốm
+    (to nhất trước) — chặn nền nhiễu trăm đốm. Trả (ảnh, mask chi tiết đã giữ)."""
     img = arr.copy()
     H, W = img.shape[:2]
     k3 = np.ones((3, 3), np.uint8)
@@ -567,6 +574,7 @@ def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4):
                 continue
             dist = cv2.distanceTransform(mask, cv2.DIST_L2, 3)
             num, comp, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+            keepers = []                                  # ứng viên GIỮ (đốm ngũ quan)
             for kk in range(1, num):
                 area = stats[kk, cv2.CC_STAT_AREA]
                 x, y, w, h = stats[kk, 0], stats[kk, 1], stats[kk, 2], stats[kk, 3]
@@ -595,8 +603,19 @@ def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4):
                     lbl[y0 + yy, x0 + xx] = nb_ci
                     changed = True
                 else:
-                    yy, xx = np.where(sub)
-                    feature[y0 + yy, x0 + xx] = 255        # ngũ quan nhỏ: GIỮ
+                    keepers.append((int(area), kk, x0, y0, x1, y1, nb_ci))
+            # TRẦN đốm giữ/màu: to nhất trước; phần dư gộp vào hàng xóm (bokeh...).
+            keepers.sort(key=lambda t: -t[0])
+            for _a, kk, x0, y0, x1, y1, _nb in keepers[:FEATURE_CAP_PER_COLOR]:
+                sub = comp[y0:y1, x0:x1] == kk
+                yy, xx = np.where(sub)
+                feature[y0 + yy, x0 + xx] = 255            # ngũ quan nhỏ: GIỮ
+            for _a, kk, x0, y0, x1, y1, nb_ci in keepers[FEATURE_CAP_PER_COLOR:]:
+                sub = comp[y0:y1, x0:x1] == kk
+                yy, xx = np.where(sub)
+                img[y0 + yy, x0 + xx] = colors[nb_ci]
+                lbl[y0 + yy, x0 + xx] = nb_ci
+                changed = True
         if not changed:
             break
     return img, feature
@@ -689,7 +708,8 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     fd, out = tempfile.mkstemp(suffix='.png', prefix='quant_')
     os.close(fd)
     work.save(out)
-    return out
+    # Trả kèm mảng 2x + hệ số: bản đồ SỐ sẽ vẽ nét trên ảnh 2x (mượt như thiết kế).
+    return out, arr, s
 
 
 def _reduce_palette_perceptual(img_rgb, target_n, protect_mask=None):
@@ -838,10 +858,16 @@ def _flat_work_file(path, min_area=0):
     return out
 
 
-def _number_work_image(work_path, design_out=None, debug=False):
+def _number_work_image(work_path, design_out=None, debug=False,
+                       render_arr=None, render_scale=1.0):
     """ĐÁNH SỐ + đếm % trên 1 ảnh LÀM VIỆC đã chuẩn bị — đây là phần index_color GỐC
     (extract màu -> contour từng màu -> polylabel -> vẽ số). design_out: lưu ảnh work
-    (bản màu phẳng) để xem trước. Xoá file work tạm khi xong."""
+    (bản màu phẳng) để xem trước. Xoá file work tạm khi xong.
+
+    render_arr/render_scale: nếu có (ảnh thiết kế 2x, palette Y HỆT bản 1x), bản đồ
+    số được VẼ trên nền 2x — đường nét lấy từ contour 2x (mượt như bản thiết kế,
+    không răng cưa khi in to), cỡ số nhân theo scale. VỊ TRÍ số vẫn tính trên bản
+    1x (polylabel rẻ). None = vẽ 1x như index_color gốc (nhánh ảnh phẳng giữ nguyên)."""
     import os
     import shutil
     if design_out:
@@ -854,10 +880,17 @@ def _number_work_image(work_path, design_out=None, debug=False):
 
     img = load_image(work_path, debug=debug)
 
-    # Cỡ số CHUẨN: cố định theo px (số to, tỉ lệ vùng) — KHÔNG theo cm.
-    min_t, mean_t, max_t = MIN_TEXT_SIZE, MEAN_TEXT_SIZE, MAX_TEXT_SIZE
+    rs = float(render_scale) if (render_arr is not None and render_scale
+                                 and float(render_scale) > 1.0) else 1.0
+    # Cỡ số CHUẨN theo px trên ảnh 1x — nhân theo scale khi vẽ trên nền 2x.
+    min_t, mean_t, max_t = MIN_TEXT_SIZE * rs, MEAN_TEXT_SIZE * rs, MAX_TEXT_SIZE * rs
 
-    img_white = np.zeros([img.shape[0], img.shape[1], 1], dtype=np.uint8)
+    if rs > 1.0:
+        big_rgb = np.ascontiguousarray(render_arr)
+        img_white = np.zeros([big_rgb.shape[0], big_rgb.shape[1], 1], dtype=np.uint8)
+    else:
+        big_rgb = None
+        img_white = np.zeros([img.shape[0], img.shape[1], 1], dtype=np.uint8)
     img_white.fill(255)
 
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -875,13 +908,20 @@ def _number_work_image(work_path, design_out=None, debug=False):
         if hierarchy is None or not contours:
             color_idx += 1
             continue
-        cv2.drawContours(img_white, contours, -1, (0, 0, 0), 1)
+        if rs > 1.0:
+            # ĐƯỜNG NÉT lấy từ ảnh 2x: biên cong mượt của bản thiết kế, in to không gãy.
+            big_mask = get_color_areas(big_rgb, color, color, color_idx)
+            big_cnts, _ = cv2.findContours(big_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+            cv2.drawContours(img_white, big_cnts, -1, (0, 0, 0), 1)
+        else:
+            cv2.drawContours(img_white, contours, -1, (0, 0, 0), 1)
 
         centers, dists = get_center_poly_from_contours(contours, hierarchy, range_img, np.array(img), debug=debug)
         count_number = 0
         for c, d in zip(centers, dists):
-            d = d * 2
-            draw = get_draw_number(img_white, (int(c[0]), int(c[1])), d, f'{len(color_mapping) + 1}',
+            d = d * 2 * rs
+            draw = get_draw_number(img_white, (int(c[0] * rs), int(c[1] * rs)), d,
+                                   f'{len(color_mapping) + 1}',
                                    debug=debug, min_t=min_t, mean_t=mean_t, max_t=max_t)
             if draw is not None:
                 count_number += 1
@@ -930,10 +970,13 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
     print_long_cm: nhận cho tương thích, không dùng (cỡ số cố định)."""
     effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
     # design_out được ghi NGAY trong _quantize_file (bản 2x sắc nét);
-    # _number_work_image chỉ đánh số trên file làm việc 1x (palette y hệt).
-    work_path = _quantize_file(path, effective_n, smooth=smooth, min_area=min_area,
-                               print_long_cm=print_long_cm, design_out=design_out)
-    return _number_work_image(work_path, design_out=None, debug=debug)
+    # bản đồ SỐ vẽ nét trên ảnh 2x (mượt), vị trí số tính trên bản 1x (nhanh).
+    work_path, arr2x, s = _quantize_file(path, effective_n, smooth=smooth,
+                                         min_area=min_area,
+                                         print_long_cm=print_long_cm,
+                                         design_out=design_out)
+    return _number_work_image(work_path, design_out=None, debug=debug,
+                              render_arr=arr2x, render_scale=s)
 
 
 def index_color_flat(path, min_area=0, design_out=None):
