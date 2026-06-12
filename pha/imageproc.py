@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 
 import cv2
+import numpy as np
 from PIL import Image
 from django.conf import settings
 
@@ -81,6 +82,56 @@ def mark_if_stuck(obj):
     return True
 
 
+def _boost_lip_color(path):
+    """GIỮ MÀU MÔI sau khi AI vẽ lại: Gemini hay làm môi nhạt lẫn vào màu da,
+    khiến bước tách màu không còn cụm môi riêng. Cách cứu: tìm khuôn mặt (Haar
+    cascade), trong vùng miệng (nửa dưới mặt) tăng độ rực các pixel HỒNG/ĐỎ hơn
+    nền da (kênh a* LAB) -> môi nổi rõ, k-means giữ được cụm môi.
+    Mọi lỗi đều bỏ qua êm (ảnh giữ nguyên, job không hỏng)."""
+    try:
+        img = cv2.imread(path)                                   # BGR
+        if img is None:
+            return
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        cas = cv2.CascadeClassifier(
+            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        faces = cas.detectMultiScale(gray, 1.1, 5, minSize=(40, 40))
+        if len(faces) == 0:
+            return
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
+        changed = False
+        for (x, y, w, h) in faces:
+            # Vùng miệng: ~55%..100% chiều cao mặt, chừa 2 mép.
+            y0, y1 = y + int(h * 0.55), min(y + h, lab.shape[0])
+            x0, x1 = x + int(w * 0.18), min(x + int(w * 0.82), lab.shape[1])
+            if y1 <= y0 or x1 <= x0:
+                continue
+            roi = lab[y0:y1, x0:x1]
+            a = roi[:, :, 1]
+            skin_a = float(np.median(a))
+            # Pixel "kiểu môi": hồng/đỏ hơn da rõ rệt, không quá tối/sáng.
+            m = (a > skin_a + 5) & (roi[:, :, 0] > 35) & (roi[:, :, 0] < 235)
+            if m.sum() < m.size * 0.004:        # không thấy môi -> bỏ qua mặt này
+                continue
+            mask = (m * 255).astype(np.uint8)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+            mask = cv2.GaussianBlur(mask, (7, 7), 0).astype(np.float32) / 255.0
+            # Kéo a* (hồng-đỏ) ra xa nền da 1.6 lần, trần 168 (đỏ son vừa phải);
+            # kênh b* ấm nhẹ 1.15 cho môi hồng tự nhiên thay vì tím.
+            a_new = np.minimum(skin_a + (a - skin_a) * 1.6, 168.0)
+            b = roi[:, :, 2]
+            b_new = 128.0 + (b - 128.0) * 1.15
+            roi[:, :, 1] = a * (1 - mask) + a_new * mask
+            roi[:, :, 2] = b * (1 - mask) + b_new * mask
+            lab[y0:y1, x0:x1] = roi
+            changed = True
+        if changed:
+            out = cv2.cvtColor(lab.clip(0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+            cv2.imwrite(path, out)
+    except Exception:
+        pass
+
+
 def process_image(rec_id, name, enhance=False, style_category=None, color_limit=0,
                   min_area=0, smooth=0, ai_prompt=None, use_refs=False, print_long_cm=0):
     """Chạy nền: (tùy chọn) tăng cường ảnh bằng AI, rồi xử lý + cập nhật ImageResult.
@@ -127,6 +178,7 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
                     raise TimeoutError(f'quá {AI_BUDGET_S}s — Google chậm/quá tải')
                 if 'err' in box:
                     raise box['err']
+                _boost_lip_color(enhanced_path)   # giữ màu môi (AI hay làm nhạt)
                 obj.enhanced_name = enhanced_name
                 obj.save(update_fields=['enhanced_name'])
                 path = enhanced_path  # số hoá trên ảnh đã tăng cường
