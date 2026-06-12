@@ -52,6 +52,29 @@ def create_image_color(color_mapping, hex_list, percentages=None):
     return result
 
 
+# Job kẹt PROCESSING quá lâu = tiến trình nền đã chết giữa chừng (hết RAM bị kill,
+# service restart giữa lúc chạy...) -> không bao giờ tự xong. Khi poll thấy quá
+# ngưỡng thì đánh dấu LỖI RÕ RÀNG để giao diện không chờ trống vô hạn.
+STUCK_MINUTES = 15
+
+
+def mark_if_stuck(obj):
+    """Trả True nếu vừa chuyển job kẹt sang trạng thái lỗi (kèm hướng dẫn)."""
+    from datetime import timedelta
+    from django.utils import timezone
+    if obj.status != ImageResult.STATUS_PROCESSING:
+        return False
+    if timezone.now() - obj.created_time < timedelta(minutes=STUCK_MINUTES):
+        return False
+    obj.status = ImageResult.STATUS_ERROR
+    obj.error_message = (f'Quá {STUCK_MINUTES} phút chưa xong — tiến trình xử lý có thể '
+                         'đã bị ngắt (server hết RAM / khởi động lại giữa chừng). '
+                         'Hãy thử lại; nếu lặp lại nhiều lần, kiểm tra RAM/CPU server '
+                         '(journalctl -u phaweb; dmesg | grep -i oom).')
+    obj.save(update_fields=['status', 'error_message'])
+    return True
+
+
 def process_image(rec_id, name, enhance=False, style_category=None, color_limit=0,
                   min_area=0, smooth=0, ai_prompt=None, use_refs=False, print_long_cm=0):
     """Chạy nền: (tùy chọn) tăng cường ảnh bằng AI, rồi xử lý + cập nhật ImageResult.

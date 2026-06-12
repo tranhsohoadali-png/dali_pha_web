@@ -372,7 +372,9 @@ def api_xu_ly_anh_status(request):
         return _cors(JsonResponse({'ok': False, 'status': 'error', 'error': 'Không tìm thấy job.'}, status=404))
 
     if rec.status == ImageResult.STATUS_PROCESSING:
-        return _cors(JsonResponse({'ok': True, 'status': 'processing', 'id': rec.id}))
+        from pha.imageproc import mark_if_stuck
+        if not mark_if_stuck(rec):          # kẹt quá lâu -> rơi xuống nhánh lỗi
+            return _cors(JsonResponse({'ok': True, 'status': 'processing', 'id': rec.id}))
     if rec.status == ImageResult.STATUS_ERROR:
         return _cors(JsonResponse({'ok': True, 'status': 'error', 'id': rec.id,
                                    'error': rec.error_message or 'Xử lý thất bại'}))
@@ -2850,12 +2852,13 @@ def cai_dat_ai(request):
 @csrf_exempt
 @staff_required
 def anh_result(request):
-    from pha.imageproc import split_list
+    from pha.imageproc import split_list, mark_if_stuck
     res = _get_img(request)
     if not res:
         return JsonResponse({'status': 'processing'})
     if res.status == ImageResult.STATUS_PROCESSING:
-        return JsonResponse({'status': 'processing'})
+        if not mark_if_stuck(res):          # kẹt quá lâu -> rơi xuống nhánh lỗi
+            return JsonResponse({'status': 'processing'})
     if res.status == ImageResult.STATUS_ERROR:
         return JsonResponse({'status': 'error', 'error': res.error_message})
     return JsonResponse({'status': 'done', 'img_output': '/media/' + res.name_output,
