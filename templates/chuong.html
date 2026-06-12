@@ -57,7 +57,7 @@
       <input type="number" id="beforeInp" min="0" max="30" placeholder="chung">
       <span class="hint">— bỏ trống = theo cài đặt chung của công ty</span>
     </div>
-    <div class="chk"><input type="checkbox" id="onLunch" checked> <span>Chuông <b>dậy trưa</b> (trước giờ hết nghỉ trưa)</span></div>
+    <div class="chk"><input type="checkbox" id="onLunch" checked> <span>Chuông <b>dậy trưa</b> (trước giờ hết nghỉ trưa) <span id="lunchLock" class="hint hidden">🔒 bắt buộc theo quy định công ty</span></span></div>
     <div class="chk"><input type="checkbox" id="onEnd"> <span>Chuông <b>tan làm</b> (đúng giờ ra)</span></div>
     <div class="hint">Cài đặt này chỉ áp dụng cho máy này — mỗi máy đặt loa có thể chỉnh khác nhau. Giờ nghỉ trưa/giờ ra lấy từ cài đặt chung (Chấm công quản lý → Khung giờ).</div>
   </div>
@@ -86,20 +86,29 @@
   function pad(n){ return ('0'+n).slice(-2); }
   function min2hm(m){ return pad(Math.floor(m/60)) + ':' + pad(m%60); }
   function effBefore(){ var d = parseInt(DEV.before, 10); return isNaN(d) ? (CFG.bell_before||0) : d; }
+  // Chuông dậy trưa BẮT BUỘC (quy định công ty) -> máy nào cũng kêu, không tắt được
+  function effOnLunch(){ return CFG.mandatory ? true : DEV.onLunch; }
 
   function renderNext(){
     var parts = [];
-    if (DEV.onLunch) parts.push('Dậy trưa: <b>' + min2hm(hm2min(CFG.lunch_end) - effBefore()) + '</b>'
-      + ' <span style="color:#9aa0b5">(hết nghỉ ' + CFG.lunch_end + ', trước ' + effBefore() + "')</span>");
+    if (effOnLunch()) parts.push('Dậy trưa: <b>' + min2hm(hm2min(CFG.lunch_end) - effBefore()) + '</b>'
+      + ' <span style="color:#9aa0b5">(hết nghỉ ' + CFG.lunch_end + ', trước ' + effBefore() + "')</span>"
+      + (CFG.mandatory ? ' <span style="color:#9aa0b5">🔒</span>' : ''));
     if (DEV.onEnd) parts.push('Tan làm: <b>' + CFG.work_end + '</b>');
     document.getElementById('next').innerHTML = parts.length
       ? '<i class="bi bi-bell"></i> ' + parts.join('<br>')
       : '<i class="bi bi-bell-slash"></i> Máy này đang TẮT cả 2 chuông — bật lại trong Cài đặt.';
   }
 
+  function applyMandatory(){
+    var oLc = document.getElementById('onLunch'), lock = document.getElementById('lunchLock');
+    if (CFG.mandatory) { oLc.checked = true; oLc.disabled = true; lock.classList.remove('hidden'); }
+    else { oLc.disabled = false; oLc.checked = DEV.onLunch; lock.classList.add('hidden'); }
+  }
+
   function loadCfg(){
     fetch('/chuong-config').then(function(r){return r.json();}).then(function(d){
-      CFG = d; renderNext();
+      CFG = d; applyMandatory(); renderNext();
     }).catch(function(){});
   }
   loadCfg(); setInterval(loadCfg, 5*60*1000);
@@ -148,7 +157,7 @@
   function check(){
     if (!armed || !CFG.lunch_end) return;
     var d = new Date(), nowm = d.getHours() * 60 + d.getMinutes();
-    if (DEV.onLunch && nowm === hm2min(CFG.lunch_end) - effBefore()) fire('lunch', 'dậy trưa');
+    if (effOnLunch() && nowm === hm2min(CFG.lunch_end) - effBefore()) fire('lunch', 'dậy trưa');
     if (DEV.onEnd && CFG.work_end && nowm === hm2min(CFG.work_end)) fire('end', 'tan làm');
   }
   setInterval(check, 5000);

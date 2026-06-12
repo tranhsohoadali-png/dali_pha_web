@@ -2124,6 +2124,8 @@ def _att_cfg():
         'lunch_start': AppSetting.get('LUNCH_START', '12:00') or '12:00',
         'lunch_end': AppSetting.get('LUNCH_END', '13:30') or '13:30',
         'bell_before': int(num('BELL_BEFORE_MIN', 3)),
+        # Chuông BẮT BUỘC (mặc định): mọi máy phải kêu, không tắt được; 0 = cho từng máy tự chọn
+        'bell_mandatory': (AppSetting.get('BELL_MANDATORY', '1') or '1') == '1',
     }
 
 
@@ -2346,6 +2348,9 @@ def cham_cong_quan_ly(request):
                 AppSetting.set(key, (request.POST.get(fld) or '0').replace(',', '').strip() or '0')
             AppSetting.set('BELL_BEFORE_MIN',
                            (request.POST.get('bell_before') or '3').replace(',', '').strip() or '3')
+            # select luôn được gửi kèm form -> form cũ thiếu field thì giữ mặc định 'bắt buộc'
+            AppSetting.set('BELL_MANDATORY',
+                           '0' if request.POST.get('bell_mode') == 'optional' else '1')
             messages.info(request, 'Đã lưu khung giờ & quy định.')
             return redirect('/cham-cong-quan-ly')
         if act == 'reset_device':

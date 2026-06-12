@@ -238,5 +238,6 @@ def chuong_config(request):
     now = _now()
     return JsonResponse({'lunch_start': cfg['lunch_start'], 'lunch_end': cfg['lunch_end'],
                          'bell_before': cfg['bell_before'], 'work_end': cfg['end'],
+                         'mandatory': cfg['bell_mandatory'],
                          'server_hm': now.strftime('%H:%M'),
                          'server_day': now.strftime('%Y-%m-%d')})

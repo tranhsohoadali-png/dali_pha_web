@@ -410,7 +410,11 @@
   // Bật/tắt RIÊNG TỪNG MÁY bằng nút chuông trên đầu trang (lưu localStorage máy này).
   (function(){
     var bellCfg=null, bellCtx=null;
-    function bellOn(){ try{ return localStorage.getItem('bell_app_on')!=='0'; }catch(e){ return true; } }
+    function bellForced(){ return !!(bellCfg && bellCfg.mandatory); }   // công ty BẮT BUỘC -> không tắt được
+    function bellOn(){
+      if(bellForced()) return true;
+      try{ return localStorage.getItem('bell_app_on')!=='0'; }catch(e){ return true; }
+    }
     var tg=document.getElementById('bellToggle');
     function paintToggle(){
       if(!tg) return;
@@ -420,11 +424,12 @@
     }
     paintToggle();
     if(tg) tg.addEventListener('click', function(){
+      if(bellForced()){ toast('🔒 Chuông dậy trưa BẮT BUỘC theo quy định công ty'); return; }
       try{ localStorage.setItem('bell_app_on', bellOn()?'0':'1'); }catch(e){}
       paintToggle();
       toast(bellOn() ? '🔔 Chuông dậy trưa: BẬT (máy này)' : '🔕 Chuông dậy trưa: TẮT (máy này)');
     });
-    fetch('/chuong-config').then(function(r){return r.json();}).then(function(d){ bellCfg=d; }).catch(function(){});
+    fetch('/chuong-config').then(function(r){return r.json();}).then(function(d){ bellCfg=d; paintToggle(); }).catch(function(){});
     setInterval(function(){ fetch('/chuong-config').then(function(r){return r.json();}).then(function(d){ bellCfg=d; }).catch(function(){}); }, 10*60*1000);
     // Trình duyệt chỉ cho phát âm thanh sau 1 thao tác chạm -> mở khoá ngầm ở lần chạm đầu
     document.addEventListener('touchstart', unlock, {once:true});

@@ -112,6 +112,13 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
               <label class="form-label small mb-1">🔔 Chuông trước (phút)</label>
               <input type="number" name="bell_before" class="form-control" value="{{ cfg.bell_before }}" min="0" max="30">
             </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label small mb-1">Chế độ chuông dậy trưa</label>
+              <select name="bell_mode" class="form-select">
+                <option value="required" {% if cfg.bell_mandatory %}selected{% endif %}>🔒 BẮT BUỘC mọi máy</option>
+                <option value="optional" {% if not cfg.bell_mandatory %}selected{% endif %}>Cho từng máy tự chọn</option>
+              </select>
+            </div>
             <div class="col-md-3">
               <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu khung giờ</button>
             </div>
