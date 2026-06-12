@@ -6,352 +6,443 @@
   <title>Quản lý chấm công</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+  <style>
+    /* ===== DALI Brand (Stitch) — phủ lên Bootstrap, không đổi hành vi ===== */
+    body{font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;}
+    [data-bs-theme=light] body.bg-body-tertiary{background-color:#f4f6f6!important;}
+
+    .card{border-radius:16px;box-shadow:0 2px 12px rgba(25,135,84,.07);overflow:hidden;}
+    [data-bs-theme=light] .card{border:1px solid #e9ecef;}
+    .card-header{font-weight:700;padding:.8rem 1.1rem;}
+    [data-bs-theme=light] .card-header{background:#fff;border-bottom:1px solid #f0f2f1;color:#212529;}
+    .card-header .bi{margin-right:.3rem;}
+    .card-body{padding:1.1rem;}
+
+    /* Nút chính theo brand: xanh #198754, đậm, bo 12px */
+    .btn{border-radius:12px;}
+    .btn-sm{border-radius:9px;}
+    .btn-primary{
+      --bs-btn-bg:#198754;--bs-btn-border-color:#198754;
+      --bs-btn-hover-bg:#157347;--bs-btn-hover-border-color:#146c43;
+      --bs-btn-active-bg:#146c43;--bs-btn-active-border-color:#13653f;
+      --bs-btn-disabled-bg:#198754;--bs-btn-disabled-border-color:#198754;
+      font-weight:700;
+    }
+    .btn-success{font-weight:700;}
+    form .btn-primary{padding-top:.55rem;padding-bottom:.55rem;}
+
+    .badge{border-radius:50rem;font-weight:600;}
+    .alert{border-radius:12px;}
+    .form-control,.form-select{border-radius:10px;}
+    .form-control-sm,.form-select-sm{border-radius:8px;}
+    [data-bs-theme=light] .form-label{color:#495057;font-weight:600;}
+
+    /* Bảng: header xám nhạt, dòng hover xanh rất nhẹ */
+    [data-bs-theme=light] .table>thead.table-light th{background:#f8f9fa;color:#495057;}
+    [data-bs-theme=light] .card .table tbody tr:not(.table-warning):hover>td{background:rgba(25,135,84,.045);}
+    .table>:not(caption)>*>*{padding-top:.5rem;padding-bottom:.5rem;}
+
+    /* Tiêu đề trang */
+    .page-head h1{letter-spacing:-.01em;}
+    .page-head .bi{color:#198754;}
+
+    /* Ngày làm việc: nút tròn kiểu Stitch (vẫn là btn-check của Bootstrap) */
+    .wd-btn{width:40px;height:40px;border-radius:50%!important;display:inline-flex;align-items:center;justify-content:center;padding:0;font-weight:700;font-size:.78rem;}
+
+    /* Ô sửa/thêm công nổi bật nhẹ */
+    #attEditCard{border-radius:14px!important;padding:1rem!important;}
+    [data-bs-theme=light] #attEditCard{background:#f8faf9!important;border:1px dashed #cfe2d8!important;}
+
+    .input-group-text{font-weight:600;}
+    details summary{cursor:pointer;}
+  </style>
 </head>
 <body class="bg-body-tertiary">
 
 {% include '_nav.html' %}
 
-<div class="container-fluid py-3">
+<div class="container-fluid py-3 px-md-4">
   {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
 
-  <!-- Cấu hình Wifi công ty -->
-  <div class="row">
-    <div class="col-12">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold"><i class="bi bi-wifi"></i> Wifi công ty (IP được phép chấm công)</div>
-        <div class="card-body">
-          <form method="POST" action="/cham-cong-quan-ly" class="row g-2 align-items-end">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="save_ips">
-            <div class="col-md-9">
-              <label class="form-label small mb-1">Danh sách IP công ty (cách nhau dấu phẩy). IP đầy đủ <code>113.161.4.20</code> hoặc tiền tố <code>113.161.</code></label>
-              <input type="text" name="ips" id="ips" class="form-control" value="{{ ips }}" placeholder="VD: 113.161.4.20, 14.169.">
-            </div>
-            <div class="col-md-3">
-              <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu IP công ty</button>
-            </div>
-          </form>
-          {% if cur_private %}
-          <div class="alert alert-danger mt-3 mb-0">
-            <i class="bi bi-exclamation-triangle-fill"></i> <b>nginx CHƯA chuyển IP thật.</b> Server đang nhận IP <b>{{ cur_ip }}</b> (nội bộ/localhost) — chấm công theo Wifi sẽ <b>không chính xác</b>.
-            <div class="small mt-1">Sửa cấu hình nginx (trong khối <code>location</code> proxy) rồi <code>nginx -s reload</code>:</div>
-            <pre class="small mb-0 mt-1 bg-body-secondary p-2 rounded">proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-proxy_set_header X-Real-IP $remote_addr;</pre>
-          </div>
-          {% else %}
-          <div class="alert {% if cur_ok %}alert-success{% elif cur_ok == None %}alert-secondary{% else %}alert-warning{% endif %} mt-3 mb-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <span><i class="bi bi-router"></i> IP bạn đang truy cập: <b id="curIp">{{ cur_ip }}</b>
-              {% if cur_ok %}<span class="badge text-bg-success ms-1"><i class="bi bi-check-lg"></i> KHỚP cấu hình</span>
-              {% elif cur_ok == None %}<span class="text-secondary ms-1">— chưa cấu hình IP nào (đang cho chấm mọi nơi)</span>
-              {% else %}<span class="badge text-bg-warning ms-1">CHƯA khớp — nếu đang ở Wifi công ty, bấm “Dùng IP này” rồi Lưu</span>{% endif %}
-            </span>
-            <button id="useIp" type="button" class="btn btn-sm btn-outline-primary">Dùng IP này</button>
-          </div>
-          {% endif %}
-        </div>
-      </div>
+  <!-- Tiêu đề trang -->
+  <div class="page-head d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <div>
+      <h1 class="h4 fw-bold mb-1"><i class="bi bi-person-badge"></i> Quản lý Chấm công &amp; Quy định</h1>
+      <div class="text-secondary small">Thiết lập tham số chấm công và kiểm soát dữ liệu công của xưởng</div>
     </div>
   </div>
 
-  <!-- Khung giờ & quy định -->
-  <div class="row mt-3">
-    <div class="col-12">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold"><i class="bi bi-clock-history"></i> Khung giờ làm việc &amp; quy định</div>
-        <div class="card-body">
-          <form method="POST" action="/cham-cong-quan-ly" class="row g-3 align-items-end">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="save_schedule">
-            <div class="col-6 col-md-2">
-              <label class="form-label small mb-1">Giờ vào</label>
-              <input type="time" name="work_start" class="form-control" value="{{ cfg.start }}">
-            </div>
-            <div class="col-6 col-md-2">
-              <label class="form-label small mb-1">Giờ ra</label>
-              <input type="time" name="work_end" class="form-control" value="{{ cfg.end }}">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label small mb-1">Ngày làm việc</label>
-              <div class="d-flex flex-wrap gap-1">
-                {% for d in weekday_opts %}
-                <input type="checkbox" class="btn-check" name="workday" value="{{ d.i }}" id="wd{{ d.i }}" {% if d.on %}checked{% endif %}>
-                <label class="btn btn-sm btn-outline-success" for="wd{{ d.i }}">{{ d.name }}</label>
-                {% endfor %}
-              </div>
-            </div>
-            <div class="col-6 col-md-2">
-              <label class="form-label small mb-1">Trễ cho phép (phút)</label>
-              <input type="number" name="grace" class="form-control" value="{{ cfg.grace }}" min="0">
-            </div>
-            <div class="col-6 col-md-2">
-              <label class="form-label small mb-1">Phạt / phút trễ (đ)</label>
-              <input type="number" name="fine_min" class="form-control" value="{{ cfg.fine_min|floatformat:0 }}" min="0" step="500">
-            </div>
-            <div class="col-6 col-md-3">
-              <label class="form-label small mb-1">Phạt cố định / lần muộn (đ)</label>
-              <input type="number" name="fine_fixed" class="form-control" value="{{ cfg.fine_fixed|floatformat:0 }}" min="0" step="1000">
-            </div>
-            <div class="col-6 col-md-3">
-              <label class="form-label small mb-1">Đơn giá tăng ca (đ/giờ)</label>
-              <input type="number" name="ot_rate" class="form-control" value="{{ cfg.ot_rate|floatformat:0 }}" min="0" step="1000">
-            </div>
-            <div class="col-6 col-md-3">
-              <label class="form-label small mb-1">Tăng ca tối thiểu (giờ)</label>
-              <input type="number" name="ot_min" class="form-control" value="{{ cfg.ot_min|floatformat:'-2' }}" min="0" step="0.5">
-            </div>
-            <div class="col-6 col-md-2">
-              <label class="form-label small mb-1">Nghỉ trưa từ</label>
-              <input type="time" name="lunch_start" class="form-control" value="{{ cfg.lunch_start }}">
-            </div>
-            <div class="col-6 col-md-2">
-              <label class="form-label small mb-1">Nghỉ trưa đến</label>
-              <input type="time" name="lunch_end" class="form-control" value="{{ cfg.lunch_end }}">
-            </div>
-            <div class="col-6 col-md-2">
-              <label class="form-label small mb-1">🔔 Chuông trước (phút)</label>
-              <input type="number" name="bell_before" class="form-control" value="{{ cfg.bell_before }}" min="0" max="30">
-            </div>
-            <div class="col-6 col-md-3">
-              <label class="form-label small mb-1">Chế độ chuông dậy trưa</label>
-              <select name="bell_mode" class="form-select">
-                <option value="required" {% if cfg.bell_mandatory %}selected{% endif %}>🔒 BẮT BUỘC mọi máy</option>
-                <option value="optional" {% if not cfg.bell_mandatory %}selected{% endif %}>Cho từng máy tự chọn</option>
-              </select>
-            </div>
-            <div class="col-md-3">
-              <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu khung giờ</button>
-            </div>
-          </form>
-          <div class="form-text mt-1">Đi muộn = vào sau (giờ vào + trễ cho phép) → phạt = phút trễ × (đ/phút) + phạt cố định. Tăng ca = làm sau giờ ra; làm ngày nghỉ tính tăng ca toàn bộ. <b>Chỉ tính tăng ca khi đạt “tối thiểu (giờ)”</b> — lố vài phút không tính (vd đặt 1 = phải tăng ca trên 1 giờ mới tính).</div>
-          <div class="form-text"><i class="bi bi-bell text-warning"></i> <b>Chuông dậy trưa</b>: kêu TRƯỚC giờ "Nghỉ trưa đến" số phút đã đặt (vd nghỉ đến 13:30, chuông trước 3 phút → 13:27 chuông kêu). Mở trang <a href="/chuong" target="_blank"><b>/chuong</b></a> trên 1 điện thoại/máy tính bảng cắm loa đặt ở xưởng, bấm "Bật chuông" 1 lần là xong — chuông kêu thành tiếng thật qua loa, không phải thông báo. Trong <b>/chuong → "Cài đặt máy này"</b> chỉnh được <b>riêng từng máy</b>: âm lượng, số tiếng chuông, kêu trước mấy phút, bật/tắt chuông dậy trưa + chuông tan làm (đặt nhiều máy ở nhiều khu, mỗi máy 1 kiểu).</div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <div class="row g-3">
+    <!-- ===== CỘT TRÁI: Cấu hình ===== -->
+    <div class="col-lg-4">
+      <div class="vstack gap-3">
 
-  <!-- Cảnh báo bất thường -->
-  <div class="row mt-3">
-    <div class="col-12">
-      <div class="card shadow-sm border-{% if shared or noout %}danger{% else %}success{% endif %}">
-        <div class="card-header fw-semibold"><i class="bi bi-shield-exclamation"></i> Cảnh báo bất thường — {{ month_label }}</div>
-        <div class="card-body">
-          {% if not shared and not noout %}
-          <div class="text-success"><i class="bi bi-check-circle"></i> Không có bất thường (chấm hộ / quên chấm ra) trong tháng này.</div>
-          {% endif %}
-
-          {% if shared %}
-          <div class="alert alert-danger py-2">
-            <b><i class="bi bi-people-fill"></i> 1 thiết bị chấm cho NHIỀU người (nghi chấm hộ):</b>
-            <ul class="mb-0">{% for s in shared %}<li>Máy <code>{{ s.token }}</code>: {{ s.users|join:", " }}</li>{% endfor %}</ul>
-            <div class="small mt-1">→ Reset thiết bị của những người này ở mục bên dưới để buộc gắn lại đúng máy.</div>
-          </div>
-          {% endif %}
-
-          {% if noout %}
-          <div class="fw-semibold text-warning"><i class="bi bi-box-arrow-right"></i> Quên chấm RA ({{ noout|length }})</div>
-          <table class="table table-sm mb-0" style="max-width:400px"><tbody>
-            {% for r in noout %}<tr><td>{{ r.day }}</td><td>{{ r.user }}</td></tr>{% endfor %}
-          </tbody></table>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Khoá thiết bị -->
-  <div class="row mt-3">
-    <div class="col-12">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold"><i class="bi bi-phone-flip"></i> Khoá thiết bị (mỗi người 1 máy)</div>
-        <div class="card-body">
-          <div class="small text-secondary mb-2">Lần đầu chấm công, tài khoản sẽ gắn với điện thoại đó. Khi nhân viên <b>đổi máy</b>, bấm <b>Reset</b> để họ gắn lại máy mới.</div>
-          {% if not bindings %}
-          <div class="text-secondary">Chưa có ai chấm công (chưa gắn thiết bị).</div>
-          {% else %}
-          <div class="table-responsive">
-            <table class="table table-sm align-middle">
-              <thead class="table-light"><tr><th>Nhân viên</th><th>Gắn lúc</th><th>Thiết bị</th><th></th></tr></thead>
-              <tbody>
-                {% for b in bindings %}
-                <tr>
-                  <td class="fw-semibold">{{ b.user }}</td>
-                  <td class="small text-secondary">{{ b.when }}</td>
-                  <td class="small text-secondary" style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.ua }}</td>
-                  <td class="text-end">
-                    <form method="POST" action="/cham-cong-quan-ly" class="d-inline" onsubmit="return confirm('Reset thiết bị cho {{ b.user }}? Lần chấm tiếp theo sẽ gắn máy mới.')">{% csrf_token %}
-                      <input type="hidden" name="action" value="reset_device"><input type="hidden" name="user" value="{{ b.user }}">
-                      <button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-arrow-repeat"></i> Reset</button>
-                    </form>
-                  </td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Đơn xin nghỉ phép -->
-  <div class="row mt-3">
-    <div class="col-12">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold"><i class="bi bi-calendar2-x text-warning"></i> Đơn xin nghỉ phép
-          {% if leave_pending %}<span class="badge text-bg-danger">{{ leave_pending|length }} chờ duyệt</span>{% endif %}
-        </div>
-        <div class="card-body">
-          {% if leave_pending %}
-          <table class="table table-sm align-middle mb-3">
-            <thead class="table-light"><tr><th>Nhân viên</th><th>Ngày nghỉ</th><th>Lý do</th><th class="text-end">Quyết định</th></tr></thead>
-            <tbody>
-              {% for l in leave_pending %}
-              <tr>
-                <td class="fw-semibold">{{ l.user }}</td><td>{{ l.rng }}</td><td class="small">{{ l.reason|default:"—" }}</td>
-                <td class="text-end text-nowrap">
-                  <form method="POST" action="/cham-cong-quan-ly" class="d-inline">{% csrf_token %}
-                    <input type="hidden" name="action" value="leave_decide"><input type="hidden" name="id" value="{{ l.id }}"><input type="hidden" name="decision" value="approve">
-                    <button class="btn btn-sm btn-success py-0"><i class="bi bi-check-lg"></i> Duyệt</button>
-                  </form>
-                  <form method="POST" action="/cham-cong-quan-ly" class="d-inline" onsubmit="return confirm('Từ chối đơn nghỉ của {{ l.user }}?')">{% csrf_token %}
-                    <input type="hidden" name="action" value="leave_decide"><input type="hidden" name="id" value="{{ l.id }}"><input type="hidden" name="decision" value="reject">
-                    <button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-x-lg"></i> Từ chối</button>
-                  </form>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-          {% else %}<div class="small text-secondary mb-2">Không có đơn nào chờ duyệt.</div>{% endif %}
-          {% if leave_recent %}
-          <details class="small">
-            <summary class="text-secondary" style="cursor:pointer">Đơn đã xử lý gần đây ({{ leave_recent|length }})</summary>
-            <table class="table table-sm mt-2 mb-0">
-              <tbody>
-                {% for l in leave_recent %}
-                <tr><td>{{ l.user }}</td><td>{{ l.rng }}</td><td class="small text-secondary">{{ l.reason|truncatechars:40 }}</td>
-                  <td class="text-end"><span class="badge {% if l.status == 'approved' %}text-bg-success{% else %}text-bg-danger{% endif %}">{% if l.status == 'approved' %}Đã duyệt{% else %}Từ chối{% endif %}</span> <span class="text-secondary">bởi {{ l.decided_by }}</span></td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </details>
-          {% endif %}
-          <div class="form-text mt-1">Nhân viên gửi đơn từ trang Chấm công. Ngày nghỉ ĐÃ DUYỆT: hiện cột "Nghỉ phép" ở bảng công, không gửi nhắc chấm công, và đưa vào API lương cho kế toán (leave_days).</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Bảng công -->
-  <div class="row mt-3">
-    <div class="col-12">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold d-flex flex-wrap justify-content-between align-items-center gap-2">
-          <span><i class="bi bi-card-checklist"></i> Bảng công — {{ month_label }}</span>
-          <span class="d-flex gap-2">
-            <select id="monthSel" class="form-select form-select-sm" style="max-width:160px">
-              {% for m in months %}<option value="{{ m.value }}" {% if m.value == month %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
-            </select>
-            <a id="excelBtn" href="/cham-cong-excel?month={{ month }}" class="btn btn-sm btn-success"><i class="bi bi-file-earmark-excel"></i> Xuất Excel</a>
-          </span>
-        </div>
-        <div class="card-body">
-          <div class="fw-semibold mb-2">Tổng hợp theo nhân viên</div>
-          <div class="table-responsive mb-4">
-            <table class="table table-sm align-middle">
-              <thead class="table-light"><tr><th>Nhân viên</th><th class="text-center">Ngày công</th><th class="text-center">Nghỉ phép</th><th class="text-end">Tổng giờ</th><th class="text-end">Tăng ca</th><th class="text-end">Đi muộn</th><th class="text-end">Phạt (đ)</th><th class="text-end">Tiền OT (đ)</th></tr></thead>
-              <tbody>
-                {% for s in summary %}<tr><td class="fw-semibold">{{ s.user }}</td><td class="text-center">{{ s.days }}</td><td class="text-center">{% if s.leave %}<span class="badge text-bg-warning">{{ s.leave }}</span>{% else %}—{% endif %}</td><td class="text-end">{{ s.hours }}h</td><td class="text-end">{% if s.ot %}{{ s.ot }}h{% else %}—{% endif %}</td><td class="text-end">{% if s.late %}{{ s.late }}'{% else %}—{% endif %}</td><td class="text-end {% if s.fine %}text-danger fw-bold{% endif %}">{{ s.fine|floatformat:0 }}</td><td class="text-end">{{ s.ot_pay|floatformat:0 }}</td></tr>
-                {% empty %}<tr><td colspan="8" class="text-secondary text-center">Chưa có dữ liệu tháng này.</td></tr>{% endfor %}
-              </tbody>
-              {% if summary %}<tfoot class="table-light fw-bold"><tr><td>TỔNG</td><td class="text-center">{{ totals.days }}</td><td class="text-center">{{ totals.leave }}</td><td class="text-end">{{ totals.hours }}h</td><td class="text-end">{{ totals.ot }}h</td><td class="text-end">{{ totals.late }}'</td><td class="text-end text-danger">{{ totals.fine|floatformat:0 }}</td><td class="text-end">{{ totals.ot_pay|floatformat:0 }}</td></tr></tfoot>{% endif %}
-            </table>
-          </div>
-
-          <!-- Sửa / thêm công thủ công (quản lý điền bù ngày cũ, kể cả tháng trước) -->
-          <div class="border rounded p-2 mb-3 bg-body-tertiary" id="attEditCard">
-            <div class="fw-semibold mb-2"><i class="bi bi-pencil-square text-primary"></i> Sửa / thêm công thủ công
-              <span class="text-secondary small fw-normal">— điền bù ngày cũ, kể cả tháng trước</span></div>
+        <!-- Cấu hình Wifi công ty -->
+        <div class="card shadow-sm">
+          <div class="card-header"><i class="bi bi-wifi text-success"></i> Wifi công ty (IP được phép chấm công)</div>
+          <div class="card-body">
             <form method="POST" action="/cham-cong-quan-ly" class="row g-2 align-items-end">
               {% csrf_token %}
-              <input type="hidden" name="action" value="save_attendance">
-              <div class="col-6 col-md-3">
-                <label class="form-label small mb-1">Nhân viên</label>
-                <input type="text" name="att_user" id="attUser" class="form-control form-control-sm" list="empList" autocomplete="off" placeholder="tên đăng nhập" required>
-                <datalist id="empList">{% for u in emp_users %}<option value="{{ u }}"></option>{% endfor %}</datalist>
+              <input type="hidden" name="action" value="save_ips">
+              <div class="col-12">
+                <label class="form-label small mb-1">Danh sách IP công ty (cách nhau dấu phẩy). IP đầy đủ <code>113.161.4.20</code> hoặc tiền tố <code>113.161.</code></label>
+                <input type="text" name="ips" id="ips" class="form-control" value="{{ ips }}" placeholder="VD: 113.161.4.20, 14.169.">
               </div>
-              <div class="col-6 col-md-3">
-                <label class="form-label small mb-1">Ngày</label>
-                <input type="date" name="att_day" id="attDay" class="form-control form-control-sm" max="{{ today_iso }}" required>
-              </div>
-              <div class="col-4 col-md-2">
-                <label class="form-label small mb-1">Giờ vào</label>
-                <input type="time" name="att_in" id="attIn" class="form-control form-control-sm">
-              </div>
-              <div class="col-4 col-md-2">
-                <label class="form-label small mb-1">Giờ ra</label>
-                <input type="time" name="att_out" id="attOut" class="form-control form-control-sm">
-              </div>
-              <div class="col-4 col-md-2">
-                <button class="btn btn-primary btn-sm w-100 fw-semibold"><i class="bi bi-save"></i> Lưu</button>
+              <div class="col-12">
+                <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu IP công ty</button>
               </div>
             </form>
-            <div class="form-text">Bỏ trống giờ nếu không có. Chọn đúng <b>nhân viên + ngày đã có</b> sẽ <b>ghi đè</b> giờ cũ. Bấm <i class="bi bi-pencil"></i> ở mỗi dòng dưới để sửa nhanh.</div>
+            {% if cur_private %}
+            <div class="alert alert-danger mt-3 mb-0">
+              <i class="bi bi-exclamation-triangle-fill"></i> <b>nginx CHƯA chuyển IP thật.</b> Server đang nhận IP <b>{{ cur_ip }}</b> (nội bộ/localhost) — chấm công theo Wifi sẽ <b>không chính xác</b>.
+              <div class="small mt-1">Sửa cấu hình nginx (trong khối <code>location</code> proxy) rồi <code>nginx -s reload</code>:</div>
+              <pre class="small mb-0 mt-1 bg-body-secondary p-2 rounded">proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Real-IP $remote_addr;</pre>
+            </div>
+            {% else %}
+            <div class="alert {% if cur_ok %}alert-success{% elif cur_ok == None %}alert-secondary{% else %}alert-warning{% endif %} mt-3 mb-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+              <span><i class="bi bi-router"></i> IP bạn đang truy cập: <b id="curIp">{{ cur_ip }}</b>
+                {% if cur_ok %}<span class="badge text-bg-success ms-1"><i class="bi bi-check-lg"></i> KHỚP cấu hình</span>
+                {% elif cur_ok == None %}<span class="text-secondary ms-1">— chưa cấu hình IP nào (đang cho chấm mọi nơi)</span>
+                {% else %}<span class="badge text-bg-warning ms-1">CHƯA khớp — nếu đang ở Wifi công ty, bấm “Dùng IP này” rồi Lưu</span>{% endif %}
+              </span>
+              <button id="useIp" type="button" class="btn btn-sm btn-outline-primary">Dùng IP này</button>
+            </div>
+            {% endif %}
           </div>
+        </div>
 
-          <div class="fw-semibold mb-2">Chi tiết từng ngày</div>
-          <div class="table-responsive" style="max-height:520px;overflow:auto">
-            <table class="table table-sm">
-              <thead class="table-light position-sticky top-0"><tr><th>Ngày</th><th>Thứ</th><th>Nhân viên</th><th class="text-center">Vào</th><th class="text-center">Ra</th><th class="text-end">Giờ</th><th class="text-end">Muộn</th><th class="text-end">Tăng ca</th><th class="text-end">Phạt</th><th class="text-end">Sửa</th></tr></thead>
+        <!-- Khung giờ & quy định -->
+        <div class="card shadow-sm">
+          <div class="card-header"><i class="bi bi-clock-history text-primary"></i> Khung giờ làm việc &amp; quy định</div>
+          <div class="card-body">
+            <form method="POST" action="/cham-cong-quan-ly" class="row g-3 align-items-end">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="save_schedule">
+              <div class="col-6">
+                <label class="form-label small mb-1">Giờ vào</label>
+                <input type="time" name="work_start" class="form-control" value="{{ cfg.start }}">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1">Giờ ra</label>
+                <input type="time" name="work_end" class="form-control" value="{{ cfg.end }}">
+              </div>
+              <div class="col-12">
+                <label class="form-label small mb-1">Ngày làm việc</label>
+                <div class="d-flex flex-wrap gap-1 justify-content-between">
+                  {% for d in weekday_opts %}
+                  <input type="checkbox" class="btn-check" name="workday" value="{{ d.i }}" id="wd{{ d.i }}" {% if d.on %}checked{% endif %}>
+                  <label class="btn btn-sm btn-outline-success wd-btn" for="wd{{ d.i }}">{{ d.name }}</label>
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1">Trễ cho phép (phút)</label>
+                <input type="number" name="grace" class="form-control" value="{{ cfg.grace }}" min="0">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1">Phạt / phút trễ (đ)</label>
+                <input type="number" name="fine_min" class="form-control" value="{{ cfg.fine_min|floatformat:0 }}" min="0" step="500">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1">Phạt cố định / lần muộn (đ)</label>
+                <input type="number" name="fine_fixed" class="form-control" value="{{ cfg.fine_fixed|floatformat:0 }}" min="0" step="1000">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1">Đơn giá tăng ca (đ/giờ)</label>
+                <input type="number" name="ot_rate" class="form-control" value="{{ cfg.ot_rate|floatformat:0 }}" min="0" step="1000">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1">Tăng ca tối thiểu (giờ)</label>
+                <input type="number" name="ot_min" class="form-control" value="{{ cfg.ot_min|floatformat:'-2' }}" min="0" step="0.5">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1">🔔 Chuông trước (phút)</label>
+                <input type="number" name="bell_before" class="form-control" value="{{ cfg.bell_before }}" min="0" max="30">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1">Nghỉ trưa từ</label>
+                <input type="time" name="lunch_start" class="form-control" value="{{ cfg.lunch_start }}">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1">Nghỉ trưa đến</label>
+                <input type="time" name="lunch_end" class="form-control" value="{{ cfg.lunch_end }}">
+              </div>
+              <div class="col-12">
+                <label class="form-label small mb-1">Chế độ chuông dậy trưa</label>
+                <select name="bell_mode" class="form-select">
+                  <option value="required" {% if cfg.bell_mandatory %}selected{% endif %}>🔒 BẮT BUỘC mọi máy</option>
+                  <option value="optional" {% if not cfg.bell_mandatory %}selected{% endif %}>Cho từng máy tự chọn</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu khung giờ</button>
+              </div>
+            </form>
+            <div class="form-text mt-2">Đi muộn = vào sau (giờ vào + trễ cho phép) → phạt = phút trễ × (đ/phút) + phạt cố định. Tăng ca = làm sau giờ ra; làm ngày nghỉ tính tăng ca toàn bộ. <b>Chỉ tính tăng ca khi đạt “tối thiểu (giờ)”</b> — lố vài phút không tính (vd đặt 1 = phải tăng ca trên 1 giờ mới tính).</div>
+            <div class="form-text"><i class="bi bi-bell text-warning"></i> <b>Chuông dậy trưa</b>: kêu TRƯỚC giờ "Nghỉ trưa đến" số phút đã đặt (vd nghỉ đến 13:30, chuông trước 3 phút → 13:27 chuông kêu). Mở trang <a href="/chuong" target="_blank"><b>/chuong</b></a> trên 1 điện thoại/máy tính bảng cắm loa đặt ở xưởng, bấm "Bật chuông" 1 lần là xong — chuông kêu thành tiếng thật qua loa, không phải thông báo. Trong <b>/chuong → "Cài đặt máy này"</b> chỉnh được <b>riêng từng máy</b>: âm lượng, số tiếng chuông, kêu trước mấy phút, bật/tắt chuông dậy trưa + chuông tan làm (đặt nhiều máy ở nhiều khu, mỗi máy 1 kiểu).</div>
+          </div>
+        </div>
+
+        <!-- Ngày nghỉ lễ Việt Nam -->
+        <div class="card shadow-sm">
+          <div class="card-header"><i class="bi bi-calendar2-heart text-danger"></i> Ngày nghỉ lễ Việt Nam <span class="text-secondary small fw-normal">(tự cập nhật theo năm)</span></div>
+          <div class="card-body">
+            <div class="small text-secondary mb-2">Tự tính lễ dương + âm (Tết, Giỗ Tổ…). Ngày lễ được tính như ngày nghỉ (làm = tăng ca, không phạt muộn) và không gửi nhắc.</div>
+            <div class="table-responsive mb-2" style="max-height:240px;overflow:auto">
+              <table class="table table-sm mb-0">
+                <tbody>
+                  {% for h in holidays %}
+                  <tr>
+                    <td class="text-nowrap small">{{ h.date_fmt }}</td>
+                    <td class="small">{{ h.name }}{% if h.custom %} <span class="badge text-bg-info">tự thêm</span>{% endif %}</td>
+                    <td class="text-end">
+                      <form method="POST" action="/cham-cong-quan-ly" class="d-inline" onsubmit="return confirm('Bỏ ngày nghỉ {{ h.date_fmt }}? (coi là ngày làm bình thường)')">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="del_holiday">
+                        <input type="hidden" name="hd_date" value="{{ h.date }}">
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1" title="Bỏ ngày này"><i class="bi bi-x"></i></button>
+                      </form>
+                    </td>
+                  </tr>
+                  {% empty %}<tr><td class="text-secondary small">Không có ngày lễ sắp tới.</td></tr>{% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <form method="POST" action="/cham-cong-quan-ly" class="row g-1 align-items-end">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="add_holiday">
+              <div class="col-5"><label class="form-label small mb-0">Thêm ngày</label><input type="date" name="hd_date" class="form-control form-control-sm" required></div>
+              <div class="col-5"><label class="form-label small mb-0">Tên</label><input type="text" name="hd_name" class="form-control form-control-sm" placeholder="VD: Nghỉ bù"></div>
+              <div class="col-2"><button class="btn btn-sm btn-success w-100"><i class="bi bi-plus-lg"></i></button></div>
+            </form>
+            <div class="form-text">Dùng để thêm ngày nghỉ bù / nghỉ riêng của công ty, hoặc bỏ ngày lễ nếu vẫn đi làm.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ===== CỘT PHẢI: Vận hành ===== -->
+    <div class="col-lg-8">
+      <div class="vstack gap-3">
+
+        <!-- Cảnh báo bất thường -->
+        <div class="card shadow-sm border-{% if shared or noout %}danger{% else %}success{% endif %}">
+          <div class="card-header"><i class="bi bi-shield-exclamation {% if shared or noout %}text-danger{% else %}text-success{% endif %}"></i> Cảnh báo bất thường — {{ month_label }}</div>
+          <div class="card-body">
+            {% if not shared and not noout %}
+            <div class="text-success"><i class="bi bi-check-circle"></i> Không có bất thường (chấm hộ / quên chấm ra) trong tháng này.</div>
+            {% endif %}
+
+            {% if shared %}
+            <div class="alert alert-danger py-2">
+              <b><i class="bi bi-people-fill"></i> 1 thiết bị chấm cho NHIỀU người (nghi chấm hộ):</b>
+              <ul class="mb-0">{% for s in shared %}<li>Máy <code>{{ s.token }}</code>: {{ s.users|join:", " }}</li>{% endfor %}</ul>
+              <div class="small mt-1">→ Reset thiết bị của những người này ở mục bên dưới để buộc gắn lại đúng máy.</div>
+            </div>
+            {% endif %}
+
+            {% if noout %}
+            <div class="fw-semibold text-warning"><i class="bi bi-box-arrow-right"></i> Quên chấm RA ({{ noout|length }})</div>
+            <table class="table table-sm mb-0" style="max-width:400px"><tbody>
+              {% for r in noout %}<tr><td>{{ r.day }}</td><td>{{ r.user }}</td></tr>{% endfor %}
+            </tbody></table>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Đơn xin nghỉ phép -->
+        <div class="card shadow-sm">
+          <div class="card-header"><i class="bi bi-calendar2-x text-warning"></i> Đơn xin nghỉ phép
+            {% if leave_pending %}<span class="badge text-bg-danger">{{ leave_pending|length }} chờ duyệt</span>{% endif %}
+          </div>
+          <div class="card-body">
+            {% if leave_pending %}
+            <table class="table table-sm align-middle mb-3">
+              <thead class="table-light"><tr><th>Nhân viên</th><th>Ngày nghỉ</th><th>Lý do</th><th class="text-end">Quyết định</th></tr></thead>
               <tbody>
-                {% for r in detail %}<tr{% if r.rest %} class="table-warning"{% endif %}>
-                  <td>{{ r.day }}</td><td class="small">{{ r.wd }}{% if r.holiday %} <span class="badge text-bg-danger" title="{{ r.holiday }}">lễ</span>{% elif r.rest %} <span class="badge text-bg-warning">nghỉ</span>{% endif %}</td>
-                  <td>{{ r.user }}</td><td class="text-center">{{ r.in|default:"—" }}</td><td class="text-center">{{ r.out|default:"—" }}</td>
-                  <td class="text-end">{% if r.hours %}{{ r.hours }}h{% else %}—{% endif %}</td>
-                  <td class="text-end {% if r.late %}text-danger{% endif %}">{% if r.late %}{{ r.late }}'{% else %}—{% endif %}</td>
-                  <td class="text-end">{% if r.ot %}{{ r.ot }}h{% else %}—{% endif %}</td>
-                  <td class="text-end {% if r.fine %}text-danger fw-bold{% endif %}">{% if r.fine %}{{ r.fine|floatformat:0 }}{% else %}—{% endif %}</td>
+                {% for l in leave_pending %}
+                <tr>
+                  <td class="fw-semibold">{{ l.user }}</td><td>{{ l.rng }}</td><td class="small">{{ l.reason|default:"—" }}</td>
                   <td class="text-end text-nowrap">
-                    <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 att-edit"
-                      data-user="{{ r.user }}" data-day="{{ r.day_iso }}" data-in="{{ r.in }}" data-out="{{ r.out }}" title="Sửa giờ"><i class="bi bi-pencil"></i></button>
-                    <form method="POST" action="/cham-cong-quan-ly" class="d-inline" onsubmit="return confirm('Xoá chấm công {{ r.user }} ngày {{ r.day }}?')">
-                      {% csrf_token %}
-                      <input type="hidden" name="action" value="delete_attendance">
-                      <input type="hidden" name="att_user" value="{{ r.user }}">
-                      <input type="hidden" name="att_day" value="{{ r.day_iso }}">
-                      <button class="btn btn-sm btn-outline-danger py-0 px-1" title="Xoá"><i class="bi bi-trash"></i></button>
+                    <form method="POST" action="/cham-cong-quan-ly" class="d-inline">{% csrf_token %}
+                      <input type="hidden" name="action" value="leave_decide"><input type="hidden" name="id" value="{{ l.id }}"><input type="hidden" name="decision" value="approve">
+                      <button class="btn btn-sm btn-success py-0"><i class="bi bi-check-lg"></i> Duyệt</button>
+                    </form>
+                    <form method="POST" action="/cham-cong-quan-ly" class="d-inline" onsubmit="return confirm('Từ chối đơn nghỉ của {{ l.user }}?')">{% csrf_token %}
+                      <input type="hidden" name="action" value="leave_decide"><input type="hidden" name="id" value="{{ l.id }}"><input type="hidden" name="decision" value="reject">
+                      <button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-x-lg"></i> Từ chối</button>
                     </form>
                   </td>
                 </tr>
-                {% empty %}<tr><td colspan="10" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>{% endfor %}
+                {% endfor %}
               </tbody>
             </table>
+            {% else %}<div class="small text-secondary mb-2">Không có đơn nào chờ duyệt.</div>{% endif %}
+            {% if leave_recent %}
+            <details class="small">
+              <summary class="text-secondary" style="cursor:pointer">Đơn đã xử lý gần đây ({{ leave_recent|length }})</summary>
+              <table class="table table-sm mt-2 mb-0">
+                <tbody>
+                  {% for l in leave_recent %}
+                  <tr><td>{{ l.user }}</td><td>{{ l.rng }}</td><td class="small text-secondary">{{ l.reason|truncatechars:40 }}</td>
+                    <td class="text-end"><span class="badge {% if l.status == 'approved' %}text-bg-success{% else %}text-bg-danger{% endif %}">{% if l.status == 'approved' %}Đã duyệt{% else %}Từ chối{% endif %}</span> <span class="text-secondary">bởi {{ l.decided_by }}</span></td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </details>
+            {% endif %}
+            <div class="form-text mt-1">Nhân viên gửi đơn từ trang Chấm công. Ngày nghỉ ĐÃ DUYỆT: hiện cột "Nghỉ phép" ở bảng công, không gửi nhắc chấm công, và đưa vào API lương cho kế toán (leave_days).</div>
           </div>
         </div>
+
+        <!-- Bảng công -->
+        <div class="card shadow-sm">
+          <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span><i class="bi bi-card-checklist text-success"></i> Bảng công — {{ month_label }}</span>
+            <span class="d-flex gap-2">
+              <select id="monthSel" class="form-select form-select-sm" style="max-width:160px">
+                {% for m in months %}<option value="{{ m.value }}" {% if m.value == month %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
+              </select>
+              <a id="excelBtn" href="/cham-cong-excel?month={{ month }}" class="btn btn-sm btn-success"><i class="bi bi-file-earmark-excel"></i> Xuất Excel</a>
+            </span>
+          </div>
+          <div class="card-body">
+            <div class="fw-semibold mb-2">Tổng hợp theo nhân viên</div>
+            <div class="table-responsive mb-4">
+              <table class="table table-sm align-middle">
+                <thead class="table-light"><tr><th>Nhân viên</th><th class="text-center">Ngày công</th><th class="text-center">Nghỉ phép</th><th class="text-end">Tổng giờ</th><th class="text-end">Tăng ca</th><th class="text-end">Đi muộn</th><th class="text-end">Phạt (đ)</th><th class="text-end">Tiền OT (đ)</th></tr></thead>
+                <tbody>
+                  {% for s in summary %}<tr><td class="fw-semibold">{{ s.user }}</td><td class="text-center">{{ s.days }}</td><td class="text-center">{% if s.leave %}<span class="badge text-bg-warning">{{ s.leave }}</span>{% else %}—{% endif %}</td><td class="text-end">{{ s.hours }}h</td><td class="text-end">{% if s.ot %}{{ s.ot }}h{% else %}—{% endif %}</td><td class="text-end">{% if s.late %}{{ s.late }}'{% else %}—{% endif %}</td><td class="text-end {% if s.fine %}text-danger fw-bold{% endif %}">{{ s.fine|floatformat:0 }}</td><td class="text-end">{{ s.ot_pay|floatformat:0 }}</td></tr>
+                  {% empty %}<tr><td colspan="8" class="text-secondary text-center">Chưa có dữ liệu tháng này.</td></tr>{% endfor %}
+                </tbody>
+                {% if summary %}<tfoot class="table-light fw-bold"><tr><td>TỔNG</td><td class="text-center">{{ totals.days }}</td><td class="text-center">{{ totals.leave }}</td><td class="text-end">{{ totals.hours }}h</td><td class="text-end">{{ totals.ot }}h</td><td class="text-end">{{ totals.late }}'</td><td class="text-end text-danger">{{ totals.fine|floatformat:0 }}</td><td class="text-end">{{ totals.ot_pay|floatformat:0 }}</td></tr></tfoot>{% endif %}
+              </table>
+            </div>
+
+            <!-- Sửa / thêm công thủ công (quản lý điền bù ngày cũ, kể cả tháng trước) -->
+            <div class="border rounded p-2 mb-3 bg-body-tertiary" id="attEditCard">
+              <div class="fw-semibold mb-2"><i class="bi bi-pencil-square text-primary"></i> Sửa / thêm công thủ công
+                <span class="text-secondary small fw-normal">— điền bù ngày cũ, kể cả tháng trước</span></div>
+              <form method="POST" action="/cham-cong-quan-ly" class="row g-2 align-items-end">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_attendance">
+                <div class="col-6 col-md-3">
+                  <label class="form-label small mb-1">Nhân viên</label>
+                  <input type="text" name="att_user" id="attUser" class="form-control form-control-sm" list="empList" autocomplete="off" placeholder="tên đăng nhập" required>
+                  <datalist id="empList">{% for u in emp_users %}<option value="{{ u }}"></option>{% endfor %}</datalist>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label small mb-1">Ngày</label>
+                  <input type="date" name="att_day" id="attDay" class="form-control form-control-sm" max="{{ today_iso }}" required>
+                </div>
+                <div class="col-4 col-md-2">
+                  <label class="form-label small mb-1">Giờ vào</label>
+                  <input type="time" name="att_in" id="attIn" class="form-control form-control-sm">
+                </div>
+                <div class="col-4 col-md-2">
+                  <label class="form-label small mb-1">Giờ ra</label>
+                  <input type="time" name="att_out" id="attOut" class="form-control form-control-sm">
+                </div>
+                <div class="col-4 col-md-2">
+                  <button class="btn btn-primary btn-sm w-100 fw-semibold"><i class="bi bi-save"></i> Lưu</button>
+                </div>
+              </form>
+              <div class="form-text">Bỏ trống giờ nếu không có. Chọn đúng <b>nhân viên + ngày đã có</b> sẽ <b>ghi đè</b> giờ cũ. Bấm <i class="bi bi-pencil"></i> ở mỗi dòng dưới để sửa nhanh.</div>
+            </div>
+
+            <div class="fw-semibold mb-2">Chi tiết từng ngày</div>
+            <div class="table-responsive" style="max-height:520px;overflow:auto">
+              <table class="table table-sm">
+                <thead class="table-light position-sticky top-0"><tr><th>Ngày</th><th>Thứ</th><th>Nhân viên</th><th class="text-center">Vào</th><th class="text-center">Ra</th><th class="text-end">Giờ</th><th class="text-end">Muộn</th><th class="text-end">Tăng ca</th><th class="text-end">Phạt</th><th class="text-end">Sửa</th></tr></thead>
+                <tbody>
+                  {% for r in detail %}<tr{% if r.rest %} class="table-warning"{% endif %}>
+                    <td>{{ r.day }}</td><td class="small">{{ r.wd }}{% if r.holiday %} <span class="badge text-bg-danger" title="{{ r.holiday }}">lễ</span>{% elif r.rest %} <span class="badge text-bg-warning">nghỉ</span>{% endif %}</td>
+                    <td>{{ r.user }}</td><td class="text-center">{{ r.in|default:"—" }}</td><td class="text-center">{{ r.out|default:"—" }}</td>
+                    <td class="text-end">{% if r.hours %}{{ r.hours }}h{% else %}—{% endif %}</td>
+                    <td class="text-end {% if r.late %}text-danger{% endif %}">{% if r.late %}{{ r.late }}'{% else %}—{% endif %}</td>
+                    <td class="text-end">{% if r.ot %}{{ r.ot }}h{% else %}—{% endif %}</td>
+                    <td class="text-end {% if r.fine %}text-danger fw-bold{% endif %}">{% if r.fine %}{{ r.fine|floatformat:0 }}{% else %}—{% endif %}</td>
+                    <td class="text-end text-nowrap">
+                      <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 att-edit"
+                        data-user="{{ r.user }}" data-day="{{ r.day_iso }}" data-in="{{ r.in }}" data-out="{{ r.out }}" title="Sửa giờ"><i class="bi bi-pencil"></i></button>
+                      <form method="POST" action="/cham-cong-quan-ly" class="d-inline" onsubmit="return confirm('Xoá chấm công {{ r.user }} ngày {{ r.day }}?')">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete_attendance">
+                        <input type="hidden" name="att_user" value="{{ r.user }}">
+                        <input type="hidden" name="att_day" value="{{ r.day_iso }}">
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1" title="Xoá"><i class="bi bi-trash"></i></button>
+                      </form>
+                    </td>
+                  </tr>
+                  {% empty %}<tr><td colspan="10" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>{% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Khoá thiết bị -->
+        <div class="card shadow-sm">
+          <div class="card-header"><i class="bi bi-phone-flip text-primary"></i> Khoá thiết bị (mỗi người 1 máy)</div>
+          <div class="card-body">
+            <div class="small text-secondary mb-2">Lần đầu chấm công, tài khoản sẽ gắn với điện thoại đó. Khi nhân viên <b>đổi máy</b>, bấm <b>Reset</b> để họ gắn lại máy mới.</div>
+            {% if not bindings %}
+            <div class="text-secondary">Chưa có ai chấm công (chưa gắn thiết bị).</div>
+            {% else %}
+            <div class="table-responsive">
+              <table class="table table-sm align-middle">
+                <thead class="table-light"><tr><th>Nhân viên</th><th>Gắn lúc</th><th>Thiết bị</th><th></th></tr></thead>
+                <tbody>
+                  {% for b in bindings %}
+                  <tr>
+                    <td class="fw-semibold">{{ b.user }}</td>
+                    <td class="small text-secondary">{{ b.when }}</td>
+                    <td class="small text-secondary" style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ b.ua }}</td>
+                    <td class="text-end">
+                      <form method="POST" action="/cham-cong-quan-ly" class="d-inline" onsubmit="return confirm('Reset thiết bị cho {{ b.user }}? Lần chấm tiếp theo sẽ gắn máy mới.')">{% csrf_token %}
+                        <input type="hidden" name="action" value="reset_device"><input type="hidden" name="user" value="{{ b.user }}">
+                        <button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-arrow-repeat"></i> Reset</button>
+                      </form>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
 
-  <!-- Khoá API kế toán / lương -->
-  <div class="row mt-3">
-    <div class="col-12">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold"><i class="bi bi-key-fill"></i> Khoá API kế toán / lương</div>
+  <!-- ===== HÀNG DƯỚI: Kết nối kế toán & tự động ===== -->
+  <div class="row g-3 mt-0">
+
+    <!-- Khoá API kế toán / lương -->
+    <div class="col-lg-6 d-flex">
+      <div class="card shadow-sm w-100">
+        <div class="card-header"><i class="bi bi-key-fill text-warning"></i> Khoá API kế toán / lương</div>
         <div class="card-body">
           <div class="small text-secondary mb-2">Phần mềm kế toán (<b>ketoan.tranhdali.vn</b>) dùng khoá này để lấy dữ liệu lương. Đặt một chuỗi bí mật mạnh, dùng đúng chuỗi đó ở bên kế toán.</div>
           <form method="POST" action="/cham-cong-quan-ly" class="row g-2 align-items-end">
             {% csrf_token %}
             <input type="hidden" name="action" value="save_api_key">
-            <div class="col-md-9">
+            <div class="col-md-8">
               <label class="form-label small mb-1">Khoá API</label>
               <div class="input-group">
                 <input type="text" name="api_key" id="apiKey" class="form-control font-monospace" value="{{ api_key }}" autocomplete="off">
                 <button type="button" id="genKey" class="btn btn-outline-secondary"><i class="bi bi-shuffle"></i> Tạo khoá mạnh</button>
               </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-4">
               <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu khoá</button>
             </div>
           </form>
@@ -379,27 +470,25 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Kéo lương TỪ kế toán về (hiện ở popup Tan làm) -->
-  <div class="row mt-3">
-    <div class="col-12">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold"><i class="bi bi-cloud-download"></i> Kéo lương từ kế toán (hiện khi nhân viên Tan làm)</div>
+    <!-- Kéo lương TỪ kế toán về (hiện ở popup Tan làm) -->
+    <div class="col-lg-6 d-flex">
+      <div class="card shadow-sm w-100">
+        <div class="card-header"><i class="bi bi-cloud-download text-primary"></i> Kéo lương từ kế toán (hiện khi nhân viên Tan làm)</div>
         <div class="card-body">
           <div class="small text-secondary mb-2">App này gọi sang <b>ketoan.tranhdali.vn</b> để lấy <b>lương ngày công chính xác</b> rồi hiện trong popup khi nhân viên bấm Tan làm. Bên kế toán cần tạo 1 endpoint trả JSON (xem hướng dẫn dưới). Khi chưa nối được, popup tự hiện ngày công như bình thường.</div>
           <form method="POST" action="/cham-cong-quan-ly" class="row g-2 align-items-end">
             {% csrf_token %}
             <input type="hidden" name="action" value="save_ketoan_pull">
-            <div class="col-md-7">
+            <div class="col-12">
               <label class="form-label small mb-1">URL API lương của kế toán</label>
               <input type="text" name="ketoan_url" class="form-control font-monospace" value="{{ ketoan_url }}" placeholder="https://ketoan.tranhdali.vn/api/luong-nhan-vien" autocomplete="off">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-8">
               <label class="form-label small mb-1">Khoá (key) bên kế toán</label>
               <input type="text" name="ketoan_pull_key" class="form-control font-monospace" value="{{ ketoan_pull_key }}" autocomplete="off">
             </div>
-            <div class="col-md-2">
+            <div class="col-md-4">
               <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu</button>
             </div>
           </form>
@@ -435,27 +524,25 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Đẩy năng suất sang kế toán (tự động khi lưu) -->
-  <div class="row mt-3">
-    <div class="col-12">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold"><i class="bi bi-cloud-upload"></i> Đẩy năng suất sang kế toán (tự động)</div>
+    <!-- Đẩy năng suất sang kế toán (tự động khi lưu) -->
+    <div class="col-lg-6 d-flex">
+      <div class="card shadow-sm w-100">
+        <div class="card-header"><i class="bi bi-cloud-upload text-success"></i> Đẩy năng suất sang kế toán (tự động)</div>
         <div class="card-body">
           <div class="small text-secondary mb-2">Số liệu năng suất (mẻ pha · tranh rót · màu rót · tranh SX) nhập ở mau sẽ <b>tự đẩy sang ketoan.tranhdali.vn</b> ngay khi lưu — gộp theo ngày + nhân viên, kế toán tự cộng "tổng việc". Mã nhân viên = tài khoản đăng nhập (khớp /api/luong).</div>
           <form method="POST" action="/cham-cong-quan-ly" class="row g-2 align-items-end">
             {% csrf_token %}
             <input type="hidden" name="action" value="save_prod_feed">
-            <div class="col-md-7">
+            <div class="col-12">
               <label class="form-label small mb-1">URL endpoint năng suất của kế toán</label>
               <input type="text" name="prod_url" class="form-control font-monospace" value="{{ prod_url }}" placeholder="http://localhost/api/productivity.php" autocomplete="off">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-8">
               <label class="form-label small mb-1">Khoá (productivity_api_key)</label>
               <input type="text" name="prod_key" class="form-control font-monospace" value="{{ prod_key }}" autocomplete="off">
             </div>
-            <div class="col-md-2">
+            <div class="col-md-4">
               <button class="btn btn-primary w-100 fw-semibold"><i class="bi bi-save"></i> Lưu</button>
             </div>
           </form>
@@ -469,13 +556,11 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Nhắc chấm công tự động (Web Push) -->
-  <div class="row mt-3">
-    <div class="col-lg-7">
-      <div class="card shadow-sm h-100">
-        <div class="card-header fw-semibold"><i class="bi bi-alarm"></i> Nhắc chấm công tự động</div>
+    <!-- Nhắc chấm công tự động (Web Push) -->
+    <div class="col-lg-6 d-flex">
+      <div class="card shadow-sm w-100">
+        <div class="card-header"><i class="bi bi-alarm text-danger"></i> Nhắc chấm công tự động</div>
         <div class="card-body">
           <div class="small text-secondary mb-2">Tự nhắc nhân viên (qua thông báo đẩy) bấm <b>VÀO LÀM</b> đầu giờ và <b>TAN LÀM</b> cuối giờ — tránh quên chấm công. Bỏ qua cuối tuần &amp; ngày lễ. Mỗi người chỉ nhắc 1 lần/ngày mỗi loại.</div>
           <div class="fw-semibold small mb-1">Đặt 1 dòng cron trên VPS (chạy trong giờ hành chính):</div>
@@ -493,43 +578,6 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
       </div>
     </div>
 
-    <!-- Ngày nghỉ lễ Việt Nam -->
-    <div class="col-lg-5">
-      <div class="card shadow-sm h-100">
-        <div class="card-header fw-semibold"><i class="bi bi-calendar2-heart"></i> Ngày nghỉ lễ Việt Nam <span class="text-secondary small fw-normal">(tự cập nhật theo năm)</span></div>
-        <div class="card-body">
-          <div class="small text-secondary mb-2">Tự tính lễ dương + âm (Tết, Giỗ Tổ…). Ngày lễ được tính như ngày nghỉ (làm = tăng ca, không phạt muộn) và không gửi nhắc.</div>
-          <div class="table-responsive mb-2" style="max-height:240px;overflow:auto">
-            <table class="table table-sm mb-0">
-              <tbody>
-                {% for h in holidays %}
-                <tr>
-                  <td class="text-nowrap small">{{ h.date_fmt }}</td>
-                  <td class="small">{{ h.name }}{% if h.custom %} <span class="badge text-bg-info">tự thêm</span>{% endif %}</td>
-                  <td class="text-end">
-                    <form method="POST" action="/cham-cong-quan-ly" class="d-inline" onsubmit="return confirm('Bỏ ngày nghỉ {{ h.date_fmt }}? (coi là ngày làm bình thường)')">
-                      {% csrf_token %}
-                      <input type="hidden" name="action" value="del_holiday">
-                      <input type="hidden" name="hd_date" value="{{ h.date }}">
-                      <button class="btn btn-sm btn-outline-danger py-0 px-1" title="Bỏ ngày này"><i class="bi bi-x"></i></button>
-                    </form>
-                  </td>
-                </tr>
-                {% empty %}<tr><td class="text-secondary small">Không có ngày lễ sắp tới.</td></tr>{% endfor %}
-              </tbody>
-            </table>
-          </div>
-          <form method="POST" action="/cham-cong-quan-ly" class="row g-1 align-items-end">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="add_holiday">
-            <div class="col-5"><label class="form-label small mb-0">Thêm ngày</label><input type="date" name="hd_date" class="form-control form-control-sm" required></div>
-            <div class="col-5"><label class="form-label small mb-0">Tên</label><input type="text" name="hd_name" class="form-control form-control-sm" placeholder="VD: Nghỉ bù"></div>
-            <div class="col-2"><button class="btn btn-sm btn-success w-100"><i class="bi bi-plus-lg"></i></button></div>
-          </form>
-          <div class="form-text">Dùng để thêm ngày nghỉ bù / nghỉ riêng của công ty, hoặc bỏ ngày lễ nếu vẫn đi làm.</div>
-        </div>
-      </div>
-    </div>
   </div>
 </div>
 

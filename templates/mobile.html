@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#2E7D32">
+  <meta name="theme-color" content="#198754">
   <title>Pha màu DALI</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/media/icon-192.png">
@@ -11,80 +11,187 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Pha màu">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <style>
-    body { background:#f6f7f9; padding-bottom: 28px; }
-    .topbar {
-      position: sticky; top: 0; z-index: 10; background:#2E7D32; color:#fff;
-      padding: .6rem .6rem .7rem;
-      padding-top: calc(.6rem + env(safe-area-inset-top));   /* tránh đè đồng hồ/notch */
+    /* ===== DALI Brand (Stitch) phủ lên Bootstrap ===== */
+    body {
+      background:#f4f6f6; padding-bottom:28px;
+      font-family:'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
     }
-    .search-lg { height: 50px; font-size: 1.1rem; border-radius: 10px; }
-    .mq { height: 52px; font-size: 1.3rem; font-weight: 700; border-radius: 10px; }
-    .sw { width: 28px; height: 28px; border-radius:.35rem; border:1px solid rgba(0,0,0,.2); display:inline-block; vertical-align:middle; }
-    .rc { background:#fff; border-radius:.8rem; box-shadow:0 1px 5px rgba(0,0,0,.1); margin-bottom:.85rem; }
-    .rc h2 { font-size:1.25rem; margin:0; font-weight:700; }
-    .gnum { font-variant-numeric: tabular-nums; font-weight:700; font-size:1.15rem; }
-    .pha-btn { height:48px; font-size:1.15rem; font-weight:700; border-radius:10px; padding:0 1.1rem; }
-    table td { padding:.5rem .55rem; font-size:1.08rem; }
-    /* Hộp xác nhận */
-    .pha-modal { position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:1000;
-                 display:none; align-items:center; justify-content:center; padding:22px; }
-    .pha-box { background:#fff; border-radius:16px; padding:22px; width:100%; max-width:380px; text-align:center; }
-    .pha-box .ttl { color:#666; font-size:1.05rem; }
-    .pha-box .info { font-size:1.7rem; font-weight:700; margin:6px 0 4px; }
-    .pha-box .sub { color:#2E7D32; font-size:1.25rem; font-weight:700; margin-bottom:18px; }
-    .pha-box .btn { height:56px; font-size:1.2rem; font-weight:700; border-radius:12px; }
+
+    /* ----- Header gradient xanh, bo đáy ----- */
+    .topbar {
+      position: sticky; top: 0; z-index: 10; color:#fff;
+      background:linear-gradient(180deg,#198754 0%,#157347 100%);
+      padding: .6rem .7rem .85rem;
+      padding-top: calc(.6rem + env(safe-area-inset-top));   /* tránh đè đồng hồ/notch */
+      border-radius:0 0 18px 18px;
+      box-shadow:0 4px 16px rgba(21,115,71,.28);
+    }
+    .topwrap { max-width:560px; margin:0 auto; }
+    .brandic {
+      width:38px; height:38px; border-radius:50%; background:#fff; color:#198754;
+      display:inline-flex; align-items:center; justify-content:center; font-size:1.25rem;
+      box-shadow:inset 0 1px 3px rgba(0,0,0,.08); flex:0 0 auto;
+    }
+    .topbar h1 { font-weight:800; letter-spacing:.2px; }
+    .brand-sub { display:block; font-size:.6rem; letter-spacing:.18em; text-transform:uppercase; opacity:.85; line-height:1.3; }
+    .topbar .btn-sm {
+      width:36px; height:36px; padding:0; border-radius:50%;
+      display:inline-flex; align-items:center; justify-content:center; font-size:1.05rem; flex:0 0 auto;
+    }
+    .topbar .btn-sm.btn-light { --bs-btn-bg:#fff; --bs-btn-color:#198754; --bs-btn-hover-bg:#f1f3f5; --bs-btn-hover-color:#157347; --bs-btn-active-bg:#e9ecef; --bs-btn-active-color:#157347; border:none; }
+    .topbar .btn-sm.btn-outline-light { --bs-btn-color:#fff; --bs-btn-border-color:rgba(255,255,255,.55); --bs-btn-hover-bg:rgba(255,255,255,.15); --bs-btn-hover-color:#fff; }
+    .userchip {
+      display:inline-flex; align-items:center; gap:.3rem; background:rgba(255,255,255,.14);
+      border-radius:50rem; padding:.28rem .6rem; font-size:.78rem; font-weight:600; color:#fff; white-space:nowrap;
+    }
+
+    /* ----- Tab pill (JS setBtn ghi đè className -> style theo .tabbar con) ----- */
+    .tabbar .btn { border-radius:12px; letter-spacing:.1px; }
+    .tabbar .btn-light {
+      --bs-btn-bg:#fff; --bs-btn-color:#198754; --bs-btn-border-color:#fff;
+      --bs-btn-hover-bg:#fff; --bs-btn-hover-color:#157347; --bs-btn-hover-border-color:#fff;
+      --bs-btn-active-bg:#fff; --bs-btn-active-color:#157347; --bs-btn-active-border-color:#fff;
+      box-shadow:0 2px 8px rgba(0,0,0,.18);
+    }
+    .tabbar .btn-outline-light {
+      --bs-btn-color:rgba(255,255,255,.9); --bs-btn-bg:rgba(255,255,255,.1); --bs-btn-border-color:transparent;
+      --bs-btn-hover-bg:rgba(255,255,255,.22); --bs-btn-hover-color:#fff; --bs-btn-hover-border-color:transparent;
+      --bs-btn-active-bg:rgba(255,255,255,.22); --bs-btn-active-color:#fff; --bs-btn-active-border-color:transparent;
+    }
+    #rotBadge { position:absolute; top:-7px; right:-5px; border:2px solid #157347; border-radius:50rem; font-size:.68rem; }
+
+    /* ----- Ô tìm + hệ số mẻ (trong header) ----- */
+    .searchwrap { position:relative; }
+    .searchwrap .bi-search { position:absolute; left:1rem; top:50%; transform:translateY(-50%); color:#8a949e; pointer-events:none; font-size:1.05rem; }
+    .search-lg { height:52px; font-size:1.05rem; font-weight:500; border-radius:14px; border:none; padding-left:2.7rem; box-shadow:0 2px 10px rgba(0,0,0,.1); }
+    .search-lg:focus { box-shadow:0 0 0 3px rgba(255,255,255,.45); }
+    .mq { height:52px; font-size:1.25rem; font-weight:800; border-radius:14px; border-width:2px; }
+    .mq.btn-light {
+      --bs-btn-bg:rgba(255,255,255,.16); --bs-btn-color:#fff; --bs-btn-border-color:transparent;
+      --bs-btn-hover-bg:rgba(255,255,255,.28); --bs-btn-hover-color:#fff; --bs-btn-hover-border-color:transparent;
+      --bs-btn-active-bg:rgba(255,255,255,.28); --bs-btn-active-color:#fff; --bs-btn-active-border-color:transparent;
+    }
+    .mq.btn-warning {
+      --bs-btn-bg:#fff; --bs-btn-color:#157347; --bs-btn-border-color:#fff;
+      --bs-btn-hover-bg:#fff; --bs-btn-hover-color:#157347; --bs-btn-hover-border-color:#fff;
+      --bs-btn-active-bg:#fff; --bs-btn-active-color:#157347; --bs-btn-active-border-color:#fff;
+      box-shadow:0 2px 10px rgba(0,0,0,.18);
+    }
+
+    /* ----- Card kiểu Stitch (dùng chung cho cả card "Cần rót" sinh từ JS) ----- */
+    .rc { background:#fff; border-radius:16px; border:1px solid #e9ecef; box-shadow:0 2px 12px rgba(25,135,84,.07); margin-bottom:.9rem; }
+    .rc h2 { font-size:1.22rem; margin:0; font-weight:800; }
+    .hexlab { font-size:.72rem; font-weight:700; color:#6c757d; letter-spacing:.08em; text-transform:uppercase; }
+    .sw { width:28px; height:28px; border-radius:8px; border:1px solid rgba(0,0,0,.15); display:inline-block; vertical-align:middle; }
+    .sw-lg { width:52px; height:52px; border-radius:14px; border:3px solid #fff; box-shadow:0 1px 6px rgba(0,0,0,.18), inset 0 1px 4px rgba(0,0,0,.1); }
+    .pha-btn { height:50px; font-size:1.1rem; font-weight:800; border-radius:14px; padding:0 1.15rem; border:none; box-shadow:0 6px 14px rgba(25,135,84,.28); }
+    .gnum { font-variant-numeric: tabular-nums; font-weight:700; font-size:1.12rem; }
+
+    /* Bảng thành phần trong panel xám bo góc */
+    .ing-panel { background:#f8f9fa; border-radius:12px; padding:.3rem .55rem; }
+    .ing-panel .table { --bs-table-bg:transparent; margin-bottom:0; }
+    .ing-panel td { padding:.5rem .35rem; font-size:1.05rem; border-color:#eef0f2; }
+    .ing-panel .table-light { --bs-table-bg:transparent; }
+    .ing-panel .table-light td { border-top:2px dashed #dee2e6; border-bottom:0; color:#157347; }
+
+    table td { padding:.5rem .55rem; font-size:1.05rem; }
+
+    /* ----- Khối nội dung canh giữa trên màn rộng ----- */
+    #list, #rotView, #rotDoneView, #historyView { max-width:560px; margin-left:auto; margin-right:auto; }
+
+    /* ----- Lịch sử + thi đua ----- */
+    #historyView .table thead th { background:#f8f9fa; font-size:.82rem; text-transform:uppercase; letter-spacing:.04em; color:#6c757d; }
+    #tdList .table-warning { --bs-table-bg:rgba(25,135,84,.12); }
+    .hr { border-radius:12px; height:44px; font-weight:700; }
+    .hr.btn-warning {
+      --bs-btn-bg:#198754; --bs-btn-border-color:#198754; --bs-btn-color:#fff;
+      --bs-btn-hover-bg:#157347; --bs-btn-hover-border-color:#157347; --bs-btn-hover-color:#fff;
+      --bs-btn-active-bg:#157347; --bs-btn-active-border-color:#157347; --bs-btn-active-color:#fff;
+    }
+    .hr.btn-light {
+      --bs-btn-bg:#f1f3f5; --bs-btn-border-color:#f1f3f5; --bs-btn-color:#212529;
+      --bs-btn-hover-bg:#e9ecef; --bs-btn-hover-border-color:#e9ecef; --bs-btn-hover-color:#212529;
+      --bs-btn-active-bg:#e9ecef; --bs-btn-active-color:#212529;
+    }
+    #rotReload, #historyReload { border-radius:10px; font-weight:600; }
+
+    /* ----- Hộp xác nhận Pha ----- */
+    .pha-modal { position:fixed; inset:0; background:rgba(16,24,32,.6); z-index:1000;
+                 display:none; align-items:center; justify-content:center; padding:22px; backdrop-filter:blur(2px); }
+    .pha-box { background:#fff; border-radius:22px; padding:24px 22px; width:100%; max-width:380px; text-align:center; box-shadow:0 18px 50px rgba(0,0,0,.3); }
+    .pha-ic { width:64px; height:64px; border-radius:50%; background:rgba(25,135,84,.1); color:#198754; font-size:1.8rem; display:flex; align-items:center; justify-content:center; margin:0 auto 10px; }
+    .pha-box .ttl { color:#6c757d; font-size:1.02rem; font-weight:600; }
+    .pha-box .info { font-size:1.75rem; font-weight:800; margin:6px 0 2px; }
+    .pha-box .sub { color:#198754; font-size:1.25rem; font-weight:800; margin-bottom:18px; }
+    .pha-box .btn { height:56px; font-size:1.15rem; font-weight:800; border-radius:14px; }
   </style>
 </head>
 <body>
 
 <div class="topbar">
-  <div class="d-flex align-items-center gap-2 mb-2">
-    <i class="bi bi-droplet-half fs-3"></i>
-    <h1 class="h5 mb-0 flex-grow-1">Công thức pha</h1>
-    <button id="installBtn" class="btn btn-sm btn-light" style="display:none"><i class="bi bi-download"></i></button>
-    <button id="bellToggle" class="btn btn-sm btn-light" title="Chuông dậy trưa trên máy này"><i class="bi bi-bell-fill"></i></button>
-    <a href="/cham-cong" class="btn btn-sm btn-light" title="Chấm công"><i class="bi bi-fingerprint"></i></a>
-    <span class="text-white small me-1"><i class="bi bi-person-circle"></i> {{ user.username }}</span>
-    <a href="/logout" class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-right"></i></a>
-  </div>
-  <div class="d-flex gap-1 mb-2">
-    <button id="tabRecipes" class="btn btn-light flex-fill fw-bold px-1" style="height:44px;font-size:.85rem">Công thức</button>
-    <button id="tabRot" class="btn btn-outline-light flex-fill fw-bold position-relative px-1" style="height:44px;font-size:.85rem">Cần rót <span id="rotBadge" class="badge text-bg-danger" style="display:none">0</span></button>
-    <button id="tabRotDone" class="btn btn-outline-light flex-fill fw-bold px-1" style="height:44px;font-size:.85rem">Đã rót</button>
-    <button id="tabHistory" class="btn btn-outline-light flex-fill fw-bold px-1" style="height:44px;font-size:.85rem">Lịch sử</button>
-  </div>
-  <div id="recipeControls">
-    <input id="q" class="form-control search-lg mb-2" placeholder="🔍 Tìm mã DALI…">
-    <div class="d-flex align-items-center gap-2">
-      <span class="fw-bold" style="font-size:1.1rem; white-space:nowrap;">Mẻ pha:</span>
-      <button type="button" class="btn btn-light flex-fill mq" data-m="4">×4</button>
-      <button type="button" class="btn btn-light flex-fill mq" data-m="5">×5</button>
+  <div class="topwrap">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <span class="brandic"><i class="bi bi-droplet-half"></i></span>
+      <div class="flex-grow-1 lh-1">
+        <h1 class="h6 mb-0">Công thức pha</h1>
+        <span class="brand-sub">DALI · Pha màu</span>
+      </div>
+      <button id="installBtn" class="btn btn-sm btn-light" style="display:none"><i class="bi bi-download"></i></button>
+      <button id="bellToggle" class="btn btn-sm btn-light" title="Chuông dậy trưa trên máy này"><i class="bi bi-bell-fill"></i></button>
+      <a href="/cham-cong" class="btn btn-sm btn-light" title="Chấm công"><i class="bi bi-fingerprint"></i></a>
+      <span class="userchip"><i class="bi bi-person-circle"></i> {{ user.username }}</span>
+      <a href="/logout" class="btn btn-sm btn-outline-light" title="Đăng xuất"><i class="bi bi-box-arrow-right"></i></a>
+    </div>
+    <div class="d-flex gap-1 mb-2 tabbar">
+      <button id="tabRecipes" class="btn btn-light flex-fill fw-bold px-1" style="height:44px;font-size:.85rem">Công thức</button>
+      <button id="tabRot" class="btn btn-outline-light flex-fill fw-bold position-relative px-1" style="height:44px;font-size:.85rem">Cần rót <span id="rotBadge" class="badge text-bg-danger" style="display:none">0</span></button>
+      <button id="tabRotDone" class="btn btn-outline-light flex-fill fw-bold px-1" style="height:44px;font-size:.85rem">Đã rót</button>
+      <button id="tabHistory" class="btn btn-outline-light flex-fill fw-bold px-1" style="height:44px;font-size:.85rem">Lịch sử</button>
+    </div>
+    <div id="recipeControls">
+      <div class="searchwrap mb-2">
+        <i class="bi bi-search"></i>
+        <input id="q" class="form-control search-lg" placeholder="Tìm mã DALI…">
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <span class="fw-bold" style="font-size:1.05rem; white-space:nowrap;">Mẻ pha:</span>
+        <button type="button" class="btn btn-light flex-fill mq" data-m="4">×4</button>
+        <button type="button" class="btn btn-light flex-fill mq" data-m="5">×5</button>
+      </div>
     </div>
   </div>
 </div>
 
 <div class="p-2" id="list">
   {% for r in recipes %}
-  <div class="rc p-2 recipe-card" data-dali="{{ r.dali }}" data-search="{{ r.dali|lower }} {{ r.hex|lower }}">
-    <div class="d-flex align-items-center gap-2 mb-1">
-      <span class="sw" style="background:#{{ r.hex }}"></span>
-      <h2 class="flex-grow-1">{{ r.dali }} <small class="text-secondary" style="font-size:.85rem;">#{{ r.hex }}</small></h2>
+  <div class="rc p-3 recipe-card" data-dali="{{ r.dali }}" data-search="{{ r.dali|lower }} {{ r.hex|lower }}">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <span class="sw sw-lg" style="background:#{{ r.hex }}"></span>
+      <div class="flex-grow-1">
+        <h2>{{ r.dali }}</h2>
+        <div class="hexlab">#{{ r.hex }}</div>
+      </div>
       <button class="btn btn-success pha-btn" data-dali="{{ r.dali }}"><i class="bi bi-droplet-fill"></i> Pha</button>
     </div>
-    <table class="table table-sm mb-0">
-      <tbody>
-        {% for c in r.components %}
-        <tr>
-          <td>{% if c.rgb %}<span class="sw" style="background:rgb({{ c.rgb.0 }},{{ c.rgb.1 }},{{ c.rgb.2 }})"></span> {% endif %}{{ c.name }}</td>
-          <td class="text-end gnum gcell" data-g="{{ c.grams }}">{{ c.grams }} g</td>
-        </tr>
-        {% endfor %}
-        <tr class="table-light"><td class="fw-bold">Tổng</td><td class="text-end fw-bold gnum tcell" data-g="{{ r.total }}">{{ r.total }} g</td></tr>
-      </tbody>
-    </table>
+    <div class="ing-panel">
+      <table class="table table-sm mb-0">
+        <tbody>
+          {% for c in r.components %}
+          <tr>
+            <td>{% if c.rgb %}<span class="sw" style="background:rgb({{ c.rgb.0 }},{{ c.rgb.1 }},{{ c.rgb.2 }})"></span> {% endif %}{{ c.name }}</td>
+            <td class="text-end gnum gcell" data-g="{{ c.grams }}">{{ c.grams }} g</td>
+          </tr>
+          {% endfor %}
+          <tr class="table-light"><td class="fw-bold">Tổng</td><td class="text-end fw-bold gnum tcell" data-g="{{ r.total }}">{{ r.total }} g</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
   {% empty %}
   <p class="text-secondary text-center py-5">Chưa có công thức nào.</p>
@@ -110,11 +217,11 @@
 <!-- Lịch sử pha (bật bằng nút "Lịch sử pha" ở trên) -->
 <div class="px-2" id="historyView" style="display:none">
   <!-- Thi đua tuần -->
-  <div class="rc p-2 mb-2">
+  <div class="rc p-3 mb-2">
     <div class="fw-bold mb-1">🏆 Thi đua tuần này <span id="tdLabel" class="text-secondary fw-normal" style="font-size:.8rem"></span></div>
     <div id="tdList" class="small text-secondary">Đang tải…</div>
   </div>
-  <div class="rc p-2">
+  <div class="rc p-3">
     <div class="d-flex align-items-center gap-2 mb-2">
       <button class="btn btn-warning flex-fill fw-bold hr" data-r="today">Hôm nay</button>
       <button class="btn btn-light flex-fill fw-bold hr" data-r="all">Tất cả</button>
@@ -130,6 +237,7 @@
 <!-- Hộp xác nhận Pha -->
 <div id="phaModal" class="pha-modal">
   <div class="pha-box">
+    <div class="pha-ic"><i class="bi bi-droplet-fill"></i></div>
     <div class="ttl">Xác nhận đã pha xong</div>
     <div class="info" id="phaInfo">—</div>
     <div class="sub" id="phaInfoSub">Mẻ ×5</div>
@@ -143,7 +251,7 @@
   <img id="lightboxImg" style="max-width:100%;max-height:100%;border-radius:8px">
 </div>
 
-<div id="toast" style="position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#212529;color:#fff;padding:12px 18px;border-radius:10px;z-index:1100;display:none;font-size:1.05rem"></div>
+<div id="toast" style="position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#212529;color:#fff;padding:12px 18px;border-radius:12px;z-index:1100;display:none;font-size:1.05rem;box-shadow:0 8px 24px rgba(0,0,0,.3)"></div>
 
 <script>
   if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(function(){}); }

@@ -6,19 +6,71 @@
   <title>Tranh hỏng (QC)</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+  <style>
+    /* ===== DALI Brand (Stitch) — phủ lên Bootstrap, không đổi hành vi ===== */
+    body{font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;}
+    [data-bs-theme="light"] body{background-color:#f4f6f6 !important;}
+
+    .page-head h1{font-size:1.35rem;font-weight:800;letter-spacing:-.01em;margin-bottom:.1rem;}
+    .page-head .sub{color:var(--bs-secondary-color);font-size:.875rem;}
+
+    .card{border-radius:16px;border:1px solid var(--bs-border-color);box-shadow:0 2px 12px rgba(25,135,84,.07);overflow:hidden;}
+    .card-header{background:var(--bs-card-bg);font-weight:700;padding:.85rem 1.1rem;border-bottom:1px solid var(--bs-border-color-translucent);}
+    .card-header .bi{margin-right:.25rem;}
+    .card-accent-danger{border-top:4px solid #dc3545;}
+
+    .form-label{font-weight:600;color:var(--bs-secondary-color);}
+    .form-control,.form-select{border-radius:10px;}
+    .form-control:focus,.form-select:focus{border-color:#198754;box-shadow:0 0 0 .2rem rgba(25,135,84,.12);}
+
+    .btn{border-radius:12px;font-weight:700;}
+    .btn-danger{padding-top:.55rem;padding-bottom:.55rem;}
+    .btn-sm.py-0{border-radius:8px;}
+
+    .stat-tile{background:var(--bs-tertiary-bg);border:1px solid var(--bs-border-color-translucent);border-radius:12px;padding:.85rem .75rem;height:100%;}
+    .stat-tile .lbl{font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--bs-secondary-color);margin-bottom:.25rem;}
+    .stat-tile .val{font-size:1.75rem;font-weight:800;line-height:1.15;}
+
+    .badge{font-weight:600;}
+    .badge.rounded-pill{padding:.35em .7em;}
+    .stage-chip{display:inline-block;padding:.15rem .55rem;border-radius:999px;font-size:.78rem;font-weight:600;background:rgba(13,110,253,.09);color:#0d6efd;}
+    [data-bs-theme="dark"] .stage-chip{background:rgba(13,110,253,.2);color:#6ea8fe;}
+
+    .table thead th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--bs-secondary-color);font-weight:700;background:var(--bs-tertiary-bg);}
+    .table tbody tr:hover{background:rgba(25,135,84,.04);}
+    .table td,.table th{padding:.55rem .75rem;}
+
+    @media (max-width: 576px){
+      .btn-danger{min-height:48px;}
+    }
+  </style>
 </head>
 <body class="bg-body-tertiary">
 {% include '_nav.html' %}
 
-<div class="container-fluid py-3">
-  {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
+<div class="container-fluid py-3 px-3 px-md-4" style="max-width:1400px">
+  {% if messages %}{% for m in messages %}<div class="alert alert-info py-2 rounded-3">{{ m }}</div>{% endfor %}{% endif %}
+
+  <!-- Tiêu đề trang -->
+  <div class="page-head d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <div>
+      <h1>Quản lý Chất lượng (QC)</h1>
+      <div class="sub">Ghi nhận và thống kê tỉ lệ tranh lỗi tại xưởng</div>
+    </div>
+  </div>
 
   <!-- Ghi nhận tranh hỏng -->
-  <div class="card shadow-sm mb-3">
-    <div class="card-header fw-semibold"><i class="bi bi-x-octagon text-danger"></i> Ghi nhận tranh hỏng</div>
+  <div class="card mb-3 card-accent-danger">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <span class="text-danger"><i class="bi bi-x-octagon"></i> Ghi nhận tranh hỏng</span>
+      <span class="small text-secondary fst-italic fw-normal">Dùng cho nhân viên sản xuất &amp; QC</span>
+    </div>
     <div class="card-body">
-      <form method="POST" action="/tranh-hong" class="row g-2 align-items-end">
+      <form method="POST" action="/tranh-hong" class="row g-2 g-md-3 align-items-end">
         {% csrf_token %}
         <input type="hidden" name="action" value="add">
         <div class="col-6 col-md-2">
@@ -62,45 +114,71 @@
           <input type="text" name="note" class="form-control form-control-sm">
         </div>
         <div class="col-12 col-md-3">
-          <button class="btn btn-danger btn-sm w-100 fw-semibold"><i class="bi bi-save"></i> Ghi nhận</button>
+          <button class="btn btn-danger btn-sm w-100"><i class="bi bi-save"></i> Ghi nhận</button>
         </div>
       </form>
     </div>
   </div>
 
   <!-- Thống kê -->
-  <div class="card shadow-sm mb-3">
-    <div class="card-header fw-semibold d-flex flex-wrap justify-content-between align-items-center gap-2">
-      <span><i class="bi bi-clipboard-data"></i> Thống kê tranh hỏng — {{ month_label }}</span>
-      <select id="monthSel" class="form-select form-select-sm" style="max-width:160px">
-        {% for m in months %}<option value="{{ m.value }}" {% if m.value == month %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
-      </select>
+  <div class="card mb-3">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <span><i class="bi bi-clipboard-data text-success"></i> Thống kê tranh hỏng — {{ month_label }}</span>
+      <div class="d-flex align-items-center gap-2">
+        <label class="small text-secondary fw-normal d-none d-md-inline" for="monthSel">Kỳ báo cáo:</label>
+        <select id="monthSel" class="form-select form-select-sm" style="max-width:160px">
+          {% for m in months %}<option value="{{ m.value }}" {% if m.value == month %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
+        </select>
+      </div>
     </div>
     <div class="card-body">
-      <div class="row g-2 mb-3">
-        <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Tổng tranh hỏng</div><div class="fs-4 fw-bold text-danger">{{ total }}</div></div></div>
-        <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Tỷ lệ lỗi</div><div class="fs-4 fw-bold {% if rate > 5 %}text-danger{% else %}text-success{% endif %}">{{ rate }}%</div><div class="small text-secondary">hỏng / (SX {{ sx_total }} + hỏng)</div></div></div>
-        <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Theo công đoạn</div><div class="small mt-1">{% for s, q in by_stage %}<span class="badge text-bg-secondary me-1">{{ s }}: {{ q }}</span>{% empty %}—{% endfor %}</div></div></div>
-        <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Theo người</div><div class="small mt-1">{% for u, q in by_user %}<span class="badge text-bg-warning me-1">{{ u }}: {{ q }}</span>{% empty %}—{% endfor %}</div></div></div>
+      <div class="row g-2 g-md-3 mb-3">
+        <div class="col-6 col-md-3">
+          <div class="stat-tile">
+            <div class="lbl">Tổng tranh hỏng</div>
+            <div class="val text-danger">{{ total }} <span class="fs-6 fw-medium text-secondary">bản</span></div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-tile">
+            <div class="lbl">Tỷ lệ lỗi</div>
+            <div class="val {% if rate > 5 %}text-danger{% else %}text-success{% endif %}">{{ rate }}%</div>
+            <div class="small text-secondary">hỏng / (SX {{ sx_total }} + hỏng)</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-tile">
+            <div class="lbl">Theo công đoạn</div>
+            <div class="small mt-1">{% for s, q in by_stage %}<span class="badge rounded-pill text-bg-secondary me-1 mb-1">{{ s }}: {{ q }}</span>{% empty %}—{% endfor %}</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-tile">
+            <div class="lbl">Theo người</div>
+            <div class="small mt-1">{% for u, q in by_user %}<span class="badge rounded-pill text-bg-warning me-1 mb-1">{{ u }}: {{ q }}</span>{% empty %}—{% endfor %}</div>
+          </div>
+        </div>
       </div>
       {% if by_reason %}
-      <div class="small fw-semibold mb-1">Lý do hay gặp:</div>
-      <div class="mb-2">{% for r, q in by_reason %}<span class="badge text-bg-light border me-1 mb-1">{{ r }} ({{ q }})</span>{% endfor %}</div>
+      <div class="stat-tile d-flex flex-column flex-md-row align-items-md-center gap-2" style="padding:.75rem 1rem">
+        <span class="small fw-bold text-secondary flex-shrink-0">Lý do hay gặp:</span>
+        <div>{% for r, q in by_reason %}<span class="badge rounded-pill text-bg-light border me-1 mb-1 fw-medium">{{ r }} <span class="text-danger fw-bold">({{ q }})</span></span>{% endfor %}</div>
+      </div>
       {% endif %}
     </div>
   </div>
 
   <!-- Lịch sử -->
-  <div class="card shadow-sm">
-    <div class="card-header fw-semibold"><i class="bi bi-clock-history"></i> Lịch sử ghi nhận</div>
+  <div class="card">
+    <div class="card-header"><i class="bi bi-clock-history text-success"></i> Lịch sử ghi nhận</div>
     <div class="table-responsive" style="max-height:480px;overflow:auto">
-      <table class="table table-sm align-middle mb-0">
+      <table class="table table-sm table-hover align-middle mb-0">
         <thead class="table-light position-sticky top-0"><tr><th>Ngày</th><th>Mã tranh</th><th>Khổ</th><th class="text-center">SL</th><th>Công đoạn</th><th>Lý do</th><th>Người liên quan</th><th>Ghi chú</th><th class="text-end">Xoá</th></tr></thead>
         <tbody>
           {% for r in rows %}
           <tr>
-            <td>{{ r.day }}</td><td class="fw-semibold">{{ r.painting|default:"—" }}</td><td>{{ r.size|default:"—" }}</td>
-            <td class="text-center text-danger fw-bold">{{ r.qty }}</td><td>{{ r.stage }}</td>
+            <td class="text-nowrap">{{ r.day }}</td><td class="fw-bold">{{ r.painting|default:"—" }}</td><td>{{ r.size|default:"—" }}</td>
+            <td class="text-center text-danger fw-bold">{{ r.qty }}</td><td><span class="stage-chip">{{ r.stage }}</span></td>
             <td>{{ r.reason }}</td><td>{{ r.by_user|default:"—" }}</td><td class="small text-secondary">{{ r.note }}</td>
             <td class="text-end">
               <form method="POST" action="/tranh-hong" class="d-inline" onsubmit="return confirm('Xoá bản ghi này?')">

@@ -7,31 +7,117 @@
   <title>Chấm công</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    body{background:#f6f7f9;padding-bottom:28px}
-    .topbar{position:sticky;top:0;z-index:10;background:#198754;color:#fff;padding:.6rem .6rem .7rem;padding-top:calc(.6rem + env(safe-area-inset-top))}
-    .cc-card{background:#fff;border-radius:1rem;box-shadow:0 1px 6px rgba(0,0,0,.1)}
-    .big-btn{height:84px;font-size:1.5rem;font-weight:800;border-radius:16px}
-    .tval{font-size:1.6rem;font-weight:800}
-    .clock{font-variant-numeric:tabular-nums}
-    .pay-modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1200;display:none;align-items:center;justify-content:center;padding:18px}
-    .pay-box{background:#fff;border-radius:18px;padding:22px;width:100%;max-width:400px;text-align:center}
+    body{
+      font-family:'Be Vietnam Pro',system-ui,-apple-system,"Segoe UI",sans-serif;
+      background:#f4f6f6;
+      padding-bottom:28px;
+      -webkit-tap-highlight-color:transparent;
+    }
+    /* Header gradient kiểu Stitch */
+    .topbar{
+      position:sticky;top:0;z-index:10;
+      background:linear-gradient(180deg,#198754 0%,#157347 100%);
+      color:#fff;
+      padding:.65rem .8rem .85rem;
+      padding-top:calc(.65rem + env(safe-area-inset-top));
+      border-radius:0 0 18px 18px;
+      box-shadow:0 2px 12px rgba(25,135,84,.25);
+    }
+    .topbar .btn-back{
+      width:36px;height:36px;border-radius:50%;
+      display:inline-flex;align-items:center;justify-content:center;
+      background:rgba(255,255,255,.92);color:#157347;border:0;
+      font-size:1.05rem;
+    }
+    .topbar .btn-back:active{transform:scale(.94)}
+    .topbar .user-chip{
+      background:rgba(255,255,255,.15);
+      border:1px solid rgba(255,255,255,.3);
+      border-radius:999px;
+      padding:.2rem .65rem;
+      font-size:.8rem;font-weight:500;
+    }
+    /* Card kiểu Stitch */
+    .cc-card{
+      background:#fff;border-radius:16px;
+      border:1px solid #e9ecef;
+      box-shadow:0 2px 12px rgba(25,135,84,.07);
+    }
+    .cc-card .card-head{
+      font-weight:700;color:#212529;
+      display:flex;align-items:center;gap:.5rem;
+    }
+    /* Đồng hồ */
+    .clock{font-variant-numeric:tabular-nums;letter-spacing:-1px;color:#1f2937;text-shadow:0 1px 2px rgba(0,0,0,.06)}
+    /* Nhãn giờ vào/ra */
+    .tlabel{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:#8a94a0}
+    .tval{font-size:1.7rem;font-weight:800;font-variant-numeric:tabular-nums}
+    /* Nút lớn */
+    .big-btn{
+      height:84px;font-size:1.4rem;font-weight:800;border-radius:16px;
+      display:flex;align-items:center;justify-content:center;gap:.65rem;
+      transition:transform .12s ease, box-shadow .12s ease;
+    }
+    .big-btn.btn-success{box-shadow:0 8px 20px rgba(25,135,84,.28)}
+    .big-btn.btn-primary{box-shadow:0 8px 20px rgba(13,110,253,.25)}
+    .big-btn:active{transform:scale(.97)}
+    .big-btn:disabled{box-shadow:none;opacity:.45}
+    /* Bảng lịch sử */
+    .cc-table{margin-bottom:0;font-size:.9rem}
+    .cc-table thead th{
+      background:#f8f9fa;color:#8a94a0;
+      font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;
+      font-weight:700;border-bottom:1px solid #e9ecef;
+      padding:.6rem .75rem;
+    }
+    .cc-table tbody td{padding:.6rem .75rem;border-color:#f1f3f5;vertical-align:middle}
+    .cc-table tbody tr:hover{background:#f8f9fa}
+    .cc-table .h-num{font-weight:700}
+    /* Nghỉ phép */
+    .leave-row{
+      background:#f8f9fa;border-radius:12px;
+      padding:.65rem .8rem;
+      display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+    }
+    .leave-row + .leave-row{margin-top:.5rem}
+    .badge{border-radius:999px;font-weight:700;letter-spacing:.02em}
+    #leaveForm{border:1px solid #e9ecef !important;border-radius:12px !important;background:#f8f9fa !important}
+    /* Popup */
+    .pay-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);z-index:1200;display:none;align-items:center;justify-content:center;padding:18px}
+    .pay-box{
+      background:#fff;border-radius:24px;padding:26px 22px;width:100%;max-width:400px;text-align:center;
+      box-shadow:0 20px 60px rgba(0,0,0,.25);
+      animation:popIn .22s ease-out;
+    }
+    @keyframes popIn{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+    .pay-pill-green{background:#e9f7ef;border:1px solid #d2eedd;border-radius:16px;padding:.9rem .75rem;margin-top:.9rem}
+    .pay-pill-blue{background:#eaf2ff;border:1px solid #d6e4fb;border-radius:16px;padding:.9rem .75rem;margin-top:.75rem}
+    .pay-pill-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.15rem}
+    .pay-pill-green .pay-pill-label{color:#157347}
+    .pay-pill-blue .pay-pill-label{color:#0d6efd}
+    .alert{border-radius:14px}
+    .btn{font-weight:600}
+    .btn-warning{border-radius:10px}
   </style>
 </head>
 <body>
 <div class="topbar">
   <div class="d-flex align-items-center gap-2">
-    <a href="/app" class="btn btn-sm btn-light"><i class="bi bi-arrow-left"></i></a>
+    <a href="/app" class="btn-back"><i class="bi bi-arrow-left"></i></a>
     <i class="bi bi-fingerprint fs-3"></i>
-    <h1 class="h5 mb-0 flex-grow-1">Chấm công</h1>
-    <span class="small"><i class="bi bi-person-circle"></i> {{ user.username }}</span>
+    <h1 class="h5 mb-0 flex-grow-1 fw-bold">Chấm công</h1>
+    <span class="user-chip"><i class="bi bi-person-circle"></i> {{ user.username }}</span>
   </div>
 </div>
 
 <div class="p-3" style="max-width:520px;margin:0 auto">
-  <div class="text-center my-2">
-    <div class="clock display-5 fw-bold" id="clock">--:--</div>
-    <div class="text-secondary">{{ today_label }}</div>
+  <div class="text-center my-3">
+    <div class="clock display-4 fw-bold" id="clock">--:--</div>
+    <div class="text-secondary fw-medium mt-1">{{ today_label }}</div>
   </div>
 
   {% if configured and not ip_ok %}
@@ -40,31 +126,34 @@
   <div class="alert alert-warning small"><i class="bi bi-info-circle"></i> Chưa cấu hình Wifi công ty nên đang cho phép chấm công ở mọi mạng. (IP hiện tại: {{ ip }} — báo quản lý để khoá theo Wifi.)</div>
   {% endif %}
 
+  <!-- Trạng thái hôm nay -->
   <div class="cc-card p-3 mb-3">
-    <div class="row text-center">
+    <div class="row text-center g-0">
       <div class="col-6 border-end">
-        <div class="text-secondary"><i class="bi bi-box-arrow-in-right text-success"></i> Giờ vào</div>
+        <div class="tlabel mb-1"><i class="bi bi-box-arrow-in-right text-success"></i> Giờ vào</div>
         <div class="tval text-success" id="tIn">{{ today_in|default:"--:--" }}</div>
       </div>
       <div class="col-6">
-        <div class="text-secondary"><i class="bi bi-box-arrow-right text-primary"></i> Giờ ra</div>
+        <div class="tlabel mb-1"><i class="bi bi-box-arrow-right text-primary"></i> Giờ ra</div>
         <div class="tval text-primary" id="tOut">{{ today_out|default:"--:--" }}</div>
       </div>
     </div>
   </div>
 
-  <div class="d-grid gap-2 mb-3">
-    <button id="btnIn" class="btn btn-success big-btn" {% if configured and not ip_ok %}disabled{% endif %}><i class="bi bi-box-arrow-in-right"></i> VÀO LÀM</button>
-    <button id="btnOut" class="btn btn-primary big-btn" {% if configured and not ip_ok %}disabled{% endif %}><i class="bi bi-box-arrow-right"></i> TAN LÀM</button>
+  <!-- Nút thao tác -->
+  <div class="d-grid gap-3 mb-3">
+    <button id="btnIn" class="btn btn-success big-btn" {% if configured and not ip_ok %}disabled{% endif %}><i class="bi bi-box-arrow-in-right fs-3"></i> VÀO LÀM</button>
+    <button id="btnOut" class="btn btn-primary big-btn" {% if configured and not ip_ok %}disabled{% endif %}><i class="bi bi-box-arrow-right fs-3"></i> TAN LÀM</button>
   </div>
 
-  <div class="cc-card p-2 mb-3">
-    <div class="fw-bold mb-1 px-1"><i class="bi bi-clock-history"></i> 14 ngày gần đây</div>
-    <table class="table table-sm mb-0">
+  <!-- Lịch sử 14 ngày -->
+  <div class="cc-card mb-3 overflow-hidden">
+    <div class="card-head p-3 pb-2"><i class="bi bi-clock-history text-primary"></i> 14 ngày gần đây</div>
+    <table class="table cc-table">
       <thead><tr><th>Ngày</th><th class="text-center">Vào</th><th class="text-center">Ra</th><th class="text-end">Giờ</th></tr></thead>
       <tbody id="histBody">
         {% for r in recent %}
-        <tr><td>{{ r.day }}</td><td class="text-center">{{ r.in|default:"—" }}</td><td class="text-center">{{ r.out|default:"—" }}</td><td class="text-end">{% if r.hours %}{{ r.hours }}h{% else %}—{% endif %}</td></tr>
+        <tr><td class="fw-medium">{{ r.day }}</td><td class="text-center">{{ r.in|default:"—" }}</td><td class="text-center">{{ r.out|default:"—" }}</td><td class="text-end h-num">{% if r.hours %}{{ r.hours }}h{% else %}—{% endif %}</td></tr>
         {% empty %}
         <tr><td colspan="4" class="text-secondary text-center">Chưa có dữ liệu.</td></tr>
         {% endfor %}
@@ -75,29 +164,29 @@
   <!-- Xin nghỉ phép -->
   <div class="cc-card p-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
-      <div class="fw-bold"><i class="bi bi-calendar2-x text-warning"></i> Nghỉ phép</div>
-      <button id="leaveBtn" class="btn btn-warning btn-sm fw-semibold"><i class="bi bi-pencil-square"></i> Xin nghỉ</button>
+      <div class="card-head"><i class="bi bi-calendar2-x text-warning"></i> Nghỉ phép</div>
+      <button id="leaveBtn" class="btn btn-warning btn-sm fw-bold"><i class="bi bi-pencil-square"></i> Xin nghỉ</button>
     </div>
     <div id="leaveForm" style="display:none" class="border rounded p-2 mb-2 bg-light">
       <div class="row g-2">
-        <div class="col-6"><label class="form-label small mb-0">Từ ngày</label><input type="date" id="lvFrom" class="form-control form-control-sm" min="{{ today_iso }}"></div>
-        <div class="col-6"><label class="form-label small mb-0">Đến ngày</label><input type="date" id="lvTo" class="form-control form-control-sm" min="{{ today_iso }}"></div>
-        <div class="col-12"><label class="form-label small mb-0">Lý do</label><input type="text" id="lvReason" class="form-control form-control-sm" placeholder="VD: việc gia đình, khám bệnh…"></div>
-        <div class="col-12"><button id="lvSend" class="btn btn-success btn-sm w-100 fw-semibold"><i class="bi bi-send"></i> Gửi đơn</button></div>
+        <div class="col-6"><label class="form-label small mb-0 fw-semibold">Từ ngày</label><input type="date" id="lvFrom" class="form-control form-control-sm" min="{{ today_iso }}"></div>
+        <div class="col-6"><label class="form-label small mb-0 fw-semibold">Đến ngày</label><input type="date" id="lvTo" class="form-control form-control-sm" min="{{ today_iso }}"></div>
+        <div class="col-12"><label class="form-label small mb-0 fw-semibold">Lý do</label><input type="text" id="lvReason" class="form-control form-control-sm" placeholder="VD: việc gia đình, khám bệnh…"></div>
+        <div class="col-12"><button id="lvSend" class="btn btn-success btn-sm w-100 fw-bold" style="height:44px;border-radius:10px"><i class="bi bi-send"></i> Gửi đơn</button></div>
       </div>
     </div>
     {% if my_leaves %}
-    <table class="table table-sm mb-0">
-      <tbody>
-        {% for l in my_leaves %}
-        <tr>
-          <td>{{ l.rng }}</td>
-          <td class="small text-secondary">{{ l.reason|truncatechars:30 }}</td>
-          <td class="text-end"><span class="badge {% if l.status == 'approved' %}text-bg-success{% elif l.status == 'rejected' %}text-bg-danger{% else %}text-bg-secondary{% endif %}">{{ l.status_label }}</span></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div>
+      {% for l in my_leaves %}
+      <div class="leave-row">
+        <div class="flex-grow-1">
+          <div class="fw-bold small">{{ l.rng }}</div>
+          <div class="small text-secondary">{{ l.reason|truncatechars:30 }}</div>
+        </div>
+        <span class="badge {% if l.status == 'approved' %}text-bg-success{% elif l.status == 'rejected' %}text-bg-danger{% else %}text-bg-secondary{% endif %}">{{ l.status_label }}</span>
+      </div>
+      {% endfor %}
+    </div>
     {% else %}<div class="small text-secondary">Chưa có đơn xin nghỉ nào.</div>{% endif %}
   </div>
 </div>
@@ -105,32 +194,38 @@
 <!-- Popup sau khi Tan làm: ưu tiên LƯƠNG (kéo từ kế toán), nếu chưa nối thì hiện NGÀY CÔNG -->
 <div id="payModal" class="pay-modal">
   <div class="pay-box">
-    <div style="font-size:2.6rem;line-height:1" id="payEmoji">👋</div>
-    <div class="text-secondary">Tan làm lúc <b id="payTime">--:--</b></div>
+    <div style="font-size:3.2rem;line-height:1" id="payEmoji">👋</div>
+    <div class="fw-bold mt-2" style="font-size:1.25rem;color:#1f2937">Tan làm lúc <b id="payTime">--:--</b></div>
 
     <!-- Khối LƯƠNG (chỉ hiện khi lấy được từ kế toán) -->
     <div id="paySalary" style="display:none">
-      <div class="text-secondary small mt-3">Lương hôm nay</div>
-      <div id="salDay" class="fw-bold text-success" style="font-size:2.3rem">0đ</div>
-      <hr>
-      <div class="text-secondary small">Tổng lương <span id="salMonthLabel">tháng này</span></div>
-      <div id="salMonth" class="fw-bold text-primary" style="font-size:1.8rem">0đ</div>
-      <div id="salCong" class="small text-secondary mt-1"></div>
+      <div class="pay-pill-green">
+        <div class="pay-pill-label">Lương hôm nay</div>
+        <div id="salDay" class="fw-bold text-success" style="font-size:2.4rem;line-height:1.15">0đ</div>
+      </div>
+      <div class="pay-pill-blue">
+        <div class="pay-pill-label">Tổng lương <span id="salMonthLabel">tháng này</span></div>
+        <div id="salMonth" class="fw-bold text-primary" style="font-size:1.7rem;line-height:1.2">0đ</div>
+        <div id="salCong" class="small text-secondary mt-1"></div>
+      </div>
     </div>
 
     <!-- Khối NGÀY CÔNG (khi chưa nối kế toán) -->
     <div id="payCong">
-      <div class="text-secondary small mt-3">Công hôm nay</div>
-      <div id="payDay" class="fw-bold text-success" style="font-size:2.2rem">0 giờ</div>
-      <div id="payDayBreak" class="small text-secondary"></div>
-      <hr>
-      <div class="text-secondary small">Tổng <span id="payMonthLabel">tháng này</span></div>
-      <div id="payMonth" class="fw-bold text-primary" style="font-size:1.5rem">0 ngày công</div>
-      <div id="payMonthBreak" class="small text-secondary"></div>
+      <div class="pay-pill-green">
+        <div class="pay-pill-label">Công hôm nay</div>
+        <div id="payDay" class="fw-bold text-success" style="font-size:2.2rem;line-height:1.15">0 giờ</div>
+        <div id="payDayBreak" class="small text-secondary"></div>
+      </div>
+      <div class="pay-pill-blue">
+        <div class="pay-pill-label">Tổng <span id="payMonthLabel">tháng này</span></div>
+        <div id="payMonth" class="fw-bold text-primary" style="font-size:1.5rem;line-height:1.2">0 ngày công</div>
+        <div id="payMonthBreak" class="small text-secondary"></div>
+      </div>
       <div class="small text-secondary mt-2"><i class="bi bi-info-circle"></i> Lương do kế toán tính theo ngày công.</div>
     </div>
 
-    <button id="payOk" class="btn btn-success w-100 mt-3" style="height:50px;font-weight:700">Đóng</button>
+    <button id="payOk" class="btn btn-success w-100 mt-3" style="height:52px;font-weight:700;border-radius:14px">Đóng</button>
   </div>
 </div>
 
@@ -140,11 +235,11 @@
     <div id="motiEmoji" style="font-size:3.4rem;line-height:1.1">🌞</div>
     <div class="text-secondary small mt-1">Đã chấm công VÀO lúc <b id="motiTime">--:--</b></div>
     <div id="motiText" class="fw-semibold mt-3" style="font-size:1.2rem;color:#198754">Chúc một ngày tốt lành!</div>
-    <button id="motiOk" class="btn btn-success w-100 mt-4" style="height:50px;font-weight:700">Bắt đầu thôi! 💚</button>
+    <button id="motiOk" class="btn btn-success w-100 mt-4" style="height:52px;font-weight:700;border-radius:14px">Bắt đầu thôi! 💚</button>
   </div>
 </div>
 
-<div id="toast" style="position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#212529;color:#fff;padding:12px 18px;border-radius:10px;z-index:1100;display:none;font-size:1.05rem"></div>
+<div id="toast" style="position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#212529;color:#fff;padding:12px 18px;border-radius:12px;z-index:1300;display:none;font-size:1.05rem;box-shadow:0 6px 20px rgba(0,0,0,.3)"></div>
 
 <script>
   function toast(m){var t=document.getElementById('toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(function(){t.style.display='none';},2500);}
