@@ -45,6 +45,7 @@
     <i class="bi bi-droplet-half fs-3"></i>
     <h1 class="h5 mb-0 flex-grow-1">Công thức pha</h1>
     <button id="installBtn" class="btn btn-sm btn-light" style="display:none"><i class="bi bi-download"></i></button>
+    <button id="bellToggle" class="btn btn-sm btn-light" title="Chuông dậy trưa trên máy này"><i class="bi bi-bell-fill"></i></button>
     <a href="/cham-cong" class="btn btn-sm btn-light" title="Chấm công"><i class="bi bi-fingerprint"></i></a>
     <span class="text-white small me-1"><i class="bi bi-person-circle"></i> {{ user.username }}</span>
     <a href="/logout" class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-right"></i></a>
@@ -406,8 +407,23 @@
   });
 
   // ----- 🔔 Chuông dậy trưa (kêu thành tiếng khi app đang mở; chuông chính ở trang /chuong) -----
+  // Bật/tắt RIÊNG TỪNG MÁY bằng nút chuông trên đầu trang (lưu localStorage máy này).
   (function(){
     var bellCfg=null, bellCtx=null;
+    function bellOn(){ try{ return localStorage.getItem('bell_app_on')!=='0'; }catch(e){ return true; } }
+    var tg=document.getElementById('bellToggle');
+    function paintToggle(){
+      if(!tg) return;
+      tg.innerHTML = bellOn() ? '<i class="bi bi-bell-fill"></i>' : '<i class="bi bi-bell-slash"></i>';
+      tg.classList.toggle('btn-light', bellOn());
+      tg.classList.toggle('btn-outline-light', !bellOn());
+    }
+    paintToggle();
+    if(tg) tg.addEventListener('click', function(){
+      try{ localStorage.setItem('bell_app_on', bellOn()?'0':'1'); }catch(e){}
+      paintToggle();
+      toast(bellOn() ? '🔔 Chuông dậy trưa: BẬT (máy này)' : '🔕 Chuông dậy trưa: TẮT (máy này)');
+    });
     fetch('/chuong-config').then(function(r){return r.json();}).then(function(d){ bellCfg=d; }).catch(function(){});
     setInterval(function(){ fetch('/chuong-config').then(function(r){return r.json();}).then(function(d){ bellCfg=d; }).catch(function(){}); }, 10*60*1000);
     // Trình duyệt chỉ cho phát âm thanh sau 1 thao tác chạm -> mở khoá ngầm ở lần chạm đầu
@@ -423,14 +439,15 @@
         o.connect(g); g.connect(bellCtx.destination); o.start(t); o.stop(t+1.7);
       });
     }
-    var rang='';
     setInterval(function(){
-      if(!bellCfg || !bellCtx || !bellCfg.lunch_end) return;
+      if(!bellCfg || !bellCtx || !bellCfg.lunch_end || !bellOn()) return;
       var d=new Date(), nowm=d.getHours()*60+d.getMinutes();
       var p=bellCfg.lunch_end.split(':'), bell=(+p[0])*60+(+p[1]||0)-(bellCfg.bell_before||0);
-      var today=d.toISOString().slice(0,10);
+      var today=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+      var rang=''; try{ rang=localStorage.getItem('bell_app_last')||''; }catch(e){}
       if(nowm===bell && rang!==today){
-        rang=today; try{ if(bellCtx.state==='suspended') bellCtx.resume(); }catch(e){}
+        try{ localStorage.setItem('bell_app_last', today); }catch(e){}
+        try{ if(bellCtx.state==='suspended') bellCtx.resume(); }catch(e){}
         var t0=bellCtx.currentTime+0.05;
         for(var i=0;i<8;i++) strike(t0+i*1.1);
         toast('🔔 Sắp hết giờ nghỉ trưa!');

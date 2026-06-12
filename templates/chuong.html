@@ -9,16 +9,26 @@
   <style>
     body{margin:0;min-height:100vh;background:#1a1a2e;color:#fff;font-family:system-ui,-apple-system,sans-serif;
          display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px}
-    .clock{font-size:min(22vw,9rem);font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
-    .date{color:#9aa0b5;font-size:1.2rem;margin-top:6px}
-    .next{margin-top:26px;font-size:1.25rem;color:#ffd166}
-    .big-btn{margin-top:30px;border:none;border-radius:18px;padding:20px 44px;font-size:1.5rem;font-weight:800;cursor:pointer}
+    .clock{font-size:min(20vw,8rem);font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+    .date{color:#9aa0b5;font-size:1.15rem;margin-top:6px}
+    .next{margin-top:20px;font-size:1.1rem;color:#ffd166;line-height:1.7}
+    .big-btn{margin-top:26px;border:none;border-radius:18px;padding:18px 40px;font-size:1.4rem;font-weight:800;cursor:pointer}
     #startBtn{background:#06d6a0;color:#06321f}
-    #testBtn{background:transparent;border:2px solid #4a4e69;color:#9aa0b5;font-size:1rem;padding:10px 22px;border-radius:12px;margin-top:16px;cursor:pointer}
-    .status{margin-top:14px;color:#9aa0b5;font-size:.95rem}
+    .sm-btn{background:transparent;border:2px solid #4a4e69;color:#9aa0b5;font-size:.95rem;padding:9px 18px;border-radius:12px;margin:14px 4px 0;cursor:pointer}
+    .status{margin-top:12px;color:#9aa0b5;font-size:.9rem;max-width:480px}
     .ringing{animation:flash .5s alternate infinite}
     @keyframes flash{from{background:#1a1a2e}to{background:#7b2d26}}
     .hidden{display:none}
+    /* Cài đặt riêng máy này */
+    #cfgPanel{background:#23243d;border:1px solid #4a4e69;border-radius:16px;padding:16px;margin-top:16px;
+              width:100%;max-width:420px;text-align:left;font-size:.95rem}
+    #cfgPanel label{display:block;color:#cfd3e8;margin-bottom:2px}
+    #cfgPanel .row{margin-bottom:12px}
+    #cfgPanel input[type=range]{width:100%}
+    #cfgPanel input[type=number]{width:110px;background:#1a1a2e;border:1px solid #4a4e69;color:#fff;border-radius:8px;padding:6px 8px}
+    .chk{display:flex;align-items:center;gap:8px;color:#cfd3e8;margin-bottom:8px}
+    .chk input{width:20px;height:20px}
+    .hint{color:#7d8199;font-size:.8rem}
   </style>
 </head>
 <body>
@@ -27,28 +37,72 @@
   <div class="next" id="next"><i class="bi bi-bell"></i> Đang tải cấu hình…</div>
 
   <button id="startBtn" class="big-btn"><i class="bi bi-bell-fill"></i> BẬT CHUÔNG</button>
-  <button id="testBtn" class="hidden"><i class="bi bi-music-note"></i> Thử chuông (3 tiếng)</button>
+  <div>
+    <button id="testBtn" class="sm-btn hidden"><i class="bi bi-music-note"></i> Thử chuông</button>
+    <button id="cfgBtn" class="sm-btn"><i class="bi bi-gear"></i> Cài đặt máy này</button>
+  </div>
+
+  <!-- Cài đặt RIÊNG cho máy này (lưu trên máy, không ảnh hưởng máy khác) -->
+  <div id="cfgPanel" class="hidden">
+    <div class="row">
+      <label>🔊 Âm lượng: <b id="volVal">100%</b></label>
+      <input type="range" id="volSlider" min="10" max="100" step="10" value="100">
+    </div>
+    <div class="row">
+      <label>🔔 Số tiếng chuông: <b id="strikesVal">12</b> <span class="hint">(~1 giây / tiếng)</span></label>
+      <input type="range" id="strikesSlider" min="3" max="25" step="1" value="12">
+    </div>
+    <div class="row">
+      <label>⏱ Kêu trước giờ hết nghỉ trưa (phút)</label>
+      <input type="number" id="beforeInp" min="0" max="30" placeholder="chung">
+      <span class="hint">— bỏ trống = theo cài đặt chung của công ty</span>
+    </div>
+    <div class="chk"><input type="checkbox" id="onLunch" checked> <span>Chuông <b>dậy trưa</b> (trước giờ hết nghỉ trưa)</span></div>
+    <div class="chk"><input type="checkbox" id="onEnd"> <span>Chuông <b>tan làm</b> (đúng giờ ra)</span></div>
+    <div class="hint">Cài đặt này chỉ áp dụng cho máy này — mỗi máy đặt loa có thể chỉnh khác nhau. Giờ nghỉ trưa/giờ ra lấy từ cài đặt chung (Chấm công quản lý → Khung giờ).</div>
+  </div>
+
   <div class="status" id="status">Đặt máy này cắm loa ở xưởng, bấm BẬT CHUÔNG rồi để nguyên màn hình này.</div>
 
 <script>
   // ================== CHUÔNG XƯỞNG ==================
-  // Chuông kêu (ÂM THANH THẬT qua loa, không phải thông báo) TRƯỚC giờ hết nghỉ trưa N phút.
-  var CFG = {lunch_end:'13:30', bell_before:3};
+  // Giờ (nghỉ trưa / giờ ra) = cài đặt CHUNG từ máy chủ.
+  // Âm lượng / số tiếng / kêu trước / loại chuông = cài đặt RIÊNG TỪNG MÁY (localStorage).
+  var CFG = {lunch_end:'13:30', bell_before:3, work_end:'17:00'};
   var ctx = null, armed = false;
+
+  // ---- Cài đặt riêng máy này ----
+  function lsGet(k, d){ try{ var v = localStorage.getItem(k); return (v === null ? d : v); }catch(e){ return d; } }
+  function lsSet(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
+  var DEV = {
+    vol:     parseInt(lsGet('bell_vol', '100'), 10) || 100,
+    strikes: parseInt(lsGet('bell_strikes', '12'), 10) || 12,
+    before:  lsGet('bell_before_dev', ''),          // '' = theo cài đặt chung
+    onLunch: lsGet('bell_on_lunch', '1') === '1',
+    onEnd:   lsGet('bell_on_end', '0') === '1'
+  };
 
   function hm2min(s){ var p=(s||'').split(':'); return (+p[0])*60 + (+p[1]||0); }
   function pad(n){ return ('0'+n).slice(-2); }
+  function min2hm(m){ return pad(Math.floor(m/60)) + ':' + pad(m%60); }
+  function effBefore(){ var d = parseInt(DEV.before, 10); return isNaN(d) ? (CFG.bell_before||0) : d; }
+
+  function renderNext(){
+    var parts = [];
+    if (DEV.onLunch) parts.push('Dậy trưa: <b>' + min2hm(hm2min(CFG.lunch_end) - effBefore()) + '</b>'
+      + ' <span style="color:#9aa0b5">(hết nghỉ ' + CFG.lunch_end + ', trước ' + effBefore() + "')</span>");
+    if (DEV.onEnd) parts.push('Tan làm: <b>' + CFG.work_end + '</b>');
+    document.getElementById('next').innerHTML = parts.length
+      ? '<i class="bi bi-bell"></i> ' + parts.join('<br>')
+      : '<i class="bi bi-bell-slash"></i> Máy này đang TẮT cả 2 chuông — bật lại trong Cài đặt.';
+  }
 
   function loadCfg(){
     fetch('/chuong-config').then(function(r){return r.json();}).then(function(d){
-      CFG = d;
-      var bell = hm2min(d.lunch_end) - (d.bell_before||0);
-      document.getElementById('next').innerHTML =
-        '<i class="bi bi-bell"></i> Chuông dậy trưa: <b>' + pad(Math.floor(bell/60)) + ':' + pad(bell%60) + '</b>'
-        + ' <span style="color:#9aa0b5">(hết nghỉ trưa ' + d.lunch_end + ', kêu trước ' + (d.bell_before||0) + " phút)</span>";
+      CFG = d; renderNext();
     }).catch(function(){});
   }
-  loadCfg(); setInterval(loadCfg, 5*60*1000);   // cập nhật cấu hình mỗi 5 phút
+  loadCfg(); setInterval(loadCfg, 5*60*1000);
 
   // Đồng hồ
   function tick(){
@@ -59,14 +113,15 @@
   }
   tick(); setInterval(tick, 1000);
 
-  // ---- Tổng hợp tiếng chuông bằng Web Audio (1 tiếng "boong" ngân dài) ----
+  // ---- Tiếng chuông (Web Audio): "boong" ngân dài, âm lượng theo máy ----
   function strike(t){
+    var v = DEV.vol / 100;
     [660, 1320, 1980].forEach(function(f, i){
       var o = ctx.createOscillator(), g = ctx.createGain();
       o.type = 'sine'; o.frequency.value = f;
-      var amp = [1.0, 0.4, 0.15][i];
+      var amp = [1.0, 0.4, 0.15][i] * v;
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(amp, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(Math.max(amp, 0.0002), t + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
       o.connect(g); g.connect(ctx.destination);
       o.start(t); o.stop(t + 1.8);
@@ -81,24 +136,24 @@
     setTimeout(function(){ document.body.classList.remove('ringing'); }, strikes * 1100 + 800);
   }
 
-  // ---- Kiểm tra mỗi 5 giây: tới giờ chuông chưa ----
+  // ---- Kiểm tra mỗi 5 giây ----
+  function fire(kind, label){
+    var d = new Date();
+    var today = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+    if (lsGet('bell_last_' + kind, '') === today) return;
+    lsSet('bell_last_' + kind, today);
+    ring(DEV.strikes);
+    document.getElementById('status').textContent = '🔔 Đã rung chuông ' + label + ' lúc ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
   function check(){
     if (!armed || !CFG.lunch_end) return;
-    var d = new Date();
-    var nowm = d.getHours() * 60 + d.getMinutes();
-    var bell = hm2min(CFG.lunch_end) - (CFG.bell_before || 0);
-    var today = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
-    var lastRang = '';
-    try { lastRang = localStorage.getItem('bell_last') || ''; } catch(e){}
-    if (nowm === bell && lastRang !== today) {
-      try { localStorage.setItem('bell_last', today); } catch(e){}
-      ring(12);   // ~13 giây boong-boong để mọi người dậy
-      document.getElementById('status').textContent = '🔔 Đã rung chuông dậy trưa lúc ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-    }
+    var d = new Date(), nowm = d.getHours() * 60 + d.getMinutes();
+    if (DEV.onLunch && nowm === hm2min(CFG.lunch_end) - effBefore()) fire('lunch', 'dậy trưa');
+    if (DEV.onEnd && CFG.work_end && nowm === hm2min(CFG.work_end)) fire('end', 'tan làm');
   }
   setInterval(check, 5000);
 
-  // ---- Bật chuông: cần 1 chạm để trình duyệt cho phát âm thanh + giữ màn hình sáng ----
+  // ---- Giữ màn hình sáng ----
   var wakeLock = null;
   function keepAwake(){
     if (!('wakeLock' in navigator)) return;
@@ -112,12 +167,27 @@
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     armed = true;
     keepAwake();
-    ring(1);   // 1 tiếng xác nhận đã bật
+    ring(1);
     this.classList.add('hidden');
     document.getElementById('testBtn').classList.remove('hidden');
     document.getElementById('status').textContent = '✅ Chuông ĐANG BẬT — giữ nguyên trang này, màn hình sẽ tự giữ sáng.';
   });
-  document.getElementById('testBtn').addEventListener('click', function(){ ring(3); });
+  document.getElementById('testBtn').addEventListener('click', function(){ ring(Math.min(DEV.strikes, 3)); });
+
+  // ---- Panel cài đặt máy này ----
+  var volS=document.getElementById('volSlider'), stS=document.getElementById('strikesSlider'),
+      bfI=document.getElementById('beforeInp'), oL=document.getElementById('onLunch'), oE=document.getElementById('onEnd');
+  volS.value=DEV.vol; stS.value=DEV.strikes; bfI.value=DEV.before; oL.checked=DEV.onLunch; oE.checked=DEV.onEnd;
+  document.getElementById('volVal').textContent=DEV.vol+'%';
+  document.getElementById('strikesVal').textContent=DEV.strikes;
+  document.getElementById('cfgBtn').addEventListener('click', function(){
+    document.getElementById('cfgPanel').classList.toggle('hidden');
+  });
+  volS.addEventListener('input', function(){ DEV.vol=+this.value; lsSet('bell_vol', this.value); document.getElementById('volVal').textContent=this.value+'%'; });
+  stS.addEventListener('input', function(){ DEV.strikes=+this.value; lsSet('bell_strikes', this.value); document.getElementById('strikesVal').textContent=this.value; });
+  bfI.addEventListener('input', function(){ DEV.before=this.value.trim(); lsSet('bell_before_dev', DEV.before); renderNext(); });
+  oL.addEventListener('change', function(){ DEV.onLunch=this.checked; lsSet('bell_on_lunch', this.checked?'1':'0'); renderNext(); });
+  oE.addEventListener('change', function(){ DEV.onEnd=this.checked; lsSet('bell_on_end', this.checked?'1':'0'); renderNext(); });
 </script>
 </body>
 </html>
