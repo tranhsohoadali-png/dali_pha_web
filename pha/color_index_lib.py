@@ -437,14 +437,60 @@ def _quantize_rarity(src_rgb, k, rar_pow=0.5, vivid_chroma=48, vivid_boost=0.02,
     crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 25, 0.5)
     _, _, centers = cv2.kmeans(samples, k, None, crit, 2, cv2.KMEANS_PP_CENTERS)
     del samples
-    # Gán mỗi pixel về center gần nhất. Dùng khai triển ||a-b||² = a²-2ab+b²
-    # (ma trận 2D, KHÔNG broadcast 3D — ảnh 2x broadcast 3D tốn ~400MB RAM).
+
+    # === VÒNG TỰ KIỂM BẢNG MÀU: không vùng đáng kể nào được LỆCH MÀU RÕ ===
+    # Ca thật bị lỗi: môi đỏ DỊU (chroma dưới ngưỡng rực) lại quá nhỏ -> lọt cả
+    # lưới "màu rực" lẫn lưới "độ hiếm" -> bị nuốt về màu da. Bịt tận gốc bằng đo
+    # LỖI GÁN: chỗ nào lệch màu > ERR_DE mà gom đủ diện tích thì ÉP cấp 1 ô màu
+    # riêng; chỗ trống lấy bằng cách GỘP 2 màu gần trùng nhất (bảng 40 màu thường
+    # thừa nhiều xám/be na ná). Tổng số màu KHÔNG đổi. Gán pixel dùng khai triển
+    # ||a-b||² = a²-2ab+b² (ma trận 2D — broadcast 3D tốn ~400MB RAM ảnh 2x).
+    # Thước đo lỗi NHẠY SẮC: mắt người thấy lệch SẮC (đỏ môi -> nâu xám) rõ hơn
+    # lệch SÁNG nhiều lần -> kênh a,b nhân CHROMA_W khi đo lỗi (gán vẫn Euclid).
+    ERR_DE = 22.0                                   # ngưỡng theo thước đã nhân trọng số
+    CHROMA_W = 2.0
+    min_mass = max(48, P // 20_000)                 # vùng lỗi phải đủ to mới đáng cấp ô
     lbl = np.empty(P, dtype=np.int32)
-    c2 = (centers ** 2).sum(1)[None, :]
-    for s in range(0, P, 400_000):
-        chunk = flat8[s:s + 400_000].astype(np.float32)
-        d = c2 - 2.0 * (chunk @ centers.T)         # bỏ a² (hằng theo hàng, không đổi argmin)
-        lbl[s:s + 400_000] = d.argmin(1)
+    max_round = 5                                   # tối đa 4 lần cấp ô + 1 vòng chốt
+    for _round in range(max_round):
+        c2 = (centers ** 2).sum(1)[None, :]
+        err_cnt = np.zeros(512, np.int64)
+        err_sum = np.zeros((512, 3), np.float64)
+        measure = _round < max_round - 1            # vòng chốt: chỉ gán, khỏi đo
+        for s in range(0, P, 400_000):
+            chunk = flat8[s:s + 400_000].astype(np.float32)
+            d = c2 - 2.0 * (chunk @ centers.T)      # thiếu a² — không đổi argmin
+            li = d.argmin(1)
+            lbl[s:s + 400_000] = li
+            if not measure:
+                continue
+            diff = chunk - centers[li]              # lệch thật so với màu được gán
+            e2 = diff[:, 0] ** 2 + (CHROMA_W * diff[:, 1]) ** 2 \
+                + (CHROMA_W * diff[:, 2]) ** 2
+            bad = e2 > ERR_DE * ERR_DE
+            if bad.any():
+                cb = flat8[s:s + 400_000][bad]
+                bb = (cb[:, 0].astype(np.int32) >> 5) * 64 \
+                    + (cb[:, 1].astype(np.int32) >> 5) * 8 \
+                    + (cb[:, 2].astype(np.int32) >> 5)
+                err_cnt += np.bincount(bb, minlength=512)
+                for c in range(3):
+                    err_sum[:, c] += np.bincount(
+                        bb, weights=cb[:, c].astype(np.float64), minlength=512)
+        if not measure or len(centers) < 3:
+            break
+        top = int(err_cnt.argmax())
+        if err_cnt[top] < min_mass:
+            break                                   # hết vùng lỗi đáng kể -> xong
+        new_c = (err_sum[top] / err_cnt[top]).astype(np.float32)
+        # Giải phóng 1 chỗ: gộp cặp màu GẦN TRÙNG nhau nhất (trộn theo độ lớn cụm).
+        cnts = np.bincount(lbl, minlength=len(centers)).astype(np.float32)
+        dcc = ((centers[:, None, :] - centers[None, :, :]) ** 2).sum(2)
+        np.fill_diagonal(dcc, np.inf)
+        i, j = np.unravel_index(int(dcc.argmin()), dcc.shape)
+        wi, wj = max(cnts[i], 1.0), max(cnts[j], 1.0)
+        centers[i] = (centers[i] * wi + centers[j] * wj) / (wi + wj)
+        centers[j] = new_c                          # ô vừa giải phóng -> màu bị thiếu
     # Màu đại diện = trung bình RGB của cụm (bincount từng kênh, không giữ float64 to).
     out = np.zeros((k, 3), np.float64)
     cnt = np.bincount(lbl, minlength=k).astype(np.float64)
