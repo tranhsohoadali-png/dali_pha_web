@@ -108,6 +108,11 @@
 
 <!-- Lịch sử pha (bật bằng nút "Lịch sử pha" ở trên) -->
 <div class="px-2" id="historyView" style="display:none">
+  <!-- Thi đua tuần -->
+  <div class="rc p-2 mb-2">
+    <div class="fw-bold mb-1">🏆 Thi đua tuần này <span id="tdLabel" class="text-secondary fw-normal" style="font-size:.8rem"></span></div>
+    <div id="tdList" class="small text-secondary">Đang tải…</div>
+  </div>
   <div class="rc p-2">
     <div class="d-flex align-items-center gap-2 mb-2">
       <button class="btn btn-warning flex-fill fw-bold hr" data-r="today">Hôm nay</button>
@@ -192,6 +197,23 @@
     }).catch(function(){});
   }
   document.getElementById('historyReload').addEventListener('click', loadHistory);
+
+  // ----- 🏆 Thi đua tuần (xếp hạng theo tổng đầu việc: pha + rót + SX) -----
+  function loadThiDua(){
+    var el=document.getElementById('tdList'); if(!el) return;
+    fetch('/thi-dua').then(function(r){return r.json();}).then(function(res){
+      document.getElementById('tdLabel').textContent = res.label||'';
+      var rows=res.rows||[];
+      if(!rows.length){ el.innerHTML='<span class="text-secondary">Tuần này chưa có số liệu — bắt đầu thôi! 💪</span>'; return; }
+      var medals=['🥇','🥈','🥉'];
+      el.innerHTML = '<table class="table table-sm mb-0"><tbody>' + rows.map(function(r){
+        var m = medals[r.rank-1] || (r.rank+'.');
+        return '<tr'+(r.me?' class="table-warning fw-bold"':'')+'><td style="width:34px">'+m+'</td><td>'+r.user+(r.me?' (bạn)':'')+'</td>'+
+               '<td class="text-end">'+r.out+' việc</td></tr>';
+      }).join('') + '</tbody></table>' +
+      (res.mine && res.mine.rank>10 ? '<div class="mt-1 small">Bạn đang hạng <b>'+res.mine.rank+'</b> với '+res.mine.out+' việc — cố lên! 🔥</div>' : '');
+    }).catch(function(){ el.textContent='Không tải được.'; });
+  }
   document.querySelectorAll('.hr').forEach(function(b){ b.addEventListener('click', function(){
     histRange = this.dataset.r;
     document.querySelectorAll('.hr').forEach(function(x){ var on=(x.dataset.r===histRange); x.classList.toggle('btn-warning',on); x.classList.toggle('btn-light',!on); });
@@ -212,7 +234,7 @@
     setBtn(tabDone, mode==='done'); setBtn(tabH, mode==='history');
     if(mode==='rot') loadRot();
     if(mode==='done') renderDoneList();
-    if(mode==='history') loadHistory();
+    if(mode==='history'){ loadHistory(); loadThiDua(); }
     window.scrollTo(0,0);
   }
   tabR.addEventListener('click', function(){ showTab('recipes'); });
@@ -382,6 +404,39 @@
       phaBusy=false; yes.disabled=false; yes.innerHTML='<i class="bi bi-check-lg"></i> Đồng ý, đã pha'; closePha();
     });
   });
+
+  // ----- 🔔 Chuông dậy trưa (kêu thành tiếng khi app đang mở; chuông chính ở trang /chuong) -----
+  (function(){
+    var bellCfg=null, bellCtx=null;
+    fetch('/chuong-config').then(function(r){return r.json();}).then(function(d){ bellCfg=d; }).catch(function(){});
+    setInterval(function(){ fetch('/chuong-config').then(function(r){return r.json();}).then(function(d){ bellCfg=d; }).catch(function(){}); }, 10*60*1000);
+    // Trình duyệt chỉ cho phát âm thanh sau 1 thao tác chạm -> mở khoá ngầm ở lần chạm đầu
+    document.addEventListener('touchstart', unlock, {once:true});
+    document.addEventListener('click', unlock, {once:true});
+    function unlock(){ try{ bellCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+    function strike(t){
+      [660,1320].forEach(function(f,i){
+        var o=bellCtx.createOscillator(), g=bellCtx.createGain();
+        o.type='sine'; o.frequency.value=f;
+        g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime([1,0.4][i],t+0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001,t+1.5);
+        o.connect(g); g.connect(bellCtx.destination); o.start(t); o.stop(t+1.7);
+      });
+    }
+    var rang='';
+    setInterval(function(){
+      if(!bellCfg || !bellCtx || !bellCfg.lunch_end) return;
+      var d=new Date(), nowm=d.getHours()*60+d.getMinutes();
+      var p=bellCfg.lunch_end.split(':'), bell=(+p[0])*60+(+p[1]||0)-(bellCfg.bell_before||0);
+      var today=d.toISOString().slice(0,10);
+      if(nowm===bell && rang!==today){
+        rang=today; try{ if(bellCtx.state==='suspended') bellCtx.resume(); }catch(e){}
+        var t0=bellCtx.currentTime+0.05;
+        for(var i=0;i<8;i++) strike(t0+i*1.1);
+        toast('🔔 Sắp hết giờ nghỉ trưa!');
+      }
+    }, 5000);
+  })();
 </script>
 </body>
 </html>

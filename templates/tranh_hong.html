@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tranh hỏng (QC)</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+</head>
+<body class="bg-body-tertiary">
+{% include '_nav.html' %}
+
+<div class="container-fluid py-3">
+  {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
+
+  <!-- Ghi nhận tranh hỏng -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-header fw-semibold"><i class="bi bi-x-octagon text-danger"></i> Ghi nhận tranh hỏng</div>
+    <div class="card-body">
+      <form method="POST" action="/tranh-hong" class="row g-2 align-items-end">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add">
+        <div class="col-6 col-md-2">
+          <label class="form-label small mb-1">Ngày</label>
+          <input type="date" name="day" class="form-control form-control-sm" value="{{ today_iso }}" max="{{ today_iso }}">
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label small mb-1">Mã tranh (nếu có)</label>
+          <input type="text" name="painting" class="form-control form-control-sm" list="paintList" placeholder="VD: K490">
+          <datalist id="paintList">{% for c in paint_codes %}<option value="{{ c }}"></option>{% endfor %}</datalist>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label small mb-1">Kích thước</label>
+          <input type="text" name="size" class="form-control form-control-sm" list="sizeList" placeholder="VD: 30x30">
+          <datalist id="sizeList">{% for s in sizes %}<option value="{{ s }}"></option>{% endfor %}</datalist>
+        </div>
+        <div class="col-6 col-md-1">
+          <label class="form-label small mb-1">Số tranh</label>
+          <input type="number" name="qty" class="form-control form-control-sm" value="1" min="1">
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label small mb-1">Công đoạn</label>
+          <select name="stage" class="form-select form-select-sm">
+            <option value="rot">Rót màu</option>
+            <option value="sx">Sản xuất</option>
+            <option value="pha">Pha màu</option>
+            <option value="khac">Khác</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label small mb-1">Người liên quan (nếu rõ)</label>
+          <input type="text" name="by_user" class="form-control form-control-sm" list="empList2" placeholder="tên đăng nhập">
+          <datalist id="empList2">{% for u in emp_users %}<option value="{{ u }}"></option>{% endfor %}</datalist>
+        </div>
+        <div class="col-12 col-md-5">
+          <label class="form-label small mb-1">Lý do hỏng</label>
+          <input type="text" name="reason" class="form-control form-control-sm" placeholder="VD: lem màu, rót sai số, canvas rách…" required>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label small mb-1">Ghi chú</label>
+          <input type="text" name="note" class="form-control form-control-sm">
+        </div>
+        <div class="col-12 col-md-3">
+          <button class="btn btn-danger btn-sm w-100 fw-semibold"><i class="bi bi-save"></i> Ghi nhận</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Thống kê -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-header fw-semibold d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <span><i class="bi bi-clipboard-data"></i> Thống kê tranh hỏng — {{ month_label }}</span>
+      <select id="monthSel" class="form-select form-select-sm" style="max-width:160px">
+        {% for m in months %}<option value="{{ m.value }}" {% if m.value == month %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="card-body">
+      <div class="row g-2 mb-3">
+        <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Tổng tranh hỏng</div><div class="fs-4 fw-bold text-danger">{{ total }}</div></div></div>
+        <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Tỷ lệ lỗi</div><div class="fs-4 fw-bold {% if rate > 5 %}text-danger{% else %}text-success{% endif %}">{{ rate }}%</div><div class="small text-secondary">hỏng / (SX {{ sx_total }} + hỏng)</div></div></div>
+        <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Theo công đoạn</div><div class="small mt-1">{% for s, q in by_stage %}<span class="badge text-bg-secondary me-1">{{ s }}: {{ q }}</span>{% empty %}—{% endfor %}</div></div></div>
+        <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Theo người</div><div class="small mt-1">{% for u, q in by_user %}<span class="badge text-bg-warning me-1">{{ u }}: {{ q }}</span>{% empty %}—{% endfor %}</div></div></div>
+      </div>
+      {% if by_reason %}
+      <div class="small fw-semibold mb-1">Lý do hay gặp:</div>
+      <div class="mb-2">{% for r, q in by_reason %}<span class="badge text-bg-light border me-1 mb-1">{{ r }} ({{ q }})</span>{% endfor %}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Lịch sử -->
+  <div class="card shadow-sm">
+    <div class="card-header fw-semibold"><i class="bi bi-clock-history"></i> Lịch sử ghi nhận</div>
+    <div class="table-responsive" style="max-height:480px;overflow:auto">
+      <table class="table table-sm align-middle mb-0">
+        <thead class="table-light position-sticky top-0"><tr><th>Ngày</th><th>Mã tranh</th><th>Khổ</th><th class="text-center">SL</th><th>Công đoạn</th><th>Lý do</th><th>Người liên quan</th><th>Ghi chú</th><th class="text-end">Xoá</th></tr></thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td>{{ r.day }}</td><td class="fw-semibold">{{ r.painting|default:"—" }}</td><td>{{ r.size|default:"—" }}</td>
+            <td class="text-center text-danger fw-bold">{{ r.qty }}</td><td>{{ r.stage }}</td>
+            <td>{{ r.reason }}</td><td>{{ r.by_user|default:"—" }}</td><td class="small text-secondary">{{ r.note }}</td>
+            <td class="text-end">
+              <form method="POST" action="/tranh-hong" class="d-inline" onsubmit="return confirm('Xoá bản ghi này?')">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="id" value="{{ r.id }}">
+                <button class="btn btn-sm btn-outline-danger py-0 px-1"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}<tr><td colspan="9" class="text-secondary text-center py-3">Chưa có tranh hỏng nào trong tháng — tốt! 🎉</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('monthSel').addEventListener('change', function(){
+    window.location = '/tranh-hong?month=' + encodeURIComponent(this.value);
+  });
+</script>
+</body>
+</html>

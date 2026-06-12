@@ -7,6 +7,8 @@ from pha import learn_lib
 from pha import flat_number
 from pha import attend_nudge
 from pha import ketoan_feed
+from pha import backup_lib
+from pha import extra_views
 
 urlpatterns = [
     path('login', views.login_view, name='login'),
@@ -68,6 +70,18 @@ urlpatterns = [
     path('cham-cong', views.cham_cong, name='cham_cong'),
     path('cham-cong-quan-ly', views.cham_cong_quan_ly, name='cham_cong_quan_ly'),
     path('cham-cong-nhac', attend_nudge.nudge, name='cham_cong_nhac'),
+    path('nghi-phep', extra_views.nghi_phep, name='nghi_phep'),
+
+    # Tranh hỏng (QC) + thi đua + chuông xưởng
+    path('tranh-hong', extra_views.tranh_hong, name='tranh_hong'),
+    path('thi-dua', extra_views.thi_dua, name='thi_dua'),
+    path('chuong', extra_views.chuong, name='chuong'),
+    path('chuong-config', extra_views.chuong_config, name='chuong_config'),
+
+    # Sao lưu dữ liệu
+    path('sao-luu', backup_lib.backup_page, name='sao_luu'),
+    path('sao-luu-chay', backup_lib.backup_run_view, name='sao_luu_chay'),
+    path('sao-luu-tai', backup_lib.backup_download, name='sao_luu_tai'),
     path('cham-cong-ip', views.cham_cong_ip, name='cham_cong_ip'),
     path('cham-cong-excel', views.export_cham_cong_excel, name='cham_cong_excel'),
     path('quan-ly-giao-rot', views.quan_ly_giao_rot, name='quan_ly_giao_rot'),

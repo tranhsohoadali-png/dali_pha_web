@@ -82,6 +82,13 @@ def nudge(request):
         if r.check_out:
             checked_out.add(r.user)
 
+    # Người đang NGHỈ PHÉP (đã duyệt) hôm nay -> không nhắc
+    try:
+        from pha.extra_views import _on_leave_today
+        on_leave = _on_leave_today(day)
+    except Exception:
+        on_leave = set()
+
     sent = _sent_today(day)
     sent_in = set(sent.get('in', []))
     sent_out = set(sent.get('out', []))
@@ -97,7 +104,7 @@ def nudge(request):
                               'body': 'Đừng quên bấm VÀO LÀM nhé! Chúc một ngày làm việc vui vẻ 💪',
                               'url': '/cham-cong', 'tag': 'nudge-in-' + day, 'icon': '/media/icon-192.png'})
         for u, subs in sub_users.items():
-            if u in checked_in:
+            if u in checked_in or u in on_leave:
                 continue
             if not force and u in sent_in:
                 continue

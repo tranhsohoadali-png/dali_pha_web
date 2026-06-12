@@ -502,7 +502,11 @@ def api_luong(request):
         a['total_hours'] += c['hours']; a['ot_hours'] += c['ot_hours']
         a['ot_pay'] += c['ot_pay']; a['late_minutes'] += c['late_min']; a['late_fine'] += c['fine']
 
-    users = sorted(set(pmap) | set(att))
+    # Nghỉ phép đã duyệt trong tháng (để kế toán trừ/cộng phép)
+    from pha.extra_views import _approved_leave_days
+    leave_map = _approved_leave_days(month)
+
+    users = sorted(set(pmap) | set(att) | set(leave_map))
     employees = []
     for u in users:
         p = pmap.get(u, {'pha': 0, 'rot_p': 0, 'rot_c': 0, 'sx': 0})
@@ -513,7 +517,8 @@ def api_luong(request):
             'attendance': {'work_days': a['work_days'], 'total_hours': round(a['total_hours'], 2),
                            'ot_hours': round(a['ot_hours'], 2), 'ot_pay': round(a['ot_pay']),
                            'late_days': a['late_days'], 'late_minutes': a['late_minutes'],
-                           'late_fine': round(a['late_fine'])},
+                           'late_fine': round(a['late_fine']),
+                           'leave_days': len(leave_map.get(u, ()))},
             'output': {'pha_batches': p['pha'], 'rot_paintings': p['rot_p'],
                        'rot_colors': p['rot_c'], 'sx_paintings': p['sx']},
         })
@@ -2115,6 +2120,10 @@ def _att_cfg():
         'ot_min': num('OT_MIN_HOURS', 1),   # tăng ca phải đạt ngưỡng này (giờ) mới được tính
         'hol_off': {d.strip() for d in (AppSetting.get('HOLIDAYS_OFF', '') or '').split(',') if d.strip()},
         'hol_extra': _parse_holidays_extra(AppSetting.get('HOLIDAYS_EXTRA', '')),
+        # Nghỉ trưa + chuông báo dậy (chuông kêu TRƯỚC giờ hết nghỉ trưa N phút)
+        'lunch_start': AppSetting.get('LUNCH_START', '12:00') or '12:00',
+        'lunch_end': AppSetting.get('LUNCH_END', '13:30') or '13:30',
+        'bell_before': int(num('BELL_BEFORE_MIN', 3)),
     }
 
 
@@ -2296,11 +2305,20 @@ def cham_cong(request):
     recent = [{'day': _fmt_day(r.day), 'in': _hm(r.check_in), 'out': _hm(r.check_out),
                'hours': _att_hours(r)}
               for r in Attendance.objects.filter(user=request.user.username).order_by('-day')[:14]]
+    from pha.models import LeaveRequest
+    _lv_label = {'pending': 'Chờ duyệt', 'approved': 'Đã duyệt', 'rejected': 'Từ chối'}
+    my_leaves = [{'rng': _fmt_day(lr.from_day) + ('' if lr.from_day == lr.to_day
+                                                  else ' → ' + _fmt_day(lr.to_day)),
+                  'reason': lr.reason, 'status': lr.status,
+                  'status_label': _lv_label.get(lr.status, lr.status)}
+                 for lr in LeaveRequest.objects.filter(user=request.user.username)[:6]]
     return render(request, 'cham_cong.html', {
         'today_in': _hm(today.check_in) if today else '',
         'today_out': _hm(today.check_out) if today else '',
         'ip': ip, 'ip_ok': ip_ok, 'configured': configured, 'recent': recent,
         'today_label': now.strftime('%d/%m/%Y'),
+        'today_iso': now.strftime('%Y-%m-%d'),
+        'my_leaves': my_leaves,
     })
 
 
@@ -2318,12 +2336,16 @@ def cham_cong_quan_ly(request):
         if act == 'save_schedule':
             AppSetting.set('WORK_START', (request.POST.get('work_start') or '08:00').strip())
             AppSetting.set('WORK_END', (request.POST.get('work_end') or '17:00').strip())
+            AppSetting.set('LUNCH_START', (request.POST.get('lunch_start') or '12:00').strip())
+            AppSetting.set('LUNCH_END', (request.POST.get('lunch_end') or '13:30').strip())
             days = [d for d in request.POST.getlist('workday') if d.isdigit()]
             AppSetting.set('WORK_DAYS', ','.join(days) if days else '0,1,2,3,4,5')
             for key, fld in (('LATE_GRACE', 'grace'), ('LATE_FINE_PER_MIN', 'fine_min'),
                              ('LATE_FINE_FIXED', 'fine_fixed'), ('OT_RATE', 'ot_rate'),
                              ('OT_MIN_HOURS', 'ot_min')):
                 AppSetting.set(key, (request.POST.get(fld) or '0').replace(',', '').strip() or '0')
+            AppSetting.set('BELL_BEFORE_MIN',
+                           (request.POST.get('bell_before') or '3').replace(',', '').strip() or '3')
             messages.info(request, 'Đã lưu khung giờ & quy định.')
             return redirect('/cham-cong-quan-ly')
         if act == 'reset_device':
@@ -2403,6 +2425,21 @@ def cham_cong_quan_ly(request):
                 AppSetting.set('HOLIDAYS_OFF', ', '.join(sorted(off)))
             messages.info(request, f'Đã bỏ ngày nghỉ {_fmt_day(d)} (coi là ngày làm).')
             return redirect('/cham-cong-quan-ly')
+        if act == 'leave_decide':
+            from pha.models import LeaveRequest
+            from pha.extra_views import _notify_leave_decision
+            lr = LeaveRequest.objects.filter(id=request.POST.get('id'),
+                                             status=LeaveRequest.STATUS_PENDING).first()
+            if lr:
+                ok = request.POST.get('decision') == 'approve'
+                lr.status = LeaveRequest.STATUS_APPROVED if ok else LeaveRequest.STATUS_REJECTED
+                lr.decided_by = request.user.username
+                lr.decided_time = _now()
+                lr.save()
+                _notify_leave_decision(lr)
+                messages.info(request, ('Đã DUYỆT' if ok else 'Đã TỪ CHỐI')
+                              + f' đơn nghỉ của {lr.user}.')
+            return redirect('/cham-cong-quan-ly')
 
     now = _now()
     month = request.GET.get('month') or now.strftime('%Y-%m')
@@ -2426,11 +2463,20 @@ def cham_cong_quan_ly(request):
             device_users.setdefault(r.device_in, set()).add(r.user)
         if r.check_in and not r.check_out and r.day != today_str:
             noout.append({'day': _fmt_day(r.day), 'user': r.user})
+    # Nghỉ phép đã duyệt trong tháng -> cột "Nghỉ phép" (kể cả người chưa có dòng chấm công)
+    from pha.extra_views import _approved_leave_days
+    leave_map = _approved_leave_days(month)
+    for u, ds in leave_map.items():
+        summ.setdefault(u, {'user': u, 'days': 0, 'hours': 0.0,
+                            'ot': 0.0, 'late': 0, 'fine': 0, 'ot_pay': 0})
+    for s in summ.values():
+        s['leave'] = len(leave_map.get(s['user'], ()))
     summary = sorted(summ.values(), key=lambda x: -x['hours'])
     for s in summary:
         s['hours'] = round(s['hours'], 1); s['ot'] = round(s['ot'], 1)
     totals = {k: round(sum(s[k] for s in summary), 1) if k in ('hours', 'ot')
-              else sum(s[k] for s in summary) for k in ('days', 'hours', 'ot', 'late', 'fine', 'ot_pay')}
+              else sum(s[k] for s in summary)
+              for k in ('days', 'hours', 'ot', 'late', 'fine', 'ot_pay', 'leave')}
     shared = [{'token': tok[:8] + '…', 'users': sorted(us)}
               for tok, us in device_users.items() if len(us) > 1]
     bindings = []
@@ -2468,7 +2514,27 @@ def cham_cong_quan_ly(request):
         'holidays': _upcoming_holidays(now, cfg),
         'prod_url': AppSetting.get('KETOAN_PROD_URL', ''),
         'prod_key': AppSetting.get('KETOAN_PROD_KEY', ''),
+        'leave_pending': _leave_rows(status='pending'),
+        'leave_recent': _leave_rows(exclude_pending=True, limit=10),
     })
+
+
+def _leave_rows(status=None, exclude_pending=False, limit=50):
+    """Danh sách đơn nghỉ phép cho trang quản lý (đã format ngày)."""
+    from pha.models import LeaveRequest
+    qs = LeaveRequest.objects.all()
+    if status:
+        qs = qs.filter(status=status)
+    if exclude_pending:
+        qs = qs.exclude(status=LeaveRequest.STATUS_PENDING)
+    out = []
+    for lr in qs[:limit]:
+        out.append({'id': lr.id, 'user': lr.user,
+                    'rng': _fmt_day(lr.from_day) + ('' if lr.from_day == lr.to_day
+                                                    else ' → ' + _fmt_day(lr.to_day)),
+                    'reason': lr.reason, 'status': lr.status,
+                    'decided_by': lr.decided_by})
+    return out
 
 
 @csrf_exempt
@@ -2978,3 +3044,4 @@ def anh_download_result(request):
         return JsonResponse({'file_paint': file_paint, 'file_a3': file_a3, 'origin_result': result_url})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+

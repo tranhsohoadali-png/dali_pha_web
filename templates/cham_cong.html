@@ -58,7 +58,7 @@
     <button id="btnOut" class="btn btn-primary big-btn" {% if configured and not ip_ok %}disabled{% endif %}><i class="bi bi-box-arrow-right"></i> TAN LÀM</button>
   </div>
 
-  <div class="cc-card p-2">
+  <div class="cc-card p-2 mb-3">
     <div class="fw-bold mb-1 px-1"><i class="bi bi-clock-history"></i> 14 ngày gần đây</div>
     <table class="table table-sm mb-0">
       <thead><tr><th>Ngày</th><th class="text-center">Vào</th><th class="text-center">Ra</th><th class="text-end">Giờ</th></tr></thead>
@@ -70,6 +70,35 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+
+  <!-- Xin nghỉ phép -->
+  <div class="cc-card p-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div class="fw-bold"><i class="bi bi-calendar2-x text-warning"></i> Nghỉ phép</div>
+      <button id="leaveBtn" class="btn btn-warning btn-sm fw-semibold"><i class="bi bi-pencil-square"></i> Xin nghỉ</button>
+    </div>
+    <div id="leaveForm" style="display:none" class="border rounded p-2 mb-2 bg-light">
+      <div class="row g-2">
+        <div class="col-6"><label class="form-label small mb-0">Từ ngày</label><input type="date" id="lvFrom" class="form-control form-control-sm" min="{{ today_iso }}"></div>
+        <div class="col-6"><label class="form-label small mb-0">Đến ngày</label><input type="date" id="lvTo" class="form-control form-control-sm" min="{{ today_iso }}"></div>
+        <div class="col-12"><label class="form-label small mb-0">Lý do</label><input type="text" id="lvReason" class="form-control form-control-sm" placeholder="VD: việc gia đình, khám bệnh…"></div>
+        <div class="col-12"><button id="lvSend" class="btn btn-success btn-sm w-100 fw-semibold"><i class="bi bi-send"></i> Gửi đơn</button></div>
+      </div>
+    </div>
+    {% if my_leaves %}
+    <table class="table table-sm mb-0">
+      <tbody>
+        {% for l in my_leaves %}
+        <tr>
+          <td>{{ l.rng }}</td>
+          <td class="small text-secondary">{{ l.reason|truncatechars:30 }}</td>
+          <td class="text-end"><span class="badge {% if l.status == 'approved' %}text-bg-success{% elif l.status == 'rejected' %}text-bg-danger{% else %}text-bg-secondary{% endif %}">{{ l.status_label }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="small text-secondary">Chưa có đơn xin nghỉ nào.</div>{% endif %}
   </div>
 </div>
 
@@ -189,6 +218,24 @@
   }
   document.getElementById('payOk').addEventListener('click', function(){ document.getElementById('payModal').style.display='none'; });
   document.getElementById('payModal').addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
+
+  // ----- Xin nghỉ phép -----
+  document.getElementById('leaveBtn').addEventListener('click', function(){
+    var f=document.getElementById('leaveForm');
+    f.style.display = (f.style.display==='none') ? '' : 'none';
+  });
+  document.getElementById('lvSend').addEventListener('click', function(){
+    var from=document.getElementById('lvFrom').value, to=document.getElementById('lvTo').value||from;
+    var reason=document.getElementById('lvReason').value;
+    if(!from){ toast('Chọn ngày bắt đầu nghỉ'); return; }
+    var btn=this; btn.disabled=true;
+    var fd=new FormData(); fd.append('from_day',from); fd.append('to_day',to); fd.append('reason',reason);
+    fetch('/nghi-phep',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(res){
+      btn.disabled=false;
+      toast(res.ok?('✓ '+res.msg):(res.msg||'Lỗi'));
+      if(res.ok) setTimeout(function(){ location.reload(); }, 1200);
+    }).catch(function(){ btn.disabled=false; toast('Lỗi kết nối'); });
+  });
 </script>
 </body>
 </html>

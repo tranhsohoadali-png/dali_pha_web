@@ -247,3 +247,46 @@ class PourRequest(models.Model):
 
     def __str__(self):
         return f'{self.painting} → {self.assignee or "mọi người"} ({self.status})'
+
+
+class LeaveRequest(models.Model):
+    """Xin nghỉ phép: nhân viên gửi từ trang chấm công, quản lý duyệt/từ chối."""
+    STATUS_PENDING = 'pending'
+    STATUS_APPROVED = 'approved'
+    STATUS_REJECTED = 'rejected'
+
+    created_time = models.DateTimeField(auto_now_add=True)
+    user = models.CharField(max_length=80, db_index=True)
+    from_day = models.CharField(max_length=10, db_index=True)   # YYYY-MM-DD
+    to_day = models.CharField(max_length=10, db_index=True)     # YYYY-MM-DD (>= from_day)
+    reason = models.CharField(max_length=300, blank=True, default='')
+    status = models.CharField(max_length=20, default=STATUS_PENDING, db_index=True)
+    decided_by = models.CharField(max_length=80, blank=True, default='')
+    decided_time = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_time', '-id']
+
+    def __str__(self):
+        return f'{self.user} nghỉ {self.from_day}→{self.to_day} ({self.status})'
+
+
+class DefectLog(models.Model):
+    """Tranh hỏng (QC): ghi nhận sản phẩm lỗi theo mã tranh / công đoạn / người liên quan."""
+    created_time = models.DateTimeField(auto_now_add=True)
+    day = models.CharField(max_length=10, db_index=True)    # YYYY-MM-DD (giờ VN)
+    month = models.CharField(max_length=7, db_index=True)   # YYYY-MM
+    painting = models.CharField(max_length=100, blank=True, default='')  # mã tranh (tuỳ chọn)
+    size = models.CharField(max_length=20, blank=True, default='')
+    qty = models.IntegerField(default=1)                    # số tranh hỏng
+    stage = models.CharField(max_length=20, blank=True, default='')  # rot | sx | khac
+    reason = models.CharField(max_length=300, blank=True, default='')
+    by_user = models.CharField(max_length=80, blank=True, default='')   # người liên quan (nếu rõ)
+    reporter = models.CharField(max_length=80, blank=True, default='')  # ai ghi nhận
+    note = models.CharField(max_length=300, blank=True, default='')
+
+    class Meta:
+        ordering = ['-created_time', '-id']
+
+    def __str__(self):
+        return f'{self.day} hỏng {self.qty} ({self.painting or self.stage})'

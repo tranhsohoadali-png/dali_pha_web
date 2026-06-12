@@ -29,6 +29,9 @@
         <li class="nav-item">
           <a class="nav-link{% if '/san-xuat' in request.path %} active fw-semibold{% endif %}" href="/san-xuat"><i class="bi bi-box2-heart"></i> Sản xuất</a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link{% if '/tranh-hong' in request.path %} active fw-semibold{% endif %}" href="/tranh-hong"><i class="bi bi-x-octagon"></i> Tranh hỏng</a>
+        </li>
         {# Năng suất đã chuyển sang phần mềm kế toán (ketoan.tranhdali.vn) — ẩn khỏi nav, trang /nang-suat vẫn truy cập được #}
         <li class="nav-item">
           <a class="nav-link{% if '/loi-nhuan' in request.path %} active fw-semibold{% endif %}" href="/loi-nhuan"><i class="bi bi-graph-up-arrow"></i> Lợi nhuận</a>
@@ -54,6 +57,9 @@
             <li><a class="dropdown-item" href="/app"><i class="bi bi-phone"></i> App nhân viên (pha + rót)</a></li>
             <li><a class="dropdown-item" href="/cham-cong"><i class="bi bi-fingerprint"></i> Chấm công</a></li>
             <li><a class="dropdown-item" href="/quan-ly"><i class="bi bi-phone-vibrate"></i> App quản lý</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="/chuong"><i class="bi bi-bell"></i> Chuông xưởng</a></li>
+            <li><a class="dropdown-item" href="/sao-luu"><i class="bi bi-shield-check"></i> Sao lưu dữ liệu</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item text-danger" href="/logout"><i class="bi bi-box-arrow-right"></i> Đăng xuất</a></li>
           </ul>
