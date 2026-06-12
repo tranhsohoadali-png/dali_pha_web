@@ -32,6 +32,9 @@ MAX_TEXT_SIZE = config("MAX_TEXT_SIZE", default=40, cast=int)
 # 2000px+ mất >2 phút, vượt thời gian chờ của trình duyệt -> "không ra kết quả").
 # 1400px thừa nét cho tranh tô màu; bản in được vẽ lại theo DPI khi tải. 0 = tắt.
 WORK_MAX_SIDE = config("WORK_MAX_SIDE", default=1400, cast=int)
+# Ảnh THIẾT KẾ được xử lý ở 2x (ngũ quan nhỏ như mắt/mũi có gấp 4 diện tích -> giữ
+# nét như Illustrator trace), nhưng không vượt cạnh dài này (giới hạn thời gian/RAM).
+DESIGN_MAX_SIDE = config("DESIGN_MAX_SIDE", default=2800, cast=int)
 GREEN = (0, 255, 0)
 BLUE = (255, 0, 0)
 PADDING_CIRCLE = config("PADDING_CIRCLE", default=1, cast=int)
@@ -395,12 +398,201 @@ def _merge_small_regions(img_rgb, min_area=0, min_radius=5.5, max_pass=6,
     return img
 
 
-def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0):
-    """Gom ảnh về tối đa n màu (median-cut) rồi lưu file tạm. Trả đường_dẫn_tạm.
-    smooth (0..3): làm phẳng vùng bằng mean-shift trước khi gom màu — biến ảnh
-    màu nước/ảnh chụp (chuyển sắc mượt) thành các MẢNG ĐẶC sạch, giống tranh tô màu.
-    min_area: gộp mảng nhỏ hơn N px vào hàng xóm. print_long_cm: nhận cho tương
-    thích, không dùng (cỡ số cố định)."""
+def _quantize_rarity(src_rgb, k, rar_pow=0.5, vivid_chroma=48, vivid_boost=0.02,
+                     seed=7):
+    """Chọn bảng màu bằng K-MEANS LAB CÓ TRỌNG SỐ ĐỘ HIẾM: pixel màu hiếm (môi đỏ,
+    bóng mũi, má hồng — nhỏ nhưng quan trọng) được lấy mẫu nhiều hơn -> CÓ CỤM RIÊNG.
+    Median-cut chia ô theo SỐ LƯỢNG pixel nên tông hiếm bị nuốt (môi đỏ 0.14% ảnh
+    mất ngay cả ở k=256) — đây là lý do đổi sang cách này."""
+    # GHI CHÚ RAM: chạy trên VPS nhỏ, 2 job song song (ThreadPoolExecutor) — tính
+    # toán theo khối + giải phóng mảng tạm NGAY sau khi dùng, tránh giữ float64 to.
+    H, W = src_rgb.shape[:2]
+    lab8 = cv2.cvtColor(src_rgb, cv2.COLOR_RGB2LAB)          # uint8, nhẹ
+    flat8 = lab8.reshape(-1, 3)
+    P = flat8.shape[0]
+    # Độ hiếm: histogram LAB 8x8x8 bin (>>5 trên uint8, khỏi cần mảng float).
+    bid = (flat8[:, 0].astype(np.int32) >> 5) * 64 \
+        + (flat8[:, 1].astype(np.int32) >> 5) * 8 \
+        + (flat8[:, 2].astype(np.int32) >> 5)
+    freq = np.bincount(bid, minlength=512).astype(np.float64)
+    w = 1.0 / np.power(freq[bid], rar_pow)
+    w /= w.sum()
+    del bid, freq
+    rng = np.random.default_rng(seed)              # seed cố định -> kết quả ổn định
+    N = min(150_000, P)
+    idx = rng.choice(P, size=N, replace=True, p=w)
+    del w
+    samples = flat8[idx].astype(np.float32)
+    del idx
+    # Ép thêm pixel RỰC (môi đỏ...) chiếm >= vivid_boost tỉ lệ mẫu.
+    chroma = np.abs(flat8[:, 1].astype(np.int16) - 128) \
+        + np.abs(flat8[:, 2].astype(np.int16) - 128)
+    viv = np.where(chroma > vivid_chroma)[0]
+    del chroma
+    if viv.size:
+        rep = viv[rng.integers(0, viv.size, size=int(N * vivid_boost))]
+        samples = np.vstack([samples, flat8[rep].astype(np.float32)])
+    del viv
+    k = max(2, min(int(k), len(np.unique(samples, axis=0))))
+    crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 25, 0.5)
+    _, _, centers = cv2.kmeans(samples, k, None, crit, 2, cv2.KMEANS_PP_CENTERS)
+    del samples
+    # Gán mỗi pixel về center gần nhất. Dùng khai triển ||a-b||² = a²-2ab+b²
+    # (ma trận 2D, KHÔNG broadcast 3D — ảnh 2x broadcast 3D tốn ~400MB RAM).
+    lbl = np.empty(P, dtype=np.int32)
+    c2 = (centers ** 2).sum(1)[None, :]
+    for s in range(0, P, 400_000):
+        chunk = flat8[s:s + 400_000].astype(np.float32)
+        d = c2 - 2.0 * (chunk @ centers.T)         # bỏ a² (hằng theo hàng, không đổi argmin)
+        lbl[s:s + 400_000] = d.argmin(1)
+    # Màu đại diện = trung bình RGB của cụm (bincount từng kênh, không giữ float64 to).
+    out = np.zeros((k, 3), np.float64)
+    cnt = np.bincount(lbl, minlength=k).astype(np.float64)
+    flat_rgb = src_rgb.reshape(-1, 3)
+    for c in range(3):
+        out[:, c] = np.bincount(lbl, weights=flat_rgb[:, c].astype(np.float64),
+                                minlength=k)
+    out = (out / np.maximum(cnt, 1)[:, None]).round().clip(0, 255).astype(np.uint8)
+    return out[lbl].reshape(H, W, 3)
+
+
+def _sweep_dust(lbl, n_colors, dust_area=4):
+    """QUÉT BỤI vector hoá: mọi đốm <= dust_area px (vụn k-means, vô hình ở bản in)
+    nhận nhãn của hàng xóm sát cạnh — 1 lượt O(P), giảm ~90% số component phải vào
+    vòng phân tích chậm phía sau. Trả True nếu có thay đổi."""
+    H, W = lbl.shape
+    dust = np.zeros((H, W), bool)
+    for ci in range(n_colors):
+        mask = (lbl == ci).astype(np.uint8)
+        if not mask.any():
+            continue
+        num, comp, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        lut = np.zeros(num, bool)
+        lut[1:] = stats[1:, cv2.CC_STAT_AREA] <= dust_area
+        dust |= lut[comp]
+    if not dust.any():
+        return False
+    lbl[dust] = -1
+    for _ in range(4):                       # bụi <=4px: vài lượt lan là hết
+        holes = lbl < 0
+        if not holes.any():
+            break
+        for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+            nbr = np.roll(lbl, (dy, dx), axis=(0, 1))
+            # không cho cuộn vòng qua mép ảnh
+            if dy == 1:
+                nbr[0, :] = -1
+            elif dy == -1:
+                nbr[-1, :] = -1
+            if dx == 1:
+                nbr[:, 0] = -1
+            elif dx == -1:
+                nbr[:, -1] = -1
+            fill = holes & (nbr >= 0)
+            lbl[fill] = nbr[fill]
+            holes &= ~fill
+    if (lbl < 0).any():                      # bụi kẹt (suy biến): trả về nhãn 0
+        lbl[lbl < 0] = 0
+    return True
+
+
+def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4):
+    """Gộp mảng nhỏ vào hàng xóm NHƯNG GIỮ chi tiết ngũ quan: đốm nhỏ TRÒN có màu
+    TƯƠNG PHẢN CAO với xung quanh (lòng trắng mắt, lỗ mũi, viền môi) được GIỮ;
+    chỉ gộp bụi thật (rad<1), sliver dẹt (thon dài sát biên) và mảng màu GẦN GIỐNG
+    hàng xóm (deltaE < de_keep). Trả (ảnh, mask các chi tiết đã giữ)."""
+    img = arr.copy()
+    H, W = img.shape[:2]
+    k3 = np.ones((3, 3), np.uint8)
+    feature = np.zeros((H, W), np.uint8)
+    for _ in range(max_pass):
+        flat = img.reshape(-1, 3)
+        colors, inv = np.unique(flat, axis=0, return_inverse=True)
+        lbl = inv.reshape(H, W).astype(np.int32)
+        lab = cv2.cvtColor(colors.reshape(-1, 1, 3).astype('uint8'),
+                           cv2.COLOR_RGB2LAB).reshape(-1, 3).astype(float)
+        changed = _sweep_dust(lbl, len(colors))          # bụi vụn đi trước, rẻ
+        if changed:
+            img = colors[lbl.reshape(-1)].reshape(img.shape)
+        feature[:] = 0
+        for ci in range(len(colors)):
+            mask = (lbl == ci).astype(np.uint8)
+            if not mask.any():
+                continue
+            dist = cv2.distanceTransform(mask, cv2.DIST_L2, 3)
+            num, comp, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+            for kk in range(1, num):
+                area = stats[kk, cv2.CC_STAT_AREA]
+                x, y, w, h = stats[kk, 0], stats[kk, 1], stats[kk, 2], stats[kk, 3]
+                # Cửa sổ NỚI 1px (kẹp biên ảnh): bbox sít làm vòng dilate không nở
+                # ra ngoài được -> đốm lấp đầy bbox không bao giờ tìm thấy hàng xóm.
+                x0, y0 = max(x - 1, 0), max(y - 1, 0)
+                x1, y1 = min(x + w + 1, W), min(y + h + 1, H)
+                sub = comp[y0:y1, x0:x1] == kk
+                rad = float(dist[y0:y1, x0:x1][sub].max())
+                if rad >= r_keep and (not min_area or area >= min_area):
+                    continue
+                dil = cv2.dilate(sub.astype(np.uint8), k3) > 0
+                ring = dil & (~sub)
+                nb = lbl[y0:y1, x0:x1][ring]
+                nb = nb[(nb != ci) & (nb >= 0)]
+                if nb.size == 0:
+                    continue
+                nb_ci = int(np.bincount(nb).argmax())
+                de = float(np.sqrt(((lab[ci] - lab[nb_ci]) ** 2).sum()))
+                elong = area / max(rad * rad, 1e-6)   # ~3.14 = tròn; lớn = dẹt/dài
+                true_dust = rad < 1.0
+                sliver = (rad < 1.6) and (elong > 8.0)
+                if true_dust or sliver or de < de_keep:
+                    yy, xx = np.where(sub)
+                    img[y0 + yy, x0 + xx] = colors[nb_ci]
+                    lbl[y0 + yy, x0 + xx] = nb_ci
+                    changed = True
+                else:
+                    yy, xx = np.where(sub)
+                    feature[y0 + yy, x0 + xx] = 255        # ngũ quan nhỏ: GIỮ
+        if not changed:
+            break
+    return img, feature
+
+
+def _smooth_labels_voting(arr, sigma, protect=None):
+    """Làm mượt biên kiểu VECTOR-TRACE: mỗi màu (nhãn) blur Gaussian, pixel theo
+    nhãn có 'phiếu' cao nhất -> biên cong mượt, KHÔNG tạo màu lạ, không răng cưa.
+    protect: vùng giữ nguyên nhãn gốc (chi tiết ngũ quan nhỏ đã được giữ)."""
+    flat = arr.reshape(-1, 3)
+    colors, inv = np.unique(flat, axis=0, return_inverse=True)
+    H, W = arr.shape[:2]
+    lbl = inv.reshape(H, W).astype(np.int32)
+    best_v = np.full((H, W), -1.0, np.float32)
+    best_l = np.zeros((H, W), np.int32)
+    for ci in range(len(colors)):
+        m = (lbl == ci).astype(np.float32)
+        if not m.any():
+            continue
+        g = cv2.GaussianBlur(m, (0, 0), sigma)
+        upd = g > best_v
+        best_v[upd] = g[upd]
+        best_l[upd] = ci
+    if protect is not None:
+        keep = protect > 0
+        best_l[keep] = lbl[keep]
+    return colors[best_l.reshape(-1)].reshape(arr.shape)
+
+
+def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=None):
+    """Tạo ảnh THIẾT KẾ chất lượng Illustrator-trace rồi lưu file LÀM VIỆC tạm (1x)
+    cho khâu đánh số. Trả đường_dẫn_tạm.
+
+    Chuỗi mới (thay median-cut + median-blur cũ — cái làm MẤT môi đỏ/bệt mặt):
+      1. (smooth>=2) mean-shift dọn ảnh chụp/màu nước.
+      2. Phóng 2x (tối đa DESIGN_MAX_SIDE) -> ngũ quan nhỏ đủ diện tích giữ nét.
+      3. K-means LAB trọng-số-độ-hiếm -> tông hiếm (môi, bóng mũi) có cụm riêng.
+      4. Gộp mảng GIỮ-CHI-TIẾT (đốm tròn tương phản cao = ngũ quan -> giữ).
+      5. Làm mượt biên Gaussian-voting (cong mượt kiểu vector).
+    design_out: lưu bản THIẾT KẾ 2x (đẹp) ra đường dẫn này; file làm việc 1x dùng
+    đánh số (palette y hệt bản 2x).
+    smooth (0..1): không tiền xử lý (ảnh AI/anime đã phẳng); (2..3): mean-shift."""
     import os
     import tempfile
     im = Image.open(path).convert('RGB')
@@ -409,13 +601,13 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0):
         im = im.copy()
         im.thumbnail((WORK_MAX_SIDE, WORK_MAX_SIDE), Resampling.LANCZOS)
     target = max(2, n)
-    src_rgb = np.array(im)
+    W1, H1 = im.size
     sm_level = int(smooth) if (smooth and int(smooth) > 0) else 0
 
-    if sm_level > 0:
+    if sm_level >= 2:
         # LÀM PHẲNG (mean-shift) trước khi gom -> dọn ảnh chụp/màu nước cho sạch mảng.
-        sp, sr = {1: (9, 18), 2: (16, 32), 3: (26, 50)}.get(sm_level, (16, 32))
-        a = src_rgb[:, :, ::-1].copy()                 # RGB -> BGR
+        sp, sr = {2: (16, 32), 3: (26, 50)}.get(sm_level, (16, 32))
+        a = np.array(im)[:, :, ::-1].copy()            # RGB -> BGR
         h, w = a.shape[:2]
         scale = 1.0
         if max(h, w) > 900:
@@ -426,20 +618,31 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0):
             a = cv2.resize(a, (w, h), interpolation=cv2.INTER_NEAREST)
         im = Image.fromarray(np.ascontiguousarray(a[:, :, ::-1]))   # BGR -> RGB
 
-    # Gom DƯ nhiều màu (median-cut) rồi HỢP NHẤT các màu cùng tông (LAB), bảo vệ màu rực.
-    k_work = min(96, max(target * 5, 48))
-    q = im.quantize(colors=k_work, method=Image.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
-    arr = np.array(q)
-    arr = _reduce_palette_perceptual(arr, target)
+    # Xử lý ở 2x (giới hạn DESIGN_MAX_SIDE) -> mắt/mũi/môi có 4x diện tích, giữ nét.
+    s = 1.0
+    if DESIGN_MAX_SIDE:
+        s = max(1.0, min(2.0, DESIGN_MAX_SIDE / float(max(W1, H1))))
+    im2 = im.resize((int(W1 * s), int(H1 * s)), Resampling.LANCZOS) if s > 1.0 else im
 
-    # GỘP vùng quá nhỏ vào hàng xóm + LÀM MƯỢT biên -> hết 'dăm', mọi ô đánh số được.
-    min_radius = (MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0
-    arr = _merge_small_regions(arr, min_area=min_area, min_radius=min_radius, max_pass=4)
-    arr = _smooth_boundaries(arr, ksize=5)
-    arr = _merge_small_regions(arr, min_area=0, min_radius=min_radius, max_pass=2)
+    arr = _quantize_rarity(np.array(im2), k=target)
+    r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s
+    arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=18.0,
+                                     min_area=int(min_area * s * s), max_pass=4)
+    arr = _smooth_labels_voting(arr, sigma=2.2 * s, protect=feat)
+    arr, _ = _merge_keep_features(arr, r_keep=1.8 * s, de_keep=10.0, max_pass=2)
+
+    if design_out:
+        try:
+            Image.fromarray(arr).save(design_out)      # bản thiết kế 2x sắc nét
+        except OSError:
+            pass
+    # File LÀM VIỆC 1x cho đánh số (NEAREST giữ nguyên bảng màu).
+    work = Image.fromarray(arr)
+    if s > 1.0:
+        work = work.resize((W1, H1), Resampling.NEAREST)
     fd, out = tempfile.mkstemp(suffix='.png', prefix='quant_')
     os.close(fd)
-    Image.fromarray(arr).save(out)
+    work.save(out)
     return out
 
 
@@ -680,9 +883,11 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
     design_out: nếu có, lưu ảnh THIẾT KẾ (bản màu phẳng đã gom) ra đường dẫn này.
     print_long_cm: nhận cho tương thích, không dùng (cỡ số cố định)."""
     effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
+    # design_out được ghi NGAY trong _quantize_file (bản 2x sắc nét);
+    # _number_work_image chỉ đánh số trên file làm việc 1x (palette y hệt).
     work_path = _quantize_file(path, effective_n, smooth=smooth, min_area=min_area,
-                               print_long_cm=print_long_cm)
-    return _number_work_image(work_path, design_out=design_out, debug=debug)
+                               print_long_cm=print_long_cm, design_out=design_out)
+    return _number_work_image(work_path, design_out=None, debug=debug)
 
 
 def index_color_flat(path, min_area=0, design_out=None):
