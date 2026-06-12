@@ -67,7 +67,6 @@
               </div>
             </div>
             <button class="btn btn-success w-100 mt-3"><i class="bi bi-save"></i> Lưu công thức</button>
-            <button type="button" id="resetForm" class="btn btn-outline-secondary w-100 mt-2">Làm mới form</button>
           </form>
         </div>
       </div>
@@ -285,11 +284,6 @@
       else { e.target.closest('.recipe-row').querySelectorAll('input').forEach(function(i){i.value='';}); }
     }
   });
-  document.getElementById('resetForm').addEventListener('click', function(){
-    rows.innerHTML=''; addRow(); addRow(); addRow();
-    document.getElementById('fDali').value=''; document.getElementById('fHex').value='';
-  });
-
   // Điền dữ liệu vào form (dùng cho Sửa và Chép sang form)
   function fillForm(dali, hex, compStr){
     document.getElementById('fDali').value = dali || '';
@@ -335,7 +329,6 @@
 
   // ---- Cảnh báo khi LƯU mã DALI trùng công thức khác (chống ghi đè nhầm) ----
   var loadedDali = null;   // mã đang sửa (nếu vào form bằng nút Sửa)
-  document.getElementById('resetForm').addEventListener('click', function(){ loadedDali = null; });
   document.getElementById('recipeForm').addEventListener('submit', function(e){
     var raw = (document.getElementById('fDali').value || '').trim();
     var entered = raw.toLowerCase();

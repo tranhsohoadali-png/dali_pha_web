@@ -61,23 +61,64 @@ def _rebuild():
     _MIX = comps @ _B
 
 
-def reload_bases():
-    global _BASES
-    with open(_PATH, "r", encoding="utf-8") as f:
-        _BASES = json.load(f)
-    _rebuild()
-    return len(_BASES)
+_SETTING_KEY = "BASE_COLORS"   # màu gốc lưu trong DB (AppSetting) -> bền qua git pull/deploy
+_LOADED = False
+
+
+def _read_seed_file():
+    """Đọc màu gốc mặc định từ file kèm mã nguồn — CHỈ dùng để seed lần đầu."""
+    try:
+        with open(_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
 
 
 def _save():
-    with open(_PATH, "w", encoding="utf-8") as f:
-        json.dump(_BASES, f, ensure_ascii=False, indent=1)
+    """Lưu màu gốc vào DATABASE (AppSetting) — bền qua deploy.
+    (Trước đây ghi vào base_colors.json trong MÃ NGUỒN -> mỗi lần `git pull` bị
+    ghi đè/reset -> mất màu đã khai báo. Nay lưu DB nên không mất nữa.)"""
+    try:
+        from pha.models import AppSetting
+        AppSetting.set(_SETTING_KEY, json.dumps(_BASES, ensure_ascii=False))
+    except Exception:
+        pass
 
 
-reload_bases()
+def _ensure_loaded():
+    """Nạp màu gốc từ DB (lazy, gọi trong request khi app đã sẵn sàng).
+    Lần đầu DB trống -> seed từ file mặc định rồi ghi vào DB (di cư 1 lần)."""
+    global _BASES, _LOADED
+    if _LOADED:
+        return
+    data = None
+    try:
+        from pha.models import AppSetting
+        raw = AppSetting.get(_SETTING_KEY, "")
+        if raw:
+            data = json.loads(raw)
+    except Exception:
+        data = None
+    if data is None:
+        _BASES = _read_seed_file()
+        _rebuild()
+        _save()
+    else:
+        _BASES = data
+        _rebuild()
+    _LOADED = True
+
+
+def reload_bases():
+    """Buộc nạp lại màu gốc từ DB."""
+    global _LOADED
+    _LOADED = False
+    _ensure_loaded()
+    return len(_BASES)
 
 
 def get_bases():
+    _ensure_loaded()
     return list(_BASES)
 
 
@@ -87,6 +128,7 @@ def _hex_to_rgb(hex_value):
 
 
 def add_base(name, hex_value):
+    _ensure_loaded()
     name = str(name).strip()
     h = str(hex_value).strip().lstrip("#").lower()
     if not name:
@@ -106,6 +148,7 @@ def add_base(name, hex_value):
 
 
 def delete_base(name):
+    _ensure_loaded()
     global _BASES
     before = len(_BASES)
     _BASES = [b for b in _BASES if b["name"] != name]
@@ -145,6 +188,7 @@ def mix_recipe(rgb, drop_pct=0.3):
       {'recipe': [{'name','percent'(float)}...], 'mixed_rgb', 'closeness'}
     drop_pct: bỏ thành phần nhỏ hơn ngưỡng % (mặc định 0.3%) rồi chuẩn hoá.
     """
+    _ensure_loaded()
     if _MIX is None or not len(_BASES):
         return None
     target = np.array(rgb, dtype=float)
