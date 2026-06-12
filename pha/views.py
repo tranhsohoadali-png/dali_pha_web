@@ -327,6 +327,14 @@ def api_xu_ly_anh(request):
     except ValueError:
         print_long_cm = 0
     ai_prompt, use_refs = _resolve_preset_ai(preset_key)
+    # Web không gửi thông số chi tiết -> tự áp BỘ THÔNG SỐ CHUẨN của preset
+    # (vd 'photo': 40 màu, mượt vừa, bỏ mảng <60px) thay vì 0/0 thô.
+    from pha.ai_enhance import get_preset as _gp
+    _pp = _gp(preset_key)
+    if color_limit <= 0:
+        color_limit = int(_pp.get('color_limit') or 0)
+    api_min_area = int(_pp.get('min_area') or 0)
+    api_smooth = int(_pp.get('smooth') or 0)
 
     fss = FileSystemStorage()
     name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_api_{upload.name}'
@@ -334,12 +342,13 @@ def api_xu_ly_anh(request):
     rec = ImageResult.objects.create(
         name=name, status=ImageResult.STATUS_PROCESSING, user='api',
         params={'enhance': enhance, 'preset': preset_key, 'color_limit': color_limit,
+                'min_area': api_min_area, 'smooth': api_smooth,
                 'print_size': size_str, 'source': 'thiet-ke'})
 
     # Chạy NỀN (qua thread như luồng nhân viên) rồi trả id ngay — request chỉ
     # sống ~1-2s nên không dính timeout proxy/nginx/gunicorn nào (AI mất 20-150s).
     _img_executor.submit(process_image, rec.id, name, enhance, None, color_limit,
-                         0, 0, ai_prompt, use_refs, print_long_cm)
+                         api_min_area, api_smooth, ai_prompt, use_refs, print_long_cm)
     _prune_image_results()
     return _cors(JsonResponse({'ok': True, 'status': 'processing', 'id': rec.id}))
 
