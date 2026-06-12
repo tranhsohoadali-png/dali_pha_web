@@ -135,14 +135,18 @@ def get_number_size(text: str, max_size: float,
     min_t = MIN_TEXT_SIZE if min_t is None else min_t
     mean_t = MEAN_TEXT_SIZE if mean_t is None else mean_t
     max_t = MAX_TEXT_SIZE if max_t is None else max_t
+    # KHOA HỌC HOÁ CỠ SỐ: phóng theo CHIỀU CAO (mọi số cao ĐỀU NHAU ~mean_t,
+    # ô to không bị số khổng lồ — số 1 chữ số trước phóng theo bề ngang nên cao
+    # gấp rưỡi số 2 chữ số). Vẫn phải LỌT vùng: cạnh lớn nhất + đệm < max_size.
+    # Ô nhỏ: chỉ cần CAO >= min_t là đánh được (bề ngang hẹp không bị loại oan).
     text_size = (0, 0)
     scale = 0.05
     thickness = 1
-    while (min(text_size) < mean_t and max(text_size) < max_t
+    while (text_size[1] < mean_t and max(text_size) < max_t
            and max(text_size) + PADDING_CIRCLE < max_size):
         text_size = get_text_size(text, scale, thickness)
         scale += 0.05
-    if min(text_size) < min_t:
+    if text_size[1] < min_t:
         return None, None, None
     return text_size, scale, thickness
 
@@ -597,7 +601,12 @@ def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4):
                 elong = area / max(rad * rad, 1e-6)   # ~3.14 = tròn; lớn = dẹt/dài
                 true_dust = rad < 1.0
                 sliver = (rad < 1.6) and (elong > 8.0)
-                if true_dust or sliver or de < de_keep:
+                # MỐI DĂM: dải CHUYỂN MÀU mảnh chạy dọc biên 2 mảng lớn — dẹt dài,
+                # màu lưng chừng (tương phản VỪA với hàng xóm) -> gộp luôn, không
+                # tô nổi. Khác DÂY VÁY/cành cây: cũng mảnh nhưng tương phản RẤT
+                # cao (de >= 38) -> giữ.
+                crumb = (rad < 3.2) and (elong > 8.0) and (de < 38.0)
+                if true_dust or sliver or crumb or de < de_keep:
                     yy, xx = np.where(sub)
                     img[y0 + yy, x0 + xx] = colors[nb_ci]
                     lbl[y0 + yy, x0 + xx] = nb_ci
@@ -931,10 +940,12 @@ def _number_work_image(work_path, design_out=None, debug=False,
             color_counts.append(count)
         color_idx += 1
 
-    # img_white = cv2.cvtColor(img_white, cv2.COLOR_RGB2GRAY)
-    img_white = 255 - img_white
-    img_white = cv2.ximgproc.thinning(img_white, None, 1)
-    img_white = 255 - img_white
+    # Nét ở 2x: GIỮ nguyên (đậm ~2px, rành mạch như kit in chuyên nghiệp).
+    # Nét ở 1x (nhánh ảnh phẳng): thinning về 1px như phần mềm gốc.
+    if rs <= 1.0:
+        img_white = 255 - img_white
+        img_white = cv2.ximgproc.thinning(img_white, None, 1)
+        img_white = 255 - img_white
     img_white = cv2.cvtColor(img_white, cv2.COLOR_GRAY2RGB)
 
     for text_size, center, radis, number, text_origin, scale, thickness in draws:
