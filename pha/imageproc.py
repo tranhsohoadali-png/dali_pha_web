@@ -52,9 +52,15 @@ def create_image_color(color_mapping, hex_list, percentages=None):
     return result
 
 
+# Trần cứng (giây) cho TOÀN BỘ khâu tăng cường AI trong 1 job (mọi lần thử cộng
+# lại). Quá trần -> bỏ AI, xử lý ảnh gốc ngay. Phải NHỎ hơn nhiều so với thời
+# gian khách sẵn sàng đợi; Google quá tải là chuyện thường gặp.
+AI_BUDGET_S = 210
+
 # Job kẹt PROCESSING quá lâu = tiến trình nền đã chết giữa chừng (hết RAM bị kill,
-# service restart giữa lúc chạy...) -> không bao giờ tự xong. Khi poll thấy quá
-# ngưỡng thì đánh dấu LỖI RÕ RÀNG để giao diện không chờ trống vô hạn.
+# service restart giữa lúc chạy...) hoặc xếp hàng sau quá nhiều job -> coi như
+# hỏng. Khi poll thấy quá ngưỡng thì đánh dấu LỖI RÕ RÀNG để giao diện không chờ
+# trống vô hạn. (Nếu job thật ra vẫn chạy xong sau đó, kết quả sẽ tự đè lại.)
 STUCK_MINUTES = 15
 
 
@@ -91,15 +97,36 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
         path = os.path.join(settings.MEDIA_ROOT, name)
         if enhance:
             # AI tách riêng: nếu lỗi/timeout -> BỎ QUA, xử lý ảnh gốc (không treo).
+            # TRẦN CỨNG AI_BUDGET_S giây cho TOÀN BỘ khâu AI (kể cả 2 lần thử +
+            # trường hợp SDK treo không timeout): chạy trong luồng phụ daemon,
+            # quá trần thì bỏ rơi luồng đó và xử lý ảnh gốc ngay — Google quá tải
+            # KHÔNG được ghim 1 trong 2 slot xử lý làm tắc cả hàng đợi.
             try:
+                import threading
                 from pha.ai_enhance import enhance_image
                 from pha import style_library
                 refs = (style_library.pick_references(path, category=style_category, n=3)
                         if use_refs else [])
                 enhanced_name = f'{os.path.splitext(name)[0]}_ai.png'
                 enhanced_path = os.path.join(settings.MEDIA_ROOT, enhanced_name)
-                enhance_image(path, enhanced_path, prompt=ai_prompt, reference_paths=refs,
-                              color_limit=color_limit, use_refs=use_refs)
+                box = {}
+
+                def _run_ai():
+                    try:
+                        enhance_image(path, enhanced_path, prompt=ai_prompt,
+                                      reference_paths=refs, color_limit=color_limit,
+                                      use_refs=use_refs)
+                        box['ok'] = True
+                    except Exception as e:          # noqa: BLE001
+                        box['err'] = e
+
+                th = threading.Thread(target=_run_ai, daemon=True)
+                th.start()
+                th.join(AI_BUDGET_S)
+                if th.is_alive():
+                    raise TimeoutError(f'quá {AI_BUDGET_S}s — Google chậm/quá tải')
+                if 'err' in box:
+                    raise box['err']
                 obj.enhanced_name = enhanced_name
                 obj.save(update_fields=['enhanced_name'])
                 path = enhanced_path  # số hoá trên ảnh đã tăng cường
