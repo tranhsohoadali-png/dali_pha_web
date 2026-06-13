@@ -26,8 +26,8 @@ MAX_CIRCLE_RADIUS = config("MAX_CIRCLE_RADIUS", default=10, cast=int)
 #  - MEAN: phóng số lớn dần tới khi chiều NHỎ của số đạt mức này (số đầy đặn, dễ đọc).
 #  - MAX: trần chiều LỚN của số (số 2-3 chữ số không phình quá).
 MIN_TEXT_SIZE = config("MIN_TEXT_SIZE", default=4, cast=int)
-MEAN_TEXT_SIZE = config("MEAN_TEXT_SIZE", default=22, cast=int)
-MAX_TEXT_SIZE = config("MAX_TEXT_SIZE", default=40, cast=int)
+MEAN_TEXT_SIZE = config("MEAN_TEXT_SIZE", default=15, cast=int)   # nhỏ + ĐỀU (vừa đủ đọc, như bản in C093)
+MAX_TEXT_SIZE = config("MAX_TEXT_SIZE", default=24, cast=int)     # trần chiều lớn (số 2 chữ số không phình)
 # Thu nhỏ ảnh LÀM VIỆC để đánh số nhanh (polylabel rất chậm trên ảnh lớn -> ảnh
 # 2000px+ mất >2 phút, vượt thời gian chờ của trình duyệt -> "không ra kết quả").
 # 1400px thừa nét cho tranh tô màu; bản in được vẽ lại theo DPI khi tải. 0 = tắt.
@@ -993,12 +993,12 @@ def _number_work_image(work_path, design_out=None, debug=False,
             color_counts.append(count)
         color_idx += 1
 
-    # Nét ở 2x: GIỮ nguyên (đậm ~2px, rành mạch như kit in chuyên nghiệp).
-    # Nét ở 1x (nhánh ảnh phẳng): thinning về 1px như phần mềm gốc.
-    if rs <= 1.0:
-        img_white = 255 - img_white
-        img_white = cv2.ximgproc.thinning(img_white, None, 1)
-        img_white = 255 - img_white
+    # NÉT MẢNH: thinning về 1px skeleton — ở 2x mỗi biên bị vẽ 2 lần (contour của 2
+    # màu kề nhau chồng nhau) -> ~2px đậm; thinning gộp lại thành MỘT nét mảnh,
+    # rành mạch (áp cho cả 2x lẫn 1x). Số vẽ SAU nên không bị ảnh hưởng.
+    img_white = 255 - img_white
+    img_white = cv2.ximgproc.thinning(img_white, None, 1)
+    img_white = 255 - img_white
     img_white = cv2.cvtColor(img_white, cv2.COLOR_GRAY2RGB)
 
     for text_size, center, radis, number, text_origin, scale, thickness in draws:
