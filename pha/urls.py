@@ -9,6 +9,7 @@ from pha import attend_nudge
 from pha import ketoan_feed
 from pha import backup_lib
 from pha import extra_views
+from pha import ai_levels
 
 urlpatterns = [
     path('login', views.login_view, name='login'),
@@ -95,6 +96,10 @@ urlpatterns = [
     path('kho-mau', views.kho_mau, name='kho_mau'),
     path('cai-dat-ai', views.cai_dat_ai, name='cai_dat_ai'),
     path('xu-ly-anh', views.xu_ly_anh, name='xu_ly_anh'),
+    # Thử "Mức độ AI" (nhẹ/vừa/mạnh) — module RIÊNG nội bộ, không đụng API bán hàng
+    path('anh-ai-test', ai_levels.anh_ai_test, name='anh_ai_test'),
+    path('anh-ai-test-run', ai_levels.anh_ai_test_run, name='anh_ai_test_run'),
+    path('anh-ai-test-status', ai_levels.anh_ai_test_status, name='anh_ai_test_status'),
     # Đánh số ảnh phẳng (đã thiết kế) — TAB RIÊNG + API (module riêng, không AI)
     path('anh-phang', flat_number.anh_phang, name='anh_phang'),
     path('xu-ly-anh-phang', flat_number.xu_ly_anh_phang, name='xu_ly_anh_phang'),

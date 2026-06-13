@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thử mức độ AI · DALI</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    .dropzone{border:2px dashed var(--bs-border-color);border-radius:.6rem;padding:1.4rem;text-align:center;cursor:pointer;background:var(--bs-tertiary-bg)}
+    .dropzone:hover{border-color:var(--bs-success)}
+    .cmp-img{width:100%;border:1px solid var(--bs-border-color);border-radius:.5rem;cursor:zoom-in;aspect-ratio:3/4;object-fit:cover;background:var(--bs-tertiary-bg)}
+    .lv-card{border:1px solid var(--bs-border-color);border-radius:.6rem;overflow:hidden;height:100%}
+    .lv-head{padding:.4rem .6rem;font-weight:600}
+  </style>
+</head>
+<body class="bg-body-tertiary">
+{% include '_nav.html' %}
+
+<div class="container py-3">
+  <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+    <h5 class="mb-0"><i class="bi bi-stars text-warning"></i> Thử "Mức độ AI" (chống ảnh ảo)</h5>
+    <span class="badge text-bg-secondary">Nội bộ · để tinh chỉnh prompt</span>
+  </div>
+  <div class="alert alert-primary py-2 small">
+    Tải 1 ảnh chân dung → so 3 mức can thiệp của AI vào khuôn mặt. <b>Nhẹ</b> = giữ đúng người (ít ảo nhất),
+    <b>Vừa</b> = giữ người + dọn nhẹ, <b>Mạnh</b> = nghệ thuật hoá (đẹp nhưng xa người thật).
+    Trang này chỉ thử AI; <u>không</u> ảnh hưởng web bán hàng.
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <div id="dz" class="dropzone mb-2"><i class="bi bi-image fs-3 text-secondary"></i>
+        <div class="small text-secondary">Kéo–thả hoặc bấm chọn ảnh chân dung</div>
+        <input id="image" type="file" accept="image/*" class="d-none"></div>
+      <div class="d-flex align-items-center gap-2">
+        <img id="preview" class="rounded" style="max-height:90px" hidden>
+        <button id="run" class="btn btn-success" disabled><i class="bi bi-magic"></i> Tạo 3 mức AI</button>
+        <span id="spin" class="d-none align-items-center text-success small"><span class="spinner-border spinner-border-sm me-1"></span> Đang gọi Google AI (song song 3 mức, ~30–120s)…</span>
+      </div>
+      <div id="err" class="alert alert-danger d-none mt-2"></div>
+    </div>
+  </div>
+
+  <div class="row g-3" id="grid">
+    <div class="col-6 col-lg-3">
+      <div class="lv-card"><div class="lv-head bg-body-secondary"><i class="bi bi-camera"></i> Ảnh gốc</div>
+        <div class="p-2"><img id="img_org" class="cmp-img" src="#"></div></div>
+    </div>
+    {% for lv in levels %}
+    <div class="col-6 col-lg-3">
+      <div class="lv-card">
+        <div class="lv-head {% if lv.key == 'nhe' %}text-bg-success{% elif lv.key == 'vua' %}text-bg-primary{% else %}text-bg-dark{% endif %}">{{ lv.label }}</div>
+        <div class="p-2">
+          <img id="img_{{ lv.key }}" class="cmp-img" src="#" hidden>
+          <div id="ph_{{ lv.key }}" class="cmp-img d-flex align-items-center justify-content-center text-secondary small">chưa có</div>
+          <div id="e_{{ lv.key }}" class="small text-danger mt-1"></div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="form-text mt-2">Mẹo: bấm vào ảnh để phóng to xem từng nét. Chọn được mức ưng → báo tôi, tôi gắn thanh "Mức độ AI" vào trang Tạo bản đồ màu.</div>
+</div>
+
+<script>
+  var dz=document.getElementById('dz'), fi=document.getElementById('image');
+  var LV=['nhe','vua','manh'];
+  dz.addEventListener('click',function(){fi.click()});
+  ['dragover','dragenter'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.style.borderColor='#198754'}));
+  ['dragleave','drop'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.style.borderColor=''}));
+  dz.addEventListener('drop',ev=>{ if(ev.dataTransfer.files.length){fi.files=ev.dataTransfer.files;onPick();} });
+  fi.addEventListener('change',onPick);
+  function onPick(){ var f=fi.files[0]; if(!f)return; document.getElementById('run').disabled=false;
+    var r=new FileReader(); r.onload=e=>{var p=document.getElementById('preview');p.src=e.target.result;p.hidden=false;
+      var o=document.getElementById('img_org');o.src=e.target.result;}; r.readAsDataURL(f); }
+  function spin(on){ var s=document.getElementById('spin'); s.classList.toggle('d-none',!on); s.classList.toggle('d-flex',on); }
+  function showErr(m){ var e=document.getElementById('err'); e.textContent=m; e.classList.remove('d-none'); }
+
+  document.getElementById('run').addEventListener('click',function(){
+    if(!fi.files[0]){ return; }
+    document.getElementById('err').classList.add('d-none');
+    LV.forEach(function(k){ document.getElementById('img_'+k).hidden=true;
+      document.getElementById('ph_'+k).style.display=''; document.getElementById('ph_'+k).textContent='đang xử lý…';
+      document.getElementById('e_'+k).textContent=''; });
+    var fd=new FormData(); fd.append('image', fi.files[0]);
+    this.disabled=true; spin(true);
+    var self=this;
+    fetch('/anh-ai-test-run',{method:'POST',body:fd}).then(r=>r.json()).then(function(res){
+      if(!res.ok){ spin(false); self.disabled=false; showErr(res.msg||'Lỗi'); return; }
+      var waited=0, poll=setInterval(function(){
+        fetch('/anh-ai-test-status?id='+res.id).then(r=>r.json()).then(function(s){
+          if(s.status==='processing'){ waited+=3000; if(waited>360000){clearInterval(poll);spin(false);self.disabled=false;showErr('Quá lâu, thử lại.');} return; }
+          clearInterval(poll); spin(false); self.disabled=false;
+          if(s.status==='error'){ showErr(s.error||'Lỗi xử lý'); return; }
+          if(s.original) document.getElementById('img_org').src=s.original+'?t='+Date.now();
+          LV.forEach(function(k){
+            var url=(s.levels||{})[k];
+            if(url){ var im=document.getElementById('img_'+k); im.src=url+'?t='+Date.now(); im.hidden=false;
+              document.getElementById('ph_'+k).style.display='none'; }
+            else { document.getElementById('ph_'+k).textContent='lỗi';
+              document.getElementById('e_'+k).textContent=(s.errors||{})[k]||''; }
+          });
+          if(s.warn) showErr(s.warn);
+        }).catch(function(){ clearInterval(poll); spin(false); self.disabled=false; showErr('Mất kết nối'); });
+      },3000);
+    }).catch(function(){ spin(false); self.disabled=false; showErr('Lỗi kết nối'); });
+  });
+
+  document.getElementById('grid').addEventListener('click',function(e){
+    if(e.target.tagName==='IMG' && e.target.src && e.target.src!=='#') window.open(e.target.src);
+  });
+</script>
+</body>
+</html>
