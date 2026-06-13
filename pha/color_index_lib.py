@@ -683,19 +683,21 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     W1, H1 = im.size
     sm_level = int(smooth) if (smooth and int(smooth) > 0) else 0
 
-    if sm_level >= 2:
-        # LÀM PHẲNG (mean-shift) trước khi gom -> dọn ảnh chụp/màu nước cho sạch mảng.
-        sp, sr = {2: (16, 32), 3: (26, 50)}.get(sm_level, (16, 32))
-        a = np.array(im)[:, :, ::-1].copy()            # RGB -> BGR
-        h, w = a.shape[:2]
-        scale = 1.0
-        if max(h, w) > 900:
-            scale = 900.0 / max(h, w)
-            a = cv2.resize(a, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-        a = cv2.pyrMeanShiftFiltering(a, sp, sr)
-        if scale != 1.0:
-            a = cv2.resize(a, (w, h), interpolation=cv2.INTER_NEAREST)
-        im = Image.fromarray(np.ascontiguousarray(a[:, :, ::-1]))   # BGR -> RGB
+    # LUÔN lọc GIỮ-BIÊN (mean-shift) trước khi tách màu — KỂ CẢ smooth=0 (mức nền
+    # nhẹ). Ảnh chụp THÔ (vd AI lỗi -> dùng ảnh gốc) đầy texture (sợi tóc, nếp vải)
+    # nếu không lọc sẽ vỡ vụn thành vô số vùng mỏng RĂNG CƯA. Mean-shift gộp texture
+    # thành mảng phẳng biên mượt mà vẫn giữ cạnh thật. smooth cao -> phẳng mạnh hơn.
+    sp, sr = {0: (11, 20), 1: (15, 28), 2: (20, 38), 3: (28, 55)}.get(sm_level, (15, 28))
+    a = np.array(im)[:, :, ::-1].copy()                # RGB -> BGR
+    h, w = a.shape[:2]
+    scale = 1.0
+    if max(h, w) > 900:
+        scale = 900.0 / max(h, w)
+        a = cv2.resize(a, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+    a = cv2.pyrMeanShiftFiltering(a, sp, sr)
+    if scale != 1.0:
+        a = cv2.resize(a, (w, h), interpolation=cv2.INTER_LINEAR)   # LINEAR: biên mượt
+    im = Image.fromarray(np.ascontiguousarray(a[:, :, ::-1]))       # BGR -> RGB
 
     # Xử lý ở 2x (giới hạn DESIGN_MAX_SIDE) -> mắt/mũi/môi có 4x diện tích, giữ nét.
     s = 1.0
@@ -707,7 +709,12 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s
     arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=18.0,
                                      min_area=int(min_area * s * s), max_pass=4)
-    arr = _smooth_labels_voting(arr, sigma=2.2 * s, protect=feat)
+    # LÀM MƯỢT BIÊN 2 lớp: voting (cong mượt) + MEDIAN trên nhãn (nắn thẳng bậc
+    # thang răng cưa còn sót). Cả hai CHỪA ngũ quan (feat) -> không mất mắt/môi.
+    arr = _smooth_labels_voting(arr, sigma=2.8 * s, protect=feat)
+    ks = int(round(3 * s)) | 1                          # ksize lẻ (3 ở 1x, 7 ở 2x)
+    arr = _smooth_boundaries(arr, ksize=max(3, ks), protect_mask=feat)
+    arr = _smooth_labels_voting(arr, sigma=1.6 * s, protect=feat)
     arr, _ = _merge_keep_features(arr, r_keep=1.8 * s, de_keep=10.0, max_pass=2)
 
     if design_out:
