@@ -716,10 +716,14 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     arr = _smooth_boundaries(arr, ksize=max(3, ks), protect_mask=feat)
     arr = _smooth_labels_voting(arr, sigma=1.6 * s, protect=feat)
     arr, _ = _merge_keep_features(arr, r_keep=1.8 * s, de_keep=10.0, max_pass=2)
+    # BIÊN MƯỢT NHƯ VECTOR: tô lại từng vùng theo polygon Chaikin -> đường biên ảnh
+    # THIẾT KẾ cong mềm (hết bậc thang); bản đồ số lấy contour từ chính arr này nên
+    # nét số khớp y biên thiết kế.
+    arr = _smooth_fill(arr, iters=2)
 
     if design_out:
         try:
-            Image.fromarray(arr).save(design_out)      # bản thiết kế 2x sắc nét
+            Image.fromarray(arr).save(design_out)      # bản thiết kế 2x biên mượt
         except OSError:
             pass
     # File LÀM VIỆC 1x cho đánh số (NEAREST giữ nguyên bảng màu).
@@ -962,6 +966,37 @@ def _draw_smooth_contours(img, contours, iters=2):
             cc = cv2.approxPolyDP(c, 0.7, True)
         pts = _chaikin(cc.reshape(-1, 2), iters)
         cv2.polylines(img, [np.round(pts).astype(np.int32)], True, 0, 1, cv2.LINE_8)
+
+
+def _smooth_fill(arr, iters=2):
+    """Dựng lại ảnh THIẾT KẾ với BIÊN MƯỢT như vector: mỗi vùng -> contour -> làm
+    mượt Chaikin -> TÔ ĐẶC polygon mượt (fillPoly). Tô VÙNG TO TRƯỚC, vùng nhỏ đè
+    lên sau -> biên = đường cong mượt của vùng trên cùng, KHÔNG hở (nền luôn có màu
+    gốc). Giữ NGUYÊN bảng màu (tô đúng màu vùng, không AA -> không sinh màu lạ)."""
+    H, W = arr.shape[:2]
+    flat = arr.reshape(-1, 3)
+    colors, inv = np.unique(flat, axis=0, return_inverse=True)
+    lbl = inv.reshape(H, W).astype(np.int32)
+    items = []                                       # (area, color_tuple, smoothed_pts)
+    for ci in range(len(colors)):
+        mask = (lbl == ci).astype(np.uint8)
+        if not mask.any():
+            continue
+        cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        col = (int(colors[ci][0]), int(colors[ci][1]), int(colors[ci][2]))
+        for c in cnts:
+            a = float(cv2.contourArea(c))
+            if len(c) < 6:
+                pts = c.reshape(-1, 2).astype(np.int32)
+            else:
+                cc = cv2.approxPolyDP(c, 0.7, True) if len(c) > 1500 else c
+                pts = np.round(_chaikin(cc.reshape(-1, 2), iters)).astype(np.int32)
+            items.append((a, col, pts))
+    items.sort(key=lambda t: -t[0])                  # VÙNG TO trước, nhỏ đè lên sau
+    out = arr.copy()
+    for _a, col, pts in items:
+        cv2.fillPoly(out, [pts.reshape(-1, 1, 2)], col, lineType=cv2.LINE_8)
+    return out
 
 
 def _number_work_image(work_path, design_out=None, debug=False,
