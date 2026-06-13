@@ -606,7 +606,12 @@ def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4):
                 # tô nổi. Khác DÂY VÁY/cành cây: cũng mảnh nhưng tương phản RẤT
                 # cao (de >= 38) -> giữ.
                 crumb = (rad < 3.2) and (elong > 8.0) and (de < 38.0)
-                if true_dust or sliver or crumb or de < de_keep:
+                # DẢI MỎNG không tô được (vd vệt phản chiếu nước): dẹt + mảnh -> GỘP
+                # dù tương phản cao (kẻ đôi 2 đường sát nhau, brush không tô nổi).
+                # elong > 6 nên KHÔNG đụng đốm TRÒN nhỏ (catch-light mắt elong ~3) và
+                # rad < 2.4 nên chừa ngũ quan to hơn (iris/môi rad >= 3).
+                thin_streak = (rad < 2.4) and (elong > 6.0)
+                if true_dust or sliver or crumb or thin_streak or de < de_keep:
                     yy, xx = np.where(sub)
                     img[y0 + yy, x0 + xx] = colors[nb_ci]
                     lbl[y0 + yy, x0 + xx] = nb_ci
@@ -920,6 +925,38 @@ def _flat_work_file(path, min_area=0):
     return out
 
 
+def _chaikin(points, iters=2):
+    """Làm mượt 1 đa giác KÍN (Chaikin corner-cutting): mỗi góc cắt thành 2 điểm
+    1/4–3/4 -> đường cong mượt, hết bậc thang pixel. Trả mảng điểm float."""
+    p = np.asarray(points, dtype=np.float32)
+    for _ in range(iters):
+        if len(p) < 4:
+            break
+        nxt = np.roll(p, -1, axis=0)
+        q = 0.75 * p + 0.25 * nxt
+        r = 0.25 * p + 0.75 * nxt
+        out = np.empty((len(p) * 2, 2), np.float32)
+        out[0::2] = q
+        out[1::2] = r
+        p = out
+    return p
+
+
+def _draw_smooth_contours(img, contours, iters=2):
+    """Vẽ các contour đã LÀM MƯỢT (Chaikin) thay vì raster bậc thang -> nét cong
+    mềm như vector. Contour quá nhiều điểm thì giảm bớt bằng approxPolyDP trước
+    (tránh chậm). Vẽ 1px; thinning sau đó gộp các nét vẽ chồng về 1 nét."""
+    for c in contours:
+        if len(c) < 6:
+            cv2.drawContours(img, [c], -1, 0, 1)     # quá nhỏ -> vẽ thẳng
+            continue
+        cc = c
+        if len(c) > 1500:                            # contour khổng lồ -> rút điểm trước
+            cc = cv2.approxPolyDP(c, 0.7, True)
+        pts = _chaikin(cc.reshape(-1, 2), iters)
+        cv2.polylines(img, [np.round(pts).astype(np.int32)], True, 0, 1, cv2.LINE_8)
+
+
 def _number_work_image(work_path, design_out=None, debug=False,
                        render_arr=None, render_scale=1.0):
     """ĐÁNH SỐ + đếm % trên 1 ảnh LÀM VIỆC đã chuẩn bị — đây là phần index_color GỐC
@@ -974,9 +1011,9 @@ def _number_work_image(work_path, design_out=None, debug=False,
             # ĐƯỜNG NÉT lấy từ ảnh 2x: biên cong mượt của bản thiết kế, in to không gãy.
             big_mask = get_color_areas(big_rgb, color, color, color_idx)
             big_cnts, _ = cv2.findContours(big_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-            cv2.drawContours(img_white, big_cnts, -1, (0, 0, 0), 1)
+            _draw_smooth_contours(img_white, big_cnts)   # làm mượt Chaikin -> hết răng cưa
         else:
-            cv2.drawContours(img_white, contours, -1, (0, 0, 0), 1)
+            _draw_smooth_contours(img_white, contours)
 
         centers, dists = get_center_poly_from_contours(contours, hierarchy, range_img, np.array(img), debug=debug)
         count_number = 0
