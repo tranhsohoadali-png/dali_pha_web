@@ -847,11 +847,63 @@ def _snap_to_design_palette(img_rgb):
     return remap[inv].reshape(img_rgb.shape)
 
 
+def _despeckle_flat(arr, min_radius, min_area=0, max_pass=4):
+    """Gộp các MẢNH quá nhỏ/mảnh — nhỏ tới mức KHÔNG THỂ ĐẶT SỐ (bán kính nội tiếp
+    < min_radius) hoặc < min_area px — vào màu HÀNG XÓM. NHƯNG mỗi màu LUÔN giữ lại
+    vùng LỚN NHẤT của nó -> bảng màu (legend) KHÔNG đổi 1 màu nào.
+
+    Dùng cho nhánh ẢNH PHẲNG: giữ 100% MÀU thiết kế + mọi ô còn đánh số được, chỉ
+    dọn 'dăm' (gợn sóng mảnh, đốm lá li ti) mà đằng nào cũng không có số / không tô
+    được. Đốm tô được (đủ chỗ đặt số) -> GIỮ nguyên."""
+    img = arr.copy()
+    H, W = img.shape[:2]
+    k3 = np.ones((3, 3), np.uint8)
+    for _ in range(max_pass):
+        flat = img.reshape(-1, 3)
+        colors, inv = np.unique(flat, axis=0, return_inverse=True)
+        lbl = inv.reshape(H, W).astype(np.int32)
+        changed = False
+        for ci in range(len(colors)):
+            mask = (lbl == ci).astype(np.uint8)
+            if not mask.any():
+                continue
+            num, comp, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+            if num <= 2:                              # màu chỉ còn 1 vùng -> giữ, khỏi đụng
+                continue
+            dist = cv2.distanceTransform(mask, cv2.DIST_L2, 3)
+            keep_k = int(stats[1:, cv2.CC_STAT_AREA].argmax()) + 1   # vùng LỚN NHẤT của màu -> bảo toàn
+            for kk in range(1, num):
+                if kk == keep_k:
+                    continue
+                area = stats[kk, cv2.CC_STAT_AREA]
+                x, y, w, h = stats[kk, 0], stats[kk, 1], stats[kk, 2], stats[kk, 3]
+                x0, y0 = max(x - 1, 0), max(y - 1, 0)
+                x1, y1 = min(x + w + 1, W), min(y + h + 1, H)
+                sub = comp[y0:y1, x0:x1] == kk
+                rad = float(dist[y0:y1, x0:x1][sub].max())
+                if rad >= min_radius and (not min_area or area >= min_area):
+                    continue                         # đủ chỗ đặt số -> giữ (ô nhỏ vẫn được đánh số)
+                dil = cv2.dilate(sub.astype(np.uint8), k3) > 0
+                ring = dil & (~sub)
+                nb = lbl[y0:y1, x0:x1][ring]
+                nb = nb[(nb != ci) & (nb >= 0)]
+                if nb.size == 0:
+                    continue
+                nb_ci = int(np.bincount(nb).argmax())
+                yy, xx = np.where(sub)
+                img[y0 + yy, x0 + xx] = colors[nb_ci]
+                lbl[y0 + yy, x0 + xx] = nb_ci
+                changed = True
+        if not changed:
+            break
+    return img
+
+
 def _flat_work_file(path, min_area=0):
     """Chuẩn bị ảnh LÀM VIỆC cho nhánh PHẲNG: thu nhỏ về WORK_MAX_SIDE, GIỮ NGUYÊN
-    bảng màu thiết kế (KHÔNG median-cut, KHÔNG giảm màu). Nếu min_area > 0: dồn răng
-    cưa về bảng màu thiết kế rồi GỘP đốm < min_area px vào hàng xóm (sạch để đánh số).
-    Trả đường dẫn file tạm."""
+    bảng màu thiết kế (KHÔNG median-cut, KHÔNG giảm màu) + LUÔN dọn 'dăm' (mảnh nhỏ
+    không thể đặt số) bằng _despeckle_flat — vẫn giữ 100% màu + mọi ô đánh số được.
+    min_area > 0: lọc thêm theo diện tích. Trả đường dẫn file tạm."""
     import os
     import tempfile
     im = Image.open(path).convert('RGB')
@@ -859,8 +911,9 @@ def _flat_work_file(path, min_area=0):
         im.thumbnail((WORK_MAX_SIDE, WORK_MAX_SIDE), Resampling.LANCZOS)
     arr = np.array(im)
     arr = _snap_to_design_palette(arr)                   # khử răng cưa (ảnh >256 màu); phẳng -> giữ nguyên
-    if min_area and int(min_area) > 0:                   # min_area CHỈ gộp mảng nhỏ, không đụng palette
-        arr = _merge_small_regions(arr, min_area=int(min_area), min_radius=0, max_pass=2)
+    # Dọn dăm: chỉ gộp mảnh KHÔNG lọt số (rad < cỡ tối thiểu) -> giữ 100% màu, hết dăm.
+    min_radius = (MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0
+    arr = _despeckle_flat(arr, min_radius=min_radius, min_area=int(min_area or 0), max_pass=4)
     fd, out = tempfile.mkstemp(suffix='.png', prefix='flat_')
     os.close(fd)
     Image.fromarray(arr).save(out)
