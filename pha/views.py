@@ -2323,6 +2323,15 @@ def cham_cong(request):
                   'reason': lr.reason, 'status': lr.status,
                   'status_label': _lv_label.get(lr.status, lr.status)}
                  for lr in LeaveRequest.objects.filter(user=request.user.username)[:6]]
+    # Trạng thái hôm nay + tổng tháng (cho thẻ trạng thái & mini-thống kê)
+    if today and today.check_out:
+        state = 'done'
+    elif today and today.check_in:
+        state = 'working'
+    else:
+        state = 'not_in'
+    cfg = _att_cfg()
+    msum = _emp_cong(request.user.username, month=now.strftime('%Y-%m'))
     return render(request, 'cham_cong.html', {
         'today_in': _hm(today.check_in) if today else '',
         'today_out': _hm(today.check_out) if today else '',
@@ -2330,6 +2339,12 @@ def cham_cong(request):
         'today_label': now.strftime('%d/%m/%Y'),
         'today_iso': now.strftime('%Y-%m-%d'),
         'my_leaves': my_leaves,
+        'state': state,
+        'month_label': _fmt_month(now.strftime('%Y-%m')),
+        'm_days': msum['days'], 'm_hours': msum['hours'],
+        'm_ot': msum['ot'], 'm_late': msum['late_min'],
+        'lunch_start': cfg['lunch_start'], 'lunch_end': cfg['lunch_end'],
+        'work_start': cfg['start'], 'work_end': cfg['end'],
     })
 
 

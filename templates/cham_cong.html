@@ -102,6 +102,22 @@
     .alert{border-radius:14px}
     .btn{font-weight:600}
     .btn-warning{border-radius:10px}
+    /* Chip trạng thái + wifi */
+    .st-chip{display:inline-flex;align-items:center;gap:.45rem;border-radius:999px;padding:.4rem .9rem;font-size:.88rem;font-weight:700}
+    .st-gray{background:#eef0f2;color:#6c757d}
+    .st-green{background:#e9f7ef;color:#157347;border:1px solid #d2eedd}
+    .st-blue{background:#eaf2ff;color:#0d6efd;border:1px solid #d6e4fb}
+    .st-green .dot{width:9px;height:9px;border-radius:50%;background:#198754;animation:pulse 1.2s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    .wifi-bad{background:#dc3545 !important;border-color:#dc3545 !important}
+    /* Đồng hồ "đã làm" chạy trực tiếp */
+    .work-timer{margin-top:.5rem;font-size:1.08rem;color:#157347;font-weight:700;font-variant-numeric:tabular-nums}
+    /* Mini thống kê tháng */
+    .m-tile{background:#fff;border:1px solid #e9ecef;border-radius:12px;padding:.6rem .25rem;box-shadow:0 1px 6px rgba(25,135,84,.05)}
+    .m-lbl{font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:#8a94a0}
+    .m-val{font-size:1.35rem;font-weight:800;line-height:1.2}
+    /* Thẻ "xong hôm nay" */
+    #doneCard{background:linear-gradient(160deg,#e9f7ef,#ffffff);border:1px solid #d2eedd}
   </style>
 </head>
 <body>
@@ -110,6 +126,7 @@
     <a href="/app" class="btn-back"><i class="bi bi-arrow-left"></i></a>
     <i class="bi bi-fingerprint fs-3"></i>
     <h1 class="h5 mb-0 flex-grow-1 fw-bold">Chấm công</h1>
+    {% if configured %}<span class="user-chip{% if not ip_ok %} wifi-bad{% endif %}"><i class="bi bi-wifi{% if not ip_ok %}-off{% endif %}"></i> {% if ip_ok %}Wifi ✓{% else %}Sai Wifi{% endif %}</span>{% endif %}
     <span class="user-chip"><i class="bi bi-person-circle"></i> {{ user.username }}</span>
   </div>
 </div>
@@ -118,6 +135,8 @@
   <div class="text-center my-3">
     <div class="clock display-4 fw-bold" id="clock">--:--</div>
     <div class="text-secondary fw-medium mt-1">{{ today_label }}</div>
+    <div class="mt-2" id="stateChip"></div>
+    <div id="workTimer" class="work-timer" style="display:none"><i class="bi bi-stopwatch"></i> Đã làm <b id="workTimerVal">0:00:00</b></div>
   </div>
 
   {% if configured and not ip_ok %}
@@ -138,12 +157,27 @@
         <div class="tval text-primary" id="tOut">{{ today_out|default:"--:--" }}</div>
       </div>
     </div>
+    <div class="text-center small text-secondary mt-2 pt-2 border-top">
+      <i class="bi bi-clock"></i> Giờ làm {{ work_start }}–{{ work_end }} &nbsp;·&nbsp; 🍚 Nghỉ trưa {{ lunch_start }}–{{ lunch_end }}
+    </div>
   </div>
 
-  <!-- Nút thao tác -->
+  <!-- Nút thao tác (đổi theo trạng thái: chưa vào / đang làm / đã về) -->
   <div class="d-grid gap-3 mb-3">
     <button id="btnIn" class="btn btn-success big-btn" {% if configured and not ip_ok %}disabled{% endif %}><i class="bi bi-box-arrow-in-right fs-3"></i> VÀO LÀM</button>
     <button id="btnOut" class="btn btn-primary big-btn" {% if configured and not ip_ok %}disabled{% endif %}><i class="bi bi-box-arrow-right fs-3"></i> TAN LÀM</button>
+    <div id="doneCard" class="cc-card p-3 text-center" style="display:none">
+      <div style="font-size:2.2rem;line-height:1.2">🎉</div>
+      <div class="fw-bold mt-1" style="font-size:1.15rem;color:#157347">Hôm nay xong rồi!</div>
+      <div class="text-secondary small">Hẹn gặp lại ngày mai 👋</div>
+    </div>
+  </div>
+
+  <!-- Mini thống kê tháng -->
+  <div class="row g-2 mb-3 text-center">
+    <div class="col-4"><div class="m-tile"><div class="m-lbl">Công {{ month_label }}</div><div class="m-val text-success">{{ m_days }}</div></div></div>
+    <div class="col-4"><div class="m-tile"><div class="m-lbl">Tăng ca</div><div class="m-val text-primary">{{ m_ot }}h</div></div></div>
+    <div class="col-4"><div class="m-tile"><div class="m-lbl">Đi muộn</div><div class="m-val {% if m_late %}text-danger{% else %}text-success{% endif %}">{{ m_late }}'</div></div></div>
   </div>
 
   <!-- Lịch sử 14 ngày -->
@@ -263,10 +297,45 @@
       toast(res.ok?('✓ '+res.msg):(res.msg||'Lỗi'));
       if(res.in!==undefined) document.getElementById('tIn').textContent=res.in||'--:--';
       if(res.out!==undefined) document.getElementById('tOut').textContent=res.out||'--:--';
+      if(res.ok && action==='in') setState('working');
+      if(res.ok && action==='out') setState('done');
       if(res.ok && res.cong) showPay(res.cong, res.salary);
       if(res.ok && res.motivate) showMotivate(res.motivate, res.in);
     }).catch(function(){ busy=false; btn.disabled=false; toast('Lỗi kết nối'); });
   }
+
+  // ----- Trạng thái thông minh: chưa vào / đang làm / đã về -----
+  var state='{{ state }}';
+  function setState(s){
+    state=s;
+    var tin=document.getElementById('tIn').textContent.trim();
+    var tout=document.getElementById('tOut').textContent.trim();
+    var chip=document.getElementById('stateChip');
+    var bi=document.getElementById('btnIn'), bo=document.getElementById('btnOut'),
+        dc=document.getElementById('doneCard'), wt=document.getElementById('workTimer');
+    if(s==='working'){
+      chip.innerHTML='<span class="st-chip st-green"><span class="dot"></span> Đang làm việc · vào '+tin+'</span>';
+      bi.style.display='none'; bo.style.display='flex'; dc.style.display='none'; wt.style.display='';
+    } else if(s==='done'){
+      chip.innerHTML='<span class="st-chip st-blue"><i class="bi bi-check-circle-fill"></i> Đã tan làm · '+tin+' → '+tout+'</span>';
+      bi.style.display='none'; bo.style.display='none'; dc.style.display=''; wt.style.display='none';
+    } else {
+      chip.innerHTML='<span class="st-chip st-gray"><i class="bi bi-sunrise"></i> Chưa chấm công vào</span>';
+      bi.style.display='flex'; bo.style.display='none'; dc.style.display='none'; wt.style.display='none';
+    }
+  }
+  // Đồng hồ "đã làm" — tính từ giờ vào (hiện trên thẻ), cập nhật mỗi giây
+  function workTick(){
+    if(state!=='working') return;
+    var m=document.getElementById('tIn').textContent.trim().match(/^(\d{1,2}):(\d{2})$/);
+    if(!m) return;
+    var d=new Date(), start=new Date(d.getFullYear(),d.getMonth(),d.getDate(),+m[1],+m[2],0);
+    var s=Math.max(0, Math.floor((d-start)/1000));
+    var h=Math.floor(s/3600), mi=Math.floor(s%3600/60), se=s%60;
+    document.getElementById('workTimerVal').textContent=h+':'+('0'+mi).slice(-2)+':'+('0'+se).slice(-2);
+  }
+  setInterval(workTick,1000);
+  setState(state); workTick();
   // ----- Popup động lực khi Vào làm -----
   function showMotivate(m, t){
     document.getElementById('motiEmoji').textContent = m.emoji || '🌞';
