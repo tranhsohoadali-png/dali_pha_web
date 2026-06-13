@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#2E7D32">
+  <meta name="theme-color" content="#198754">
   <title>DALI</title>
   <link rel="manifest" href="/manifest-app.webmanifest">
   <link rel="apple-touch-icon" href="/media/icon-192.png">
@@ -13,41 +13,97 @@
   <meta name="apple-mobile-web-app-title" content="DALI">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    body{background:#f4f6f8;padding-bottom:30px}
-    .topbar{background:#2E7D32;color:#fff;padding:.7rem .8rem;padding-top:calc(.7rem + env(safe-area-inset-top))}
+    /* ===== DALI Brand (Stitch) — phủ lên Bootstrap, không đổi hành vi ===== */
+    body{
+      font-family:'Be Vietnam Pro',system-ui,-apple-system,"Segoe UI",sans-serif;
+      background:#f4f6f6;
+      padding-bottom:30px;
+      -webkit-tap-highlight-color:transparent;
+    }
+    /* Header gradient kiểu Stitch */
+    .topbar{
+      position:sticky;top:0;z-index:10;
+      background:linear-gradient(180deg,#198754 0%,#157347 100%);
+      color:#fff;
+      padding:.7rem .9rem .95rem;
+      padding-top:calc(.7rem + env(safe-area-inset-top));
+      border-radius:0 0 18px 18px;
+      box-shadow:0 2px 12px rgba(25,135,84,.25);
+    }
+    .topbar .brand-logo{
+      width:40px;height:40px;border-radius:11px;background:#fff;
+      box-shadow:0 2px 8px rgba(0,0,0,.18);
+    }
+    .topbar .brand-name{font-size:1.25rem;font-weight:800;letter-spacing:-.01em;line-height:1}
+    .topbar .brand-sub{font-size:.8rem;font-weight:500;opacity:.88;margin-top:2px}
+    .topbar .btn-light{border-radius:999px;font-weight:700;color:#157347}
+    .topbar .btn-outline-light{
+      border-radius:50%;width:36px;height:36px;
+      display:inline-flex;align-items:center;justify-content:center;
+      border-color:rgba(255,255,255,.55);
+    }
+    .topbar .btn-outline-light:active{transform:scale(.94)}
+    /* Gợi ý cài iOS */
+    #iosTip{border-radius:14px;border:1px solid #cfe2ff}
+    /* Nhãn mục */
+    .sect{
+      font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
+      color:#8a94a0;margin:.25rem .25rem .65rem;
+    }
+    /* Lưới tile */
     .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
     @media(min-width:560px){.grid{grid-template-columns:repeat(3,1fr)}}
     @media(min-width:860px){.grid{grid-template-columns:repeat(4,1fr)}}
-    .tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-      text-decoration:none;color:#fff;border-radius:18px;padding:20px 10px;min-height:118px;
-      box-shadow:0 3px 10px rgba(0,0,0,.12);font-weight:700;text-align:center;transition:transform .08s}
+    /* Tile kiểu Stitch: thẻ trắng bo 16px + icon màu */
+    .tile{
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+      text-decoration:none;color:#212529;
+      background:#fff;border:1px solid #e9ecef;border-radius:16px;
+      padding:18px 10px;min-height:122px;
+      box-shadow:0 2px 12px rgba(25,135,84,.07);
+      font-weight:700;text-align:center;
+      transition:transform .08s ease, box-shadow .12s ease;
+    }
     .tile:active{transform:scale(.96)}
-    .tile i{font-size:2.1rem}
-    .tile span{font-size:1rem;line-height:1.15}
+    .tile:hover{box-shadow:0 4px 16px rgba(25,135,84,.14);color:#212529}
+    .tile .tile-ic{
+      width:52px;height:52px;border-radius:14px;
+      display:inline-flex;align-items:center;justify-content:center;
+      color:#fff;flex:0 0 auto;
+      box-shadow:0 4px 10px rgba(0,0,0,.14);
+    }
+    .tile .tile-ic i{font-size:1.6rem;line-height:1}
+    .tile .tile-label{font-size:.92rem;line-height:1.2;font-weight:700}
   </style>
 </head>
 <body>
-<div class="topbar d-flex align-items-center gap-2">
-  <img src="/media/icon-192.png" alt="Dali" style="width:38px;height:38px;border-radius:9px;background:#fff">
-  <div class="flex-grow-1">
-    <div class="fw-bold" style="font-size:1.25rem;line-height:1">Dali</div>
-    <div class="small" style="opacity:.85">Xin chào, {{ user.username }}{% if user.is_staff %} · Quản lý{% endif %}</div>
+<div class="topbar">
+  <div class="d-flex align-items-center gap-2">
+    <img src="/media/icon-192.png" alt="Dali" class="brand-logo">
+    <div class="flex-grow-1">
+      <div class="brand-name">Dali</div>
+      <div class="brand-sub">Xin chào, {{ user.username }}{% if user.is_staff %} · Quản lý{% endif %}</div>
+    </div>
+    <button id="installBtn" class="btn btn-sm btn-light" style="display:none"><i class="bi bi-download"></i> Cài app</button>
+    <a href="/logout" class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-right"></i></a>
   </div>
-  <button id="installBtn" class="btn btn-sm btn-light" style="display:none"><i class="bi bi-download"></i> Cài app</button>
-  <a href="/logout" class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-right"></i></a>
 </div>
 
 <div id="iosTip" class="alert alert-info m-2 mb-0 small" style="display:none">
   <i class="bi bi-phone"></i> Để cài thành app: bấm nút <b>Chia sẻ</b> <i class="bi bi-box-arrow-up"></i> ở Safari → <b>“Thêm vào MH chính”</b>.
 </div>
 
-<div class="p-2 pt-3">
+<div class="p-2 pt-3 px-3" style="max-width:980px;margin:0 auto">
+  <div class="sect"><i class="bi bi-grid-fill"></i> Chức năng</div>
   <div class="grid">
     {% for t in tiles %}
-    <a class="tile" href="{{ t.url }}" style="background:{{ t.bg }}">
-      <i class="bi {{ t.icon }}"></i>
-      <span>{{ t.label }}</span>
+    <a class="tile" href="{{ t.url }}">
+      <span class="tile-ic" style="background:{{ t.bg }}"><i class="bi {{ t.icon }}"></i></span>
+      <span class="tile-label">{{ t.label }}</span>
     </a>
     {% endfor %}
   </div>

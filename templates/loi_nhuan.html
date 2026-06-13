@@ -6,22 +6,95 @@
   <title>Doanh thu – Lợi nhuận</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+  <style>
+    /* ===== DALI Brand (Stitch) — phủ lên Bootstrap, không đổi hành vi ===== */
+    body{font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;}
+    [data-bs-theme=light] body.bg-body-tertiary{background-color:#f4f6f6!important;}
+
+    /* Tiêu đề trang */
+    .page-head h1{font-size:1.35rem;font-weight:800;letter-spacing:-.01em;margin-bottom:.15rem;}
+    .page-head .sub{color:var(--bs-secondary-color);font-size:.875rem;}
+    .page-head .bi{color:#198754;}
+
+    /* Card bo 16px, bóng xanh nhẹ */
+    .card{border-radius:16px;box-shadow:0 2px 12px rgba(25,135,84,.07);overflow:hidden;}
+    [data-bs-theme=light] .card{border:1px solid #e9ecef;}
+    .card-header{font-weight:700;padding:.85rem 1.1rem;}
+    [data-bs-theme=light] .card-header{background:#fff;border-bottom:1px solid #f0f2f1;color:#212529;}
+    .card-header .bi{margin-right:.3rem;color:#198754;}
+    .card-body{padding:1.1rem;}
+
+    /* <details> giá bán: summary đóng vai card-header */
+    details.card > summary{cursor:pointer;list-style:none;}
+    details.card > summary::-webkit-details-marker{display:none;}
+    details.card > summary .chev{display:inline-block;transition:transform .2s ease;color:#198754;}
+    details.card[open] > summary .chev{transform:rotate(90deg);}
+    details.card:not([open]) > summary{border-bottom:0;}
+
+    /* Nút brand: bo 12px, đậm, xanh #198754 */
+    .btn{border-radius:12px;font-weight:700;}
+    .btn-sm{border-radius:9px;}
+    .btn-primary{
+      --bs-btn-bg:#198754;--bs-btn-border-color:#198754;
+      --bs-btn-hover-bg:#157347;--bs-btn-hover-border-color:#146c43;
+      --bs-btn-active-bg:#146c43;--bs-btn-active-border-color:#13653f;
+      --bs-btn-disabled-bg:#198754;--bs-btn-disabled-border-color:#198754;
+    }
+    .btn-outline-primary{
+      --bs-btn-color:#198754;--bs-btn-border-color:#bcd9cb;
+      --bs-btn-hover-bg:#e8f3ee;--bs-btn-hover-border-color:#198754;--bs-btn-hover-color:#146c43;
+      --bs-btn-active-bg:#198754;--bs-btn-active-border-color:#198754;
+    }
+    .btn-success{font-weight:700;}
+    form .btn-primary{padding-top:.55rem;padding-bottom:.55rem;}
+
+    /* Form */
+    .form-control,.form-select{border-radius:10px;}
+    .form-control-sm,.form-select-sm{border-radius:8px;}
+    .form-control:focus,.form-select:focus{border-color:#198754;box-shadow:0 0 0 .2rem rgba(25,135,84,.12);}
+    [data-bs-theme=light] .form-label{color:#495057;font-weight:600;}
+    .badge{border-radius:50rem;font-weight:600;}
+    .alert{border-radius:12px;}
+
+    /* Stat tile bento — số liệu tổng quan */
+    .stat-tile{background:var(--bs-tertiary-bg);border:1px solid var(--bs-border-color-translucent);border-radius:12px;padding:.85rem .75rem;height:100%;text-align:center;}
+    [data-bs-theme=light] .stat-tile{background:#f8faf9;}
+    .stat-tile .lbl{font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--bs-secondary-color);margin-bottom:.2rem;}
+    .stat-tile .fs-4{font-size:1.6rem!important;font-weight:800!important;line-height:1.15;}
+
+    /* Bảng: header uppercase xám nhạt, hover xanh rất nhẹ */
+    .table thead th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;}
+    [data-bs-theme=light] .table>thead.table-light th{background:#f8f9fa;color:#495057;}
+    [data-bs-theme=light] .card .table tbody tr:hover>td{background:rgba(25,135,84,.045);}
+    .table>:not(caption)>*>*{padding-top:.5rem;padding-bottom:.5rem;}
+  </style>
 </head>
 <body class="bg-body-tertiary">
 
 {% include '_nav.html' %}
 
-<div class="container-fluid py-3">
+<div class="container-fluid py-3 px-md-4">
   {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
+
+  <!-- Tiêu đề trang -->
+  <div class="page-head d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <div>
+      <h1><i class="bi bi-graph-up-arrow"></i> Doanh thu – Lợi nhuận</h1>
+      <div class="sub">Theo dõi doanh thu, chi phí sơn, nhân công và lợi nhuận của xưởng</div>
+    </div>
+  </div>
 
   <!-- Giá bán theo kích thước -->
   <div class="row">
     <div class="col-12">
       <details class="card shadow-sm">
-        <summary class="card-header fw-semibold" style="cursor:pointer; list-style:none;">
-          <i class="bi bi-tag"></i> Giá bán &amp; đơn giá ngày công <span class="text-secondary small fw-normal">(bấm để mở/đóng — đặt giá để tính doanh thu &amp; nhân công)</span>
+        <summary class="card-header fw-semibold">
+          <i class="bi bi-chevron-right chev"></i><i class="bi bi-tag"></i> Giá bán &amp; đơn giá ngày công <span class="text-secondary small fw-normal">(bấm để mở/đóng — đặt giá để tính doanh thu &amp; nhân công)</span>
         </summary>
         <div class="card-body">
           <form method="POST" action="/loi-nhuan" class="row g-2 align-items-end">
@@ -69,11 +142,11 @@
             <span id="statLabel" class="fw-semibold ms-2">{{ label }}</span>
           </div>
 
-          <div class="row g-2 mb-3">
-            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Doanh thu</div><div class="fs-4 fw-bold text-success" id="sRev">0</div><div class="small text-secondary">đồng</div></div></div>
-            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Chi phí sơn</div><div class="fs-4 fw-bold text-warning" id="sPaint">0</div><div class="small text-secondary">đồng</div></div></div>
-            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Nhân công (ngày công)</div><div class="fs-4 fw-bold" style="color:#6610f2" id="sLabor">0</div><div class="small text-secondary" id="sLaborBreak">đồng</div></div></div>
-            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Lợi nhuận</div><div class="fs-4 fw-bold text-primary" id="sProfit">0</div><div class="small text-secondary">đồng</div></div></div>
+          <div class="row g-2 g-md-3 mb-3">
+            <div class="col-6 col-md-3"><div class="stat-tile"><div class="lbl">Doanh thu</div><div class="fs-4 fw-bold text-success" id="sRev">0</div><div class="small text-secondary">đồng</div></div></div>
+            <div class="col-6 col-md-3"><div class="stat-tile"><div class="lbl">Chi phí sơn</div><div class="fs-4 fw-bold text-warning" id="sPaint">0</div><div class="small text-secondary">đồng</div></div></div>
+            <div class="col-6 col-md-3"><div class="stat-tile"><div class="lbl">Nhân công (ngày công)</div><div class="fs-4 fw-bold" style="color:#6610f2" id="sLabor">0</div><div class="small text-secondary" id="sLaborBreak">đồng</div></div></div>
+            <div class="col-6 col-md-3"><div class="stat-tile"><div class="lbl">Lợi nhuận</div><div class="fs-4 fw-bold text-primary" id="sProfit">0</div><div class="small text-secondary">đồng</div></div></div>
           </div>
 
           <div class="row g-3">

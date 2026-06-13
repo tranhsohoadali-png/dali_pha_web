@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-bs-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,7 +7,11 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
+    /* ===== CSS gốc (giữ nguyên các hook nội bộ: dash-card, sw, pill, rank, minibar, num, tbl-clean) ===== */
     body{background:#eef1f5}
     .dash-card{border:none;border-radius:1rem;box-shadow:0 6px 18px rgba(20,30,60,.08);overflow:hidden}
     .dash-card .card-header{background:#fff;border-bottom:1px solid #eef0f4;font-weight:600;display:flex;align-items:center;gap:.45rem}
@@ -33,30 +37,97 @@
     .rank{width:24px;height:24px;border-radius:50%;background:#eef2f7;color:#475569;font-weight:700;font-size:.8rem;display:inline-flex;align-items:center;justify-content:center}
     .minibar{height:6px;border-radius:999px;background:#eef2f7;overflow:hidden}
     .minibar>span{display:block;height:100%;border-radius:999px}
+
+    /* ===== DALI Brand (Stitch) — phủ lên Bootstrap, không đổi hành vi ===== */
+    body{font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;}
+    [data-bs-theme=light] body{background:#f4f6f6 !important;}
+
+    .page-head h1{font-size:1.35rem;font-weight:800;letter-spacing:-.01em;margin-bottom:.1rem;}
+    .page-head h1 .bi{color:#198754;}
+    .page-head .sub{color:var(--bs-secondary-color);font-size:.875rem;}
+
+    .dash-card{border-radius:16px;box-shadow:0 2px 12px rgba(25,135,84,.07);}
+    [data-bs-theme=light] .dash-card{border:1px solid #e9ecef;}
+    .dash-card .card-header{font-weight:700;padding:.85rem 1.1rem;}
+    [data-bs-theme=light] .dash-card .card-header{background:#fff;border-bottom:1px solid #f0f2f1;color:#212529;}
+    .dash-card .card-footer{border-top:1px solid var(--bs-border-color-translucent);}
+
+    .btn{border-radius:12px;font-weight:700;}
+    .btn-sm{border-radius:9px;}
+    .badge{font-weight:600;}
+    .alert{border-radius:12px;}
+
+    /* Bento stat-tile (thay thẻ gradient cũ, các class cũ vẫn giữ trong CSS) */
+    .stat-tile{background:var(--bs-card-bg,#fff);border:1px solid #e9ecef;border-radius:16px;box-shadow:0 2px 12px rgba(25,135,84,.07);padding:1rem 1.1rem;height:100%;position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:center;min-height:108px;}
+    .stat-tile .lbl{font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--bs-secondary-color);margin-bottom:.3rem;}
+    .stat-tile .val{font-size:1.9rem;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums;}
+    .stat-tile .sub{font-size:.78rem;color:var(--bs-secondary-color);margin-top:.2rem;}
+    .stat-tile .ico-wrap{position:absolute;right:14px;top:14px;width:40px;height:40px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;}
+    .ico-green{background:rgba(25,135,84,.1);color:#198754;}
+    .ico-blue{background:rgba(13,110,253,.1);color:#0d6efd;}
+    .ico-amber{background:rgba(255,193,7,.16);color:#b07a00;}
+    .ico-slate{background:rgba(108,117,125,.12);color:#6c757d;}
+    .ico-red{background:rgba(220,53,69,.12);color:#dc3545;}
+    .stat-tile.tile-danger{border-top:4px solid #dc3545;}
+    .stat-tile.tile-green{border-top:4px solid #198754;}
+
+    /* Bảng theo brand: header xám nhạt chữ hoa, hover xanh rất nhẹ */
+    [data-bs-theme=light] .tbl-clean thead th{background:#f8f9fa;color:#495057;font-weight:700;letter-spacing:.06em;font-size:.72rem;border-bottom:1px solid #e9ecef;}
+    [data-bs-theme=light] .tbl-clean tbody tr:hover{background:rgba(25,135,84,.045);}
+    .tbl-clean td,.tbl-clean th{padding:.55rem .75rem;}
   </style>
 </head>
-<body>
+<body class="bg-body-tertiary">
 {% load humanize %}
 {% include '_nav.html' %}
-<div class="container-fluid py-3">
+<div class="container-fluid py-3 px-3 px-md-4" style="max-width:1500px">
+
+  <!-- Tiêu đề trang -->
+  <div class="page-head d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <div>
+      <h1><i class="bi bi-speedometer2"></i> Bảng điều khiển</h1>
+      <div class="sub">Tổng quan mẻ pha, chi phí sơn và tồn kho của xưởng</div>
+    </div>
+  </div>
+
   {% if low_stock %}
-  <div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle-fill"></i> <b>Sắp hết sơn:</b> {{ low_stock|join:", " }} — <a href="/kho-son">xem kho</a></div>
+  <div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle-fill"></i> <b>Sắp hết sơn:</b> {{ low_stock|join:", " }} — <a href="/kho-son" class="alert-link">xem kho</a></div>
   {% endif %}
 
-  <!-- Thẻ số liệu -->
+  <!-- Thẻ số liệu (bento) -->
   <div class="row g-3 mb-3">
-    <div class="col-6 col-xl-3"><div class="stat-card g-green h-100"><div class="card-body">
-      <i class="bi bi-cup-hot ico"></i>
-      <div class="lbl">Mẻ pha hôm nay</div><div class="val">{{ today_n }}</div><div class="sub">{{ today_label }}</div></div></div></div>
-    <div class="col-6 col-xl-3"><div class="stat-card g-blue h-100"><div class="card-body">
-      <i class="bi bi-calendar3 ico"></i>
-      <div class="lbl">Mẻ pha tháng này</div><div class="val">{{ month_n }}</div><div class="sub">{{ month_label }}</div></div></div></div>
-    <div class="col-6 col-xl-3"><div class="stat-card g-amber h-100"><div class="card-body">
-      <i class="bi bi-cash-coin ico"></i>
-      <div class="lbl">Chi phí sơn tháng này</div><div class="val" style="font-size:1.7rem;word-break:break-word">{{ month_cost|intcomma }} <span style="font-size:1.1rem;font-weight:600">đ</span></div><div class="sub">{{ month_label }}</div></div></div></div>
-    <div class="col-6 col-xl-3"><div class="stat-card {% if low_stock %}g-red{% else %}g-slate{% endif %} h-100"><div class="card-body">
-      <i class="bi bi-exclamation-triangle ico"></i>
-      <div class="lbl">Màu sắp hết</div><div class="val">{{ low_stock|length }}</div><div class="sub">{% if low_stock %}{{ low_stock|join:", "|truncatechars:24 }}{% else %}Kho ổn định{% endif %}</div></div></div></div>
+    <div class="col-6 col-xl-3">
+      <div class="stat-tile tile-green">
+        <span class="ico-wrap ico-green"><i class="bi bi-cup-hot"></i></span>
+        <div class="lbl">Mẻ pha hôm nay</div>
+        <div class="val text-success">{{ today_n }}</div>
+        <div class="sub">{{ today_label }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="stat-tile">
+        <span class="ico-wrap ico-blue"><i class="bi bi-calendar3"></i></span>
+        <div class="lbl">Mẻ pha tháng này</div>
+        <div class="val">{{ month_n }}</div>
+        <div class="sub">{{ month_label }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="stat-tile">
+        <span class="ico-wrap ico-amber"><i class="bi bi-cash-coin"></i></span>
+        <div class="lbl">Chi phí sơn tháng này</div>
+        <div class="val" style="font-size:1.45rem;word-break:break-word">{{ month_cost|intcomma }} <span style="font-size:.95rem;font-weight:600" class="text-secondary">đ</span></div>
+        <div class="sub">{{ month_label }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="stat-tile {% if low_stock %}tile-danger{% endif %}">
+        <span class="ico-wrap {% if low_stock %}ico-red{% else %}ico-slate{% endif %}"><i class="bi bi-exclamation-triangle"></i></span>
+        <div class="lbl">Màu sắp hết</div>
+        <div class="val {% if low_stock %}text-danger{% endif %}">{{ low_stock|length }}</div>
+        <div class="sub">{% if low_stock %}{{ low_stock|join:", "|truncatechars:24 }}{% else %}Kho ổn định{% endif %}</div>
+      </div>
+    </div>
   </div>
 
   <!-- Biểu đồ -->

@@ -1,19 +1,74 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-bs-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Nhân viên · Pha màu</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    /* ===== DALI Brand (Stitch) — phủ lên Bootstrap, không đổi hành vi ===== */
+    body{font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;}
+    [data-bs-theme=light] body.bg-body-tertiary{background-color:#f4f6f6!important;}
+
+    /* Tiêu đề trang */
+    .page-head h1{font-size:1.35rem;font-weight:800;letter-spacing:-.01em;margin-bottom:.1rem;}
+    .page-head .sub{color:var(--bs-secondary-color);font-size:.875rem;}
+    .page-head .bi{color:#198754;}
+
+    /* Card bo 16px, bóng xanh nhẹ */
+    .card{border-radius:16px;box-shadow:0 2px 12px rgba(25,135,84,.07);overflow:hidden;}
+    [data-bs-theme=light] .card{border:1px solid #e9ecef;}
+    .card-header{font-weight:700;padding:.85rem 1.1rem;}
+    [data-bs-theme=light] .card-header{background:#fff;border-bottom:1px solid #f0f2f1;color:#212529;}
+    .card-header .bi{margin-right:.3rem;}
+    .card-body{padding:1.1rem;}
+
+    /* Form */
+    [data-bs-theme=light] .form-label{color:#495057;font-weight:600;}
+    .form-control,.form-select{border-radius:10px;}
+    .form-control:focus,.form-select:focus{border-color:#198754;box-shadow:0 0 0 .2rem rgba(25,135,84,.12);}
+    .form-check-input:checked{background-color:#198754;border-color:#198754;}
+
+    /* Nút theo brand: đậm, bo 12px */
+    .btn{border-radius:12px;font-weight:700;}
+    .btn-sm{border-radius:9px;font-weight:600;}
+    .btn-success{
+      --bs-btn-bg:#198754;--bs-btn-border-color:#198754;
+      --bs-btn-hover-bg:#157347;--bs-btn-hover-border-color:#146c43;
+      --bs-btn-active-bg:#146c43;--bs-btn-active-border-color:#13653f;
+      padding-top:.55rem;padding-bottom:.55rem;
+    }
+
+    /* Bảng: header xám nhạt chữ hoa, dòng hover xanh rất nhẹ */
+    .table thead th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;}
+    [data-bs-theme=light] .table>thead.table-light th{background:#f8f9fa;color:#495057;}
+    [data-bs-theme=light] .card .table tbody tr:hover>td{background:rgba(25,135,84,.045);}
+    .table td,.table th{padding:.6rem .9rem;}
+
+    .badge{border-radius:50rem;font-weight:600;padding:.35em .7em;}
+    .alert{border-radius:12px;}
+  </style>
 </head>
 <body class="bg-body-tertiary">
 {% include '_nav.html' %}
 <div class="container py-3" style="max-width:760px;">
   {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
 
+  <!-- Tiêu đề trang -->
+  <div class="page-head d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <div>
+      <h1><i class="bi bi-people-fill"></i> Quản lý Nhân viên</h1>
+      <div class="sub">Tạo tài khoản, phân quyền và đặt lại mật khẩu cho xưởng</div>
+    </div>
+  </div>
+
+  <!-- Thêm tài khoản -->
   <div class="card shadow-sm mb-3">
-    <div class="card-header fw-semibold"><i class="bi bi-person-plus"></i> Thêm tài khoản</div>
+    <div class="card-header"><i class="bi bi-person-plus text-success"></i> Thêm tài khoản</div>
     <div class="card-body">
       <form method="POST" action="/nhan-vien" class="row g-2 align-items-end">
         {% csrf_token %}
@@ -25,14 +80,15 @@
         <div class="col-md-2 form-check ms-2 mb-2">
           <input class="form-check-input" type="checkbox" name="is_manager" id="ism">
           <label class="form-check-label small" for="ism">Quyền quản lý</label></div>
-        <div class="col-md-2"><button class="btn btn-success w-100">Thêm</button></div>
+        <div class="col-md-2"><button class="btn btn-success w-100"><i class="bi bi-plus-lg"></i> Thêm</button></div>
       </form>
-      <p class="text-secondary small mt-2 mb-0">Bỏ tick "Quyền quản lý" = nhân viên (chỉ vào app pha, không sửa công thức).</p>
+      <p class="text-secondary small mt-2 mb-0"><i class="bi bi-info-circle"></i> Bỏ tick "Quyền quản lý" = nhân viên (chỉ vào app pha, không sửa công thức).</p>
     </div>
   </div>
 
+  <!-- Danh sách tài khoản -->
   <div class="card shadow-sm">
-    <div class="card-header fw-semibold"><i class="bi bi-people"></i> Danh sách tài khoản</div>
+    <div class="card-header"><i class="bi bi-people text-success"></i> Danh sách tài khoản</div>
     <div class="card-body p-0">
       <table class="table mb-0 align-middle">
         <thead class="table-light"><tr><th>Tên đăng nhập</th><th>Vai trò</th><th class="text-end">Thao tác</th></tr></thead>
@@ -49,7 +105,7 @@
               <form method="POST" action="/nhan-vien" class="d-inline" onsubmit="return resetPw(this)">
                 {% csrf_token %}<input type="hidden" name="action" value="reset_pw"><input type="hidden" name="username" value="{{ u.username }}">
                 <input type="hidden" name="password" class="pwfield">
-                <button class="btn btn-sm btn-outline-secondary">Đổi mật khẩu</button>
+                <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-key"></i> Đổi mật khẩu</button>
               </form>
               {% if not u.is_superuser %}
               <form method="POST" action="/nhan-vien" class="d-inline" onsubmit="return confirm('Xoá tài khoản {{ u.username }}?')">

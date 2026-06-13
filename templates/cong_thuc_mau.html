@@ -6,8 +6,41 @@
   <title>Công thức pha màu</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
   <style>
+    /* ===== DALI Brand (Stitch) — phủ lên Bootstrap, không đổi hành vi ===== */
+    body{font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;}
+    [data-bs-theme="light"] body{background-color:#f4f6f6 !important;}
+
+    .page-head h1{font-size:1.35rem;font-weight:800;letter-spacing:-.01em;margin-bottom:.1rem;}
+    .page-head .sub{color:var(--bs-secondary-color);font-size:.875rem;}
+
+    .card{border-radius:16px;border:1px solid var(--bs-border-color);box-shadow:0 2px 12px rgba(25,135,84,.07);overflow:hidden;}
+    .card-header{background:var(--bs-card-bg);font-weight:700;padding:.85rem 1.1rem;border-bottom:1px solid var(--bs-border-color-translucent);}
+    .card-header .bi{margin-right:.25rem;}
+
+    .form-label{font-weight:600;color:var(--bs-secondary-color);}
+    .form-control,.form-select{border-radius:10px;}
+    .form-control:focus,.form-select:focus{border-color:#198754;box-shadow:0 0 0 .2rem rgba(25,135,84,.12);}
+
+    .btn{border-radius:12px;font-weight:700;}
+    .btn-sm.py-0{border-radius:8px;}
+
+    .badge{font-weight:600;}
+    .badge.rounded-pill{padding:.35em .7em;}
+    .badge.text-bg-light.border{border-radius:999px;padding:.35em .6em;background:var(--bs-tertiary-bg) !important;}
+
+    .table thead th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--bs-secondary-color);font-weight:700;background:var(--bs-tertiary-bg);}
+    .table tbody tr:hover{background:rgba(25,135,84,.04);}
+    .table td,.table th{padding:.55rem .75rem;}
+    .recipe-card .table td,.recipe-card .table th{padding:.35rem .5rem;}
+
+    .recipe-card{border-radius:14px !important;border:1px solid var(--bs-border-color) !important;transition:box-shadow .15s ease;}
+    .recipe-card:hover{box-shadow:0 2px 12px rgba(25,135,84,.12);}
+
     .sw { width: 34px; height: 34px; border-radius: .35rem; border: 1px solid rgba(0,0,0,.2); }
     .sw-sm { width: 20px; height: 20px; border-radius: .25rem; border: 1px solid rgba(0,0,0,.2); display:inline-block; vertical-align:middle; }
   </style>
@@ -16,8 +49,16 @@
 
 {% include '_nav.html' %}
 
-<div class="container-fluid py-3">
-  {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
+<div class="container-fluid py-3 px-3 px-md-4" style="max-width:1400px">
+  <!-- Tiêu đề trang -->
+  <div class="page-head d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <div>
+      <h1>Công thức pha màu</h1>
+      <div class="sub">Lưu công thức pha, ghi nhận mẻ sản xuất và thống kê lượng màu gốc đã dùng</div>
+    </div>
+  </div>
+
+  {% if messages %}{% for m in messages %}<div class="alert alert-info py-2 rounded-3">{{ m }}</div>{% endfor %}{% endif %}
   {% if low_stock %}
   <div class="alert alert-danger d-flex align-items-center justify-content-between py-2">
     <span><i class="bi bi-exclamation-triangle-fill"></i> <b>Sắp hết sơn:</b> {{ low_stock|join:", " }}</span>
@@ -28,8 +69,8 @@
   <div class="row g-3">
     <!-- Nhập công thức -->
     <div class="col-lg-5">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold"><i class="bi bi-pencil-square"></i> Nhập công thức pha</div>
+      <div class="card">
+        <div class="card-header"><i class="bi bi-pencil-square text-success"></i> Nhập công thức pha</div>
         <div class="card-body">
           <form method="POST" action="cong-thuc-mau" id="recipeForm">
             {% csrf_token %}
@@ -72,8 +113,8 @@
       </div>
 
       <!-- Màu gốc (gợi ý cho ô Màu gốc) -->
-      <div class="card shadow-sm mt-3">
-        <div class="card-header fw-semibold"><i class="bi bi-palette2"></i> Màu gốc đã khai báo ({{ bases|length }})</div>
+      <div class="card mt-3">
+        <div class="card-header"><i class="bi bi-palette2 text-success"></i> Màu gốc đã khai báo ({{ bases|length }})</div>
         <div class="card-body">
           <div class="mb-2">
             <div class="small text-secondary mb-1">Bấm 1 màu để điền vào ô "Màu gốc" đang chọn:</div>
@@ -105,10 +146,10 @@
 
     <!-- Công thức đã lưu -->
     <div class="col-lg-7">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
-          <span><i class="bi bi-journal-text"></i> Công thức đã lưu
-            {% if recipes %}<span class="badge text-bg-secondary">{{ recipes|length }}</span>{% endif %}</span>
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-journal-text text-success"></i> Công thức đã lưu
+            {% if recipes %}<span class="badge rounded-pill text-bg-secondary">{{ recipes|length }}</span>{% endif %}</span>
           {% if recipes %}<button id="copyAll" class="btn btn-sm btn-outline-secondary"><i class="bi bi-clipboard-check"></i> Sao chép tất cả</button>{% endif %}
         </div>
         <div class="card-body">
@@ -175,8 +216,8 @@
   <!-- Thống kê sản xuất -->
   <div class="row mt-3">
     <div class="col-12">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold"><i class="bi bi-bar-chart-line"></i> Thống kê lượng màu đã pha (sản xuất)</div>
+      <div class="card">
+        <div class="card-header"><i class="bi bi-bar-chart-line text-success"></i> Thống kê lượng màu đã pha (sản xuất)</div>
         <div class="card-body">
           <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
             <div class="btn-group btn-group-sm" role="group">
@@ -207,9 +248,9 @@
   <!-- Lịch sử pha màu -->
   <div class="row mt-3">
     <div class="col-12">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
-          <span><i class="bi bi-clock-history"></i> Lịch sử pha màu (mới nhất)</span>
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-clock-history text-success"></i> Lịch sử pha màu (mới nhất)</span>
           <button id="historyReload" type="button" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i></button>
         </div>
         <div class="card-body p-0">

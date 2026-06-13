@@ -3,38 +3,139 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#2E7D32">
+  <meta name="theme-color" content="#198754">
   <title>Đăng nhập · Pha màu DALI</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-  <style>body{background:#2E7D32}</style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    /* ===== DALI Brand (Stitch) — trang đăng nhập standalone ===== */
+    html,body{height:100%;}
+    body{
+      font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;
+      -webkit-tap-highlight-color:transparent;
+      background:
+        radial-gradient(640px 360px at 12% -8%, rgba(25,135,84,.16), transparent 60%),
+        radial-gradient(560px 320px at 105% 0%, rgba(13,110,253,.08), transparent 55%),
+        radial-gradient(720px 420px at 50% 115%, rgba(25,135,84,.12), transparent 60%),
+        linear-gradient(165deg,#eef7f1 0%,#f4f6f6 55%,#e9f3ee 100%);
+      background-attachment:fixed;
+    }
+    /* Hoạ tiết chấm sơn mờ */
+    body::before{
+      content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+      background-image:radial-gradient(rgba(25,135,84,.10) 1.2px, transparent 1.3px);
+      background-size:26px 26px;
+      mask-image:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,.15) 45%,rgba(0,0,0,.5));
+      -webkit-mask-image:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,.15) 45%,rgba(0,0,0,.5));
+    }
+    .login-wrap{
+      position:relative;z-index:1;
+      min-height:100dvh;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      padding:24px 16px calc(24px + env(safe-area-inset-bottom));
+    }
+    /* Card trắng bo 20px kiểu Stitch */
+    .login-card{
+      width:100%;max-width:420px;
+      background:#fff;
+      border:1px solid #e9ecef;
+      border-radius:20px;
+      box-shadow:0 10px 40px rgba(25,135,84,.12), 0 2px 12px rgba(25,135,84,.07);
+      overflow:hidden;
+    }
+    .login-card .card-top{height:5px;background:linear-gradient(90deg,#198754,#157347 55%,#0d6efd);}
+    .login-body{padding:1.9rem 1.6rem 1.6rem;}
+    @media (max-width:420px){.login-body{padding:1.5rem 1.15rem 1.25rem;}}
+    /* Logo giọt sơn tròn */
+    .brand-drop{
+      width:92px;height:92px;margin:0 auto;
+      border-radius:50%;
+      background:linear-gradient(180deg,#198754 0%,#157347 100%);
+      display:flex;align-items:center;justify-content:center;
+      box-shadow:0 10px 24px rgba(25,135,84,.30), inset 0 -3px 8px rgba(0,0,0,.12);
+      position:relative;
+    }
+    .brand-drop::after{
+      content:"";position:absolute;left:-7px;bottom:6px;
+      width:14px;height:14px;border-radius:50% 50% 50% 0;
+      transform:rotate(-45deg);
+      background:linear-gradient(180deg,#27a06a,#157347);
+      box-shadow:0 4px 10px rgba(25,135,84,.25);
+    }
+    .brand-drop img{
+      width:72px;height:72px;border-radius:50%;
+      border:3px solid rgba(255,255,255,.9);
+      box-shadow:0 2px 8px rgba(0,0,0,.18);
+      background:#fff;object-fit:cover;
+    }
+    .brand-title{font-weight:800;letter-spacing:-.01em;font-size:1.3rem;color:#1f2937;margin:.85rem 0 0;}
+    .brand-sub{color:#6c757d;font-size:.875rem;font-weight:500;}
+    /* Form */
+    .form-label{font-weight:600;color:#6c757d;font-size:.85rem;margin-bottom:.35rem;}
+    .input-group-text{
+      background:#f8f9fa;border:1px solid #dee2e6;border-right:0;
+      border-radius:12px 0 0 12px;color:#198754;
+    }
+    .form-control{border-radius:12px;border:1px solid #dee2e6;}
+    .input-group .form-control{border-radius:0 12px 12px 0;border-left:0;}
+    .form-control:focus{border-color:#198754;box-shadow:0 0 0 .2rem rgba(25,135,84,.12);}
+    .form-control:focus + .input-group-text,
+    .input-group:focus-within .input-group-text{border-color:#198754;color:#157347;background:#e9f7ef;}
+    .form-control-lg{font-size:1rem;padding:.7rem .9rem;}
+    /* Nút đăng nhập xanh to */
+    .btn-login{
+      border-radius:12px;font-weight:700;font-size:1.05rem;
+      padding:.8rem 1rem;
+      background:linear-gradient(180deg,#198754 0%,#157347 100%);
+      border:0;
+      box-shadow:0 8px 20px rgba(25,135,84,.28);
+      transition:transform .12s ease, box-shadow .12s ease;
+    }
+    .btn-login:hover{background:linear-gradient(180deg,#1d9a5f 0%,#157347 100%);box-shadow:0 10px 24px rgba(25,135,84,.34);}
+    .btn-login:active{transform:scale(.97);box-shadow:0 4px 12px rgba(25,135,84,.25);}
+    .alert{border-radius:14px;font-weight:500;}
+    .login-foot{margin-top:1.1rem;color:#8a94a0;font-size:.78rem;font-weight:500;letter-spacing:.02em;}
+  </style>
 </head>
 <body>
-<div class="container" style="max-width:420px;">
-  <div class="card shadow mt-5 border-0">
-    <div class="card-body p-4">
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="card-top"></div>
+    <div class="login-body">
       <div class="text-center mb-4">
-        <img src="/media/icon-512.png" alt="Dali" style="width:74px;height:74px;border-radius:18px;box-shadow:0 2px 8px rgba(0,0,0,.15)">
-        <h4 class="mt-2 mb-0">Dali · Tô điểm cuộc sống</h4>
-        <div class="text-secondary small">Đăng nhập để tiếp tục</div>
+        <div class="brand-drop">
+          <img src="/media/icon-512.png" alt="Dali">
+        </div>
+        <h1 class="brand-title">Dali · Tô điểm cuộc sống</h1>
+        <div class="brand-sub">Đăng nhập để tiếp tục</div>
       </div>
-      {% if messages %}{% for m in messages %}<div class="alert alert-danger py-2">{{ m }}</div>{% endfor %}{% endif %}
+      {% if messages %}{% for m in messages %}<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle-fill me-1"></i>{{ m }}</div>{% endfor %}{% endif %}
       <form method="POST" action="/login{% if request.GET.next %}?next={{ request.GET.next }}{% endif %}">
         {% csrf_token %}
         <div class="mb-3">
           <label class="form-label">Tên đăng nhập</label>
-          <input type="text" name="username" class="form-control form-control-lg" required autofocus
-                 autocapitalize="none" autocomplete="username">
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-person"></i></span>
+            <input type="text" name="username" class="form-control form-control-lg" required autofocus
+                   autocapitalize="none" autocomplete="username">
+          </div>
         </div>
         <div class="mb-4">
           <label class="form-label">Mật khẩu</label>
-          <input type="password" name="password" class="form-control form-control-lg" required
-                 autocomplete="current-password">
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-shield-lock"></i></span>
+            <input type="password" name="password" class="form-control form-control-lg" required
+                   autocomplete="current-password">
+          </div>
         </div>
-        <button class="btn btn-success btn-lg w-100"><i class="bi bi-box-arrow-in-right"></i> Đăng nhập</button>
+        <button class="btn btn-success btn-lg w-100 btn-login"><i class="bi bi-box-arrow-in-right"></i> Đăng nhập</button>
       </form>
     </div>
   </div>
+  <div class="login-foot text-center">© DALI · mau.tranhdali.vn</div>
 </div>
 </body>
 </html>

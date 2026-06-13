@@ -6,23 +6,78 @@
   <title>Sản xuất tranh</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+  <style>
+    /* ===== DALI Brand (Stitch) — phủ lên Bootstrap, không đổi hành vi ===== */
+    body{font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;}
+    [data-bs-theme="light"] body{background-color:#f4f6f6 !important;}
+
+    .page-head h1{font-size:1.35rem;font-weight:800;letter-spacing:-.01em;margin-bottom:.1rem;}
+    .page-head .sub{color:var(--bs-secondary-color);font-size:.875rem;}
+
+    .card{border-radius:16px;border:1px solid var(--bs-border-color);box-shadow:0 2px 12px rgba(25,135,84,.07);overflow:hidden;}
+    .card-header{background:var(--bs-card-bg);font-weight:700;padding:.85rem 1.1rem;border-bottom:1px solid var(--bs-border-color-translucent);}
+    .card-header .bi{margin-right:.25rem;}
+    .card-accent-success{border-top:4px solid #198754;}
+
+    .form-label{font-weight:600;color:var(--bs-secondary-color);}
+    .form-control,.form-select{border-radius:10px;}
+    .form-control:focus,.form-select:focus{border-color:#198754;box-shadow:0 0 0 .2rem rgba(25,135,84,.12);}
+    .input-group-lg>.form-control{border-top-left-radius:10px;border-bottom-left-radius:10px;}
+
+    .btn{border-radius:12px;font-weight:700;}
+    .btn-sm.py-0{border-radius:8px;}
+    .input-group .btn{border-top-right-radius:12px;border-bottom-right-radius:12px;}
+
+    .stat-tile{background:var(--bs-tertiary-bg);border:1px solid var(--bs-border-color-translucent);border-radius:12px;padding:.85rem .75rem;height:100%;}
+    .stat-tile .lbl{font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--bs-secondary-color);margin-bottom:.25rem;}
+    .stat-tile .val{font-size:1.75rem;font-weight:800;line-height:1.15;}
+
+    .badge{font-weight:600;}
+    .size-chip{display:inline-block;padding:.15rem .55rem;border-radius:999px;font-size:.78rem;font-weight:700;background:rgba(25,135,84,.1);color:#198754;}
+    [data-bs-theme="dark"] .size-chip{background:rgba(25,135,84,.22);color:#75b798;}
+
+    .table thead th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--bs-secondary-color);font-weight:700;background:var(--bs-tertiary-bg);}
+    .table tbody tr:hover{background:rgba(25,135,84,.04);}
+    .table td,.table th{padding:.55rem .75rem;}
+
+    .section-label{font-weight:700;font-size:.9rem;}
+    .section-label .bi{color:#198754;margin-right:.25rem;}
+
+    @media (max-width: 576px){
+      .btn-success.fw-semibold,.btn-primary.fw-semibold{min-height:48px;}
+    }
+  </style>
 </head>
 <body class="bg-body-tertiary">
 
 {% include '_nav.html' %}
 
-<div class="container-fluid py-3">
-  {% if messages %}{% for m in messages %}<div class="alert alert-info py-2">{{ m }}</div>{% endfor %}{% endif %}
+<div class="container-fluid py-3 px-3 px-md-4" style="max-width:1400px">
+  {% if messages %}{% for m in messages %}<div class="alert alert-info py-2 rounded-3">{{ m }}</div>{% endfor %}{% endif %}
+
+  <!-- Tiêu đề trang -->
+  <div class="page-head d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <div>
+      <h1>Sản xuất tranh</h1>
+      <div class="sub">Ghi nhận sản lượng và thống kê tranh sản xuất tại xưởng</div>
+    </div>
+  </div>
 
   <!-- Ghi nhận sản xuất -->
   <div class="row">
     <div class="col-12">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold"><i class="bi bi-box2-heart"></i> Ghi nhận sản xuất tranh</div>
+      <div class="card card-accent-success">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <span class="text-success"><i class="bi bi-box2-heart"></i> Ghi nhận sản xuất tranh</span>
+          <span class="small text-secondary fst-italic fw-normal">Nhập nhanh theo khổ tranh</span>
+        </div>
         <div class="card-body">
-          <form method="POST" action="/san-xuat" class="row g-2 align-items-end">
+          <form method="POST" action="/san-xuat" class="row g-2 g-md-3 align-items-end">
             {% csrf_token %}
             <input type="hidden" name="action" value="add">
             <div class="col-md-3">
@@ -41,7 +96,7 @@
               <label class="form-label small mb-1">Ghi chú</label>
               <div class="input-group input-group-lg">
                 <input type="text" name="note" class="form-control" placeholder="tuỳ chọn">
-                <button class="btn btn-primary fw-semibold"><i class="bi bi-save"></i> Lưu</button>
+                <button class="btn btn-success fw-semibold"><i class="bi bi-save"></i> Lưu</button>
               </div>
             </div>
           </form>
@@ -53,8 +108,8 @@
   <!-- Thống kê -->
   <div class="row mt-3">
     <div class="col-12">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold"><i class="bi bi-bar-chart-line"></i> Thống kê số lượng tranh sản xuất</div>
+      <div class="card">
+        <div class="card-header"><i class="bi bi-bar-chart-line text-success"></i> Thống kê số lượng tranh sản xuất</div>
         <div class="card-body">
           <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
             <div class="btn-group btn-group-sm" role="group">
@@ -69,12 +124,22 @@
             <button id="statExcel" type="button" class="btn btn-sm btn-success"><i class="bi bi-file-earmark-excel"></i> Xuất Excel</button>
             <span id="statLabel" class="fw-semibold ms-2">{{ stat_label }}</span>
           </div>
-          <div class="row g-2 mb-3">
-            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Tổng số tranh SX</div><div class="fs-3 fw-bold text-success" id="statTotal">{{ stat_agg.total }}</div></div></div>
-            <div class="col-6 col-md-3"><div class="border rounded text-center py-2"><div class="text-secondary small">Số lượt ghi</div><div class="fs-3 fw-bold text-primary" id="statEntries">{{ stat_agg.entries }}</div></div></div>
+          <div class="row g-2 g-md-3 mb-3">
+            <div class="col-6 col-md-3">
+              <div class="stat-tile">
+                <div class="lbl">Tổng số tranh SX</div>
+                <div class="val text-success" id="statTotal">{{ stat_agg.total }}</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="stat-tile">
+                <div class="lbl">Số lượt ghi</div>
+                <div class="val text-primary" id="statEntries">{{ stat_agg.entries }}</div>
+              </div>
+            </div>
           </div>
 
-          <div class="fw-semibold mb-2"><i class="bi bi-rulers"></i> Số lượng tranh theo kích thước</div>
+          <div class="section-label mb-2"><i class="bi bi-rulers"></i> Số lượng tranh theo kích thước</div>
           <div class="row g-3">
             <div class="col-lg-5">
               <table class="table table-sm">
@@ -97,31 +162,33 @@
   <!-- Danh sách ghi nhận gần đây -->
   <div class="row mt-3">
     <div class="col-12">
-      <div class="card shadow-sm">
-        <div class="card-header fw-semibold"><i class="bi bi-clock-history"></i> Ghi nhận gần đây ({{ entries|length }})</div>
+      <div class="card">
+        <div class="card-header"><i class="bi bi-clock-history text-success"></i> Ghi nhận gần đây ({{ entries|length }})</div>
         <div class="card-body p-0">
-          <table class="table table-sm mb-0 align-middle">
-            <thead class="table-light"><tr><th style="width:140px">Lúc</th><th class="text-center" style="width:120px">Kích thước</th><th class="text-center" style="width:90px">Số lượng</th><th>Ghi chú</th><th>Người nhập</th><th style="width:46px"></th></tr></thead>
-            <tbody>
-              {% for e in entries %}
-              <tr>
-                <td class="small">{{ e.dt }}</td>
-                <td class="text-center">{% if e.size %}<span class="badge text-bg-dark">{{ e.size }}</span>{% else %}<span class="text-secondary">—</span>{% endif %}</td>
-                <td class="text-center fw-bold">{{ e.qty }}</td>
-                <td class="small">{{ e.note }}</td>
-                <td class="small text-secondary">{{ e.user }}</td>
-                <td class="text-center">
-                  <form method="POST" action="/san-xuat" class="d-inline" onsubmit="return confirm('Xoá dòng này?')">{% csrf_token %}
-                    <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ e.id }}">
-                    <button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-x-lg"></i></button>
-                  </form>
-                </td>
-              </tr>
-              {% empty %}
-              <tr><td colspan="6" class="text-secondary text-center py-3">Chưa có ghi nhận sản xuất nào.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 align-middle">
+              <thead class="table-light"><tr><th style="width:140px">Lúc</th><th class="text-center" style="width:120px">Kích thước</th><th class="text-center" style="width:90px">Số lượng</th><th>Ghi chú</th><th>Người nhập</th><th style="width:46px"></th></tr></thead>
+              <tbody>
+                {% for e in entries %}
+                <tr>
+                  <td class="small">{{ e.dt }}</td>
+                  <td class="text-center">{% if e.size %}<span class="size-chip">{{ e.size }}</span>{% else %}<span class="text-secondary">—</span>{% endif %}</td>
+                  <td class="text-center fw-bold">{{ e.qty }}</td>
+                  <td class="small">{{ e.note }}</td>
+                  <td class="small text-secondary">{{ e.user }}</td>
+                  <td class="text-center">
+                    <form method="POST" action="/san-xuat" class="d-inline" onsubmit="return confirm('Xoá dòng này?')">{% csrf_token %}
+                      <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ e.id }}">
+                      <button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-x-lg"></i></button>
+                    </form>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-secondary text-center py-3">Chưa có ghi nhận sản xuất nào.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
