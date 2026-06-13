@@ -2288,9 +2288,29 @@ def cham_cong(request):
             return JsonResponse({'ok': True, 'msg': 'Đã chấm công VÀO lúc ' + _hm(now),
                                  'in': _hm(rec.check_in), 'out': _hm(rec.check_out),
                                  'motivate': _mot.quote_for(now)})
+        if action == 'undo_out':
+            # Hoàn tác TAN LÀM bấm nhầm — chỉ trong 15 phút sau khi bấm
+            if not rec.check_out:
+                return JsonResponse({'ok': False, 'msg': 'Hôm nay bạn chưa bấm tan làm.'})
+            if (now - rec.check_out).total_seconds() > 15 * 60:
+                return JsonResponse({'ok': False, 'msg': 'Quá 15 phút — nhờ quản lý sửa giờ ra giúp.'})
+            rec.check_out = None; rec.ip_out = ''; rec.device_out = ''; rec.save()
+            return JsonResponse({'ok': True, 'msg': 'Đã hoàn tác tan làm — tiếp tục làm việc nhé! 💪',
+                                 'in': _hm(rec.check_in), 'out': '', 'undone': True})
         if action == 'out':
             if not rec.check_in:
                 return JsonResponse({'ok': False, 'msg': 'Bạn chưa chấm công VÀO.'})
+            # CHỐNG BẤM NHẦM: tan làm sớm bất thường / tan làm lần 2 -> phải xác nhận rõ
+            if request.POST.get('confirm') != '1':
+                if rec.check_out:
+                    return JsonResponse({'ok': False, 'need_confirm': 'update',
+                                         'msg': f'Bạn đã tan làm lúc {_hm(rec.check_out)}. '
+                                                f'Cập nhật giờ ra thành {_hm(now)}?'})
+                mins = int((now - rec.check_in).total_seconds() // 60)
+                if mins < 60:
+                    return JsonResponse({'ok': False, 'need_confirm': 'early', 'mins': mins,
+                                         'msg': f'Bạn mới VÀO LÀM {mins} phút trước. '
+                                                f'Chắc chắn TAN LÀM bây giờ?'})
             rec.check_out = now; rec.ip_out = ip; rec.device_out = device; rec.save()
             day_s, month_s = now.strftime('%Y-%m-%d'), now.strftime('%Y-%m')
             tc = _att_calc(rec, _att_cfg())  # công hôm nay
