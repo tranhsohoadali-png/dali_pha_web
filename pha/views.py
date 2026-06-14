@@ -2817,6 +2817,19 @@ def xu_ly_anh(request):
         smooth = max(0, min(smooth, 3))  # 0=không, 1=nhẹ, 2=vừa, 3=mạnh
         preset_key = (request.POST.get('preset') or 'anime').strip()
         ai_prompt, use_refs = _resolve_preset_ai(preset_key)
+        # Thanh "Mức độ AI" (1 lựa chọn = 1 lần gọi, KHÔNG nhân tiền): nếu chọn mức
+        # thì DÙNG prompt mức đó thay prompt preset (nhe=giữ thật, vua, manh=nghệ
+        # thuật, nen=nền tối giản). Để trống = theo loại tranh như cũ.
+        ai_level = (request.POST.get('ai_level') or '').strip()
+        if ai_level:
+            try:
+                from pha.ai_levels import LEVELS as _AILV
+                _lvmap = {k: p for k, _lb, p in _AILV}
+                if ai_level in _lvmap:
+                    ai_prompt = _lvmap[ai_level]
+                    use_refs = False           # mức tự chứa hướng dẫn, không cần ảnh mẫu
+            except Exception:
+                pass
         size_str = (request.POST.get('print_size') or '40x50').strip()
         try:
             dims = [int(x) for x in size_str.lower().replace(' ', '').split('x') if x]
@@ -2827,7 +2840,7 @@ def xu_ly_anh(request):
             name=name, status=ImageResult.STATUS_PROCESSING, user=request.user.username,
             params={'enhance': enhance, 'color_limit': color_limit, 'min_area': min_area,
                     'smooth': smooth, 'style_category': style_category or '',
-                    'preset': preset_key, 'print_size': size_str})
+                    'preset': preset_key, 'print_size': size_str, 'ai_level': ai_level})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
                              color_limit, min_area, smooth, ai_prompt, use_refs, print_long_cm)
         _prune_image_results()                 # giữ 10 kết quả gần nhất (bộ nhớ tạm)
