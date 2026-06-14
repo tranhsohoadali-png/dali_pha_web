@@ -556,12 +556,13 @@ def _sweep_dust(lbl, n_colors, dust_area=4):
 FEATURE_CAP_PER_COLOR = config("FEATURE_CAP_PER_COLOR", default=10, cast=int)
 
 
-def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4):
+def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4, feature_cap=None):
     """Gộp mảng nhỏ vào hàng xóm NHƯNG GIỮ chi tiết ngũ quan: đốm nhỏ TRÒN có màu
     TƯƠNG PHẢN CAO với xung quanh (lòng trắng mắt, lỗ mũi, viền môi) được GIỮ;
     chỉ gộp bụi thật (rad<1), sliver dẹt (thon dài sát biên) và mảng màu GẦN GIỐNG
     hàng xóm (deltaE < de_keep). Mỗi màu giữ tối đa FEATURE_CAP_PER_COLOR đốm
     (to nhất trước) — chặn nền nhiễu trăm đốm. Trả (ảnh, mask chi tiết đã giữ)."""
+    cap = FEATURE_CAP_PER_COLOR if feature_cap is None else feature_cap
     img = arr.copy()
     H, W = img.shape[:2]
     k3 = np.ones((3, 3), np.uint8)
@@ -630,11 +631,11 @@ def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4):
                     keepers.append((int(area), kk, x0, y0, x1, y1, nb_ci))
             # TRẦN đốm giữ/màu: to nhất trước; phần dư gộp vào hàng xóm (bokeh...).
             keepers.sort(key=lambda t: -t[0])
-            for _a, kk, x0, y0, x1, y1, _nb in keepers[:FEATURE_CAP_PER_COLOR]:
+            for _a, kk, x0, y0, x1, y1, _nb in keepers[:cap]:
                 sub = comp[y0:y1, x0:x1] == kk
                 yy, xx = np.where(sub)
                 feature[y0 + yy, x0 + xx] = 255            # ngũ quan nhỏ: GIỮ
-            for _a, kk, x0, y0, x1, y1, nb_ci in keepers[FEATURE_CAP_PER_COLOR:]:
+            for _a, kk, x0, y0, x1, y1, nb_ci in keepers[cap:]:
                 sub = comp[y0:y1, x0:x1] == kk
                 yy, xx = np.where(sub)
                 img[y0 + yy, x0 + xx] = colors[nb_ci]
@@ -669,7 +670,8 @@ def _smooth_labels_voting(arr, sigma, protect=None):
     return colors[best_l.reshape(-1)].reshape(arr.shape)
 
 
-def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=None):
+def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=None,
+                   detail=False):
     """Tạo ảnh THIẾT KẾ chất lượng Illustrator-trace rồi lưu file LÀM VIỆC tạm (1x)
     cho khâu đánh số. Trả đường_dẫn_tạm.
 
@@ -697,17 +699,20 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     # nhẹ). Ảnh chụp THÔ (vd AI lỗi -> dùng ảnh gốc) đầy texture (sợi tóc, nếp vải)
     # nếu không lọc sẽ vỡ vụn thành vô số vùng mỏng RĂNG CƯA. Mean-shift gộp texture
     # thành mảng phẳng biên mượt mà vẫn giữ cạnh thật. smooth cao -> phẳng mạnh hơn.
-    sp, sr = {0: (11, 20), 1: (15, 28), 2: (20, 38), 3: (28, 55)}.get(sm_level, (15, 28))
-    a = np.array(im)[:, :, ::-1].copy()                # RGB -> BGR
-    h, w = a.shape[:2]
-    scale = 1.0
-    if max(h, w) > 900:
-        scale = 900.0 / max(h, w)
-        a = cv2.resize(a, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-    a = cv2.pyrMeanShiftFiltering(a, sp, sr)
-    if scale != 1.0:
-        a = cv2.resize(a, (w, h), interpolation=cv2.INTER_LINEAR)   # LINEAR: biên mượt
-    im = Image.fromarray(np.ascontiguousarray(a[:, :, ::-1]))       # BGR -> RGB
+    # CHẾ ĐỘ CHI TIẾT (cây/hoa): KHÔNG mean-shift nền nhẹ (giữ từng cánh hoa/lá);
+    # chỉ làm phẳng khi user chủ động chọn smooth>=2.
+    if (not detail) or sm_level >= 2:
+        sp, sr = {0: (11, 20), 1: (15, 28), 2: (20, 38), 3: (28, 55)}.get(sm_level, (15, 28))
+        a = np.array(im)[:, :, ::-1].copy()                # RGB -> BGR
+        h, w = a.shape[:2]
+        scale = 1.0
+        if max(h, w) > 900:
+            scale = 900.0 / max(h, w)
+            a = cv2.resize(a, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        a = cv2.pyrMeanShiftFiltering(a, sp, sr)
+        if scale != 1.0:
+            a = cv2.resize(a, (w, h), interpolation=cv2.INTER_LINEAR)   # LINEAR: biên mượt
+        im = Image.fromarray(np.ascontiguousarray(a[:, :, ::-1]))       # BGR -> RGB
 
     # Xử lý ở 2x (giới hạn DESIGN_MAX_SIDE) -> mắt/mũi/môi có 4x diện tích, giữ nét.
     s = 1.0
@@ -716,16 +721,27 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     im2 = im.resize((int(W1 * s), int(H1 * s)), Resampling.LANCZOS) if s > 1.0 else im
 
     arr = _quantize_rarity(np.array(im2), k=target)
-    r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s
-    arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=18.0,
-                                     min_area=int(min_area * s * s), max_pass=4)
-    # LÀM MƯỢT BIÊN 2 lớp: voting (cong mượt) + MEDIAN trên nhãn (nắn thẳng bậc
-    # thang răng cưa còn sót). Cả hai CHỪA ngũ quan (feat) -> không mất mắt/môi.
-    arr = _smooth_labels_voting(arr, sigma=2.8 * s, protect=feat)
-    ks = int(round(3 * s)) | 1                          # ksize lẻ (3 ở 1x, 7 ở 2x)
-    arr = _smooth_boundaries(arr, ksize=max(3, ks), protect_mask=feat)
-    arr = _smooth_labels_voting(arr, sigma=1.6 * s, protect=feat)
-    arr, _ = _merge_keep_features(arr, r_keep=1.8 * s, de_keep=10.0, max_pass=2)
+    if detail:
+        # CHI TIẾT (cây/hoa): giữ NHIỀU ô nhỏ (cánh hoa/lá) -> nhiều số nhỏ. Chỉ dọn
+        # bụi/đốm gần-trùng-màu, KHÔNG gộp theo trần (feature_cap vô hạn), bán kính
+        # giữ rất nhỏ. Vẫn làm mượt biên nhẹ cho nét đẹp.
+        arr, feat = _merge_keep_features(arr, r_keep=2.2 * s, de_keep=8.0,
+                                         min_area=int(min_area * s * s), max_pass=2,
+                                         feature_cap=10 ** 7)
+        arr = _smooth_labels_voting(arr, sigma=1.3 * s, protect=feat)
+        arr, _ = _merge_keep_features(arr, r_keep=1.3 * s, de_keep=6.0, max_pass=1,
+                                      feature_cap=10 ** 7)
+    else:
+        r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s
+        arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=18.0,
+                                         min_area=int(min_area * s * s), max_pass=4)
+        # LÀM MƯỢT BIÊN 2 lớp: voting (cong mượt) + MEDIAN trên nhãn (nắn thẳng bậc
+        # thang răng cưa còn sót). Cả hai CHỪA ngũ quan (feat) -> không mất mắt/môi.
+        arr = _smooth_labels_voting(arr, sigma=2.8 * s, protect=feat)
+        ks = int(round(3 * s)) | 1                      # ksize lẻ (3 ở 1x, 7 ở 2x)
+        arr = _smooth_boundaries(arr, ksize=max(3, ks), protect_mask=feat)
+        arr = _smooth_labels_voting(arr, sigma=1.6 * s, protect=feat)
+        arr, _ = _merge_keep_features(arr, r_keep=1.8 * s, de_keep=10.0, max_pass=2)
     # BIÊN MƯỢT NHƯ VECTOR: tô lại từng vùng theo polygon Chaikin -> đường biên ảnh
     # THIẾT KẾ cong mềm (hết bậc thang); bản đồ số lấy contour từ chính arr này nên
     # nét số khớp y biên thiết kế.
@@ -1135,11 +1151,12 @@ def _number_work_image(work_path, design_out=None, debug=False,
 
 
 def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_out=None,
-                print_long_cm=0):
+                print_long_cm=0, detail=False):
     """num_colors > 0: gom ảnh về tối đa N màu (để trống = DEFAULT_NUM_COLORS).
     min_area > 0: gộp các mảng màu nhỏ hơn N pixel vào hàng xóm (đỡ lấm tấm).
     smooth (0..3): làm phẳng vùng (mean-shift) trước khi gom — dọn ảnh màu nước/chụp.
     design_out: nếu có, lưu ảnh THIẾT KẾ (bản màu phẳng đã gom) ra đường dẫn này.
+    detail=True: chế độ CÂY/HOA — giữ nhiều ô nhỏ, ít gộp -> số nhỏ, chi tiết.
     print_long_cm: nhận cho tương thích, không dùng (cỡ số cố định)."""
     effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
     # design_out được ghi NGAY trong _quantize_file (bản 2x sắc nét);
@@ -1147,7 +1164,7 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
     work_path, arr2x, s = _quantize_file(path, effective_n, smooth=smooth,
                                          min_area=min_area,
                                          print_long_cm=print_long_cm,
-                                         design_out=design_out)
+                                         design_out=design_out, detail=detail)
     return _number_work_image(work_path, design_out=None, debug=debug,
                               render_arr=arr2x, render_scale=s)
 

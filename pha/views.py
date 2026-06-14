@@ -2836,13 +2836,18 @@ def xu_ly_anh(request):
             print_long_cm = max(dims) if dims else 0
         except ValueError:
             print_long_cm = 0
+        # Chế độ CHI TIẾT (preset Cây/Hoa): giữ nhiều ô nhỏ, số nhỏ — ít gộp mảng.
+        from pha.ai_enhance import get_preset as _gp
+        detail = bool(_gp(preset_key).get('detail'))
         rec = ImageResult.objects.create(
             name=name, status=ImageResult.STATUS_PROCESSING, user=request.user.username,
             params={'enhance': enhance, 'color_limit': color_limit, 'min_area': min_area,
                     'smooth': smooth, 'style_category': style_category or '',
-                    'preset': preset_key, 'print_size': size_str, 'ai_level': ai_level})
+                    'preset': preset_key, 'print_size': size_str, 'ai_level': ai_level,
+                    'detail': detail})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
-                             color_limit, min_area, smooth, ai_prompt, use_refs, print_long_cm)
+                             color_limit, min_area, smooth, ai_prompt, use_refs,
+                             print_long_cm, detail)
         _prune_image_results()                 # giữ 10 kết quả gần nhất (bộ nhớ tạm)
         ctx = build_ctx()
         ctx['file_url'] = '/media/' + name

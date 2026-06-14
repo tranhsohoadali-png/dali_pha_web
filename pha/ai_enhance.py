@@ -162,6 +162,15 @@ PRESETS = {
         'color_limit': 16, 'smooth': 0, 'min_area': 40, 'enhance': False,
         'use_refs': False, 'face_priority': False, 'prompt': _PROMPT_DESIGN,
     },
+    'cayhoa': {
+        'label': 'Cây / Hoa (chi tiết, số nhỏ)',
+        'desc': 'Tranh cây/hoa/phong cảnh rậm: GIỮ nhiều chi tiết, đánh số nhỏ — '
+                'KHÔNG gộp mảng mạnh. Số màu cao, không lọc đốm. Dùng cho ai muốn '
+                'tranh chi tiết (số bé vẫn đọc được). Tắt AI để giữ nguyên ảnh.',
+        'color_limit': 24, 'smooth': 0, 'min_area': 0, 'enhance': False,
+        'use_refs': False, 'face_priority': False, 'detail': True,
+        'prompt': _PROMPT_DESIGN,
+    },
 }
 DEFAULT_PRESET = 'anime'
 

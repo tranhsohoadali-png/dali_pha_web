@@ -133,7 +133,8 @@ def _boost_lip_color(path):
 
 
 def process_image(rec_id, name, enhance=False, style_category=None, color_limit=0,
-                  min_area=0, smooth=0, ai_prompt=None, use_refs=False, print_long_cm=0):
+                  min_area=0, smooth=0, ai_prompt=None, use_refs=False, print_long_cm=0,
+                  detail=False):
     """Chạy nền: (tùy chọn) tăng cường ảnh bằng AI, rồi xử lý + cập nhật ImageResult.
 
     enhance=True: gọi Google AI làm sạch/nâng cấp ảnh khách trước khi đánh số.
@@ -188,7 +189,7 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
         design_path = os.path.join(settings.MEDIA_ROOT, design_name)
         edge_img, color_mapping, percentages = index_color(
             path, debug=False, num_colors=color_limit, min_area=min_area, smooth=smooth,
-            design_out=design_path, print_long_cm=print_long_cm)
+            design_out=design_path, print_long_cm=print_long_cm, detail=detail)
         dpi = Image.open(path).info.get('dpi', (72, 72))
         name_output = save_img(edge_img, dpi)
         colors = create_image_color(color_mapping, convert_to_hex(color_mapping), percentages)
