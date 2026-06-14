@@ -91,10 +91,34 @@ PROMPT_MANH = (
     "Output ONLY the redrawn image."
 )
 
+# NỀN TỐI GIẢN: giữ NGƯỜI trung thực (như mức Vừa) + ÉP NỀN đơn giản mạnh ->
+# tách chủ thể, nền chỉ vài mảng lớn dễ tô (thử cho ảnh nền lộn xộn: cầu, phố, cây).
+PROMPT_NEN = (
+    "ROLE. Convert this REAL PHOTOGRAPH into a clean paint-by-numbers portrait that "
+    "clearly looks like the SAME REAL PERSON (realistic, NOT anime/cartoon/3D).\n"
+    "PERSON (keep faithful + detailed): same face shape, features, proportions, "
+    "expression, hair, pose and clothing — instantly recognisable. Render as smooth "
+    "flat tone bands; lips in their own rosy/red tone; eyes with clear dark iris + "
+    "catch-light; defined eyebrows and nose; sharp clean feature edges, skin warm "
+    "and healthy. You MAY gently remove blemishes/noise but do NOT reshape the face.\n"
+    "BACKGROUND — SIMPLIFY AGGRESSIVELY (very important): the person is the focus and "
+    "must stay detailed; the BACKGROUND must be reduced to only a FEW (about 4-7) "
+    "large, calm, flat colour shapes. Aggressively DELETE background clutter: cables, "
+    "wires, railings, poles, road markings, window/beam edges, signage, individual "
+    "leaves and twigs, and any small or thin objects. Merge the background into broad "
+    "simple masses (e.g. one flat sky, one flat road, one simplified building block, "
+    "one soft tree mass). Lower the background's detail, contrast and saturation so it "
+    "visibly recedes and the person pops; keep background colours roughly recognisable "
+    "but much simpler. Do NOT invent new background detail. The background must look "
+    "like a minimal, easy-to-paint backdrop — the OPPOSITE of a busy photo.\n"
+    "NO black cartoon outlines. Same framing and aspect ratio. Output ONLY the image."
+)
+
 LEVELS = [
     ('nhe', 'Nhẹ — giữ nét thật', PROMPT_NHE),
     ('vua', 'Vừa — cân bằng', PROMPT_VUA),
     ('manh', 'Mạnh — nghệ thuật', PROMPT_MANH),
+    ('nen', 'Nền tối giản', PROMPT_NEN),
 ]
 
 # Trần thời gian (giây) cho MỖI mức (3 mức chạy SONG SONG nên tổng ~ 1 lần gọi).
@@ -102,9 +126,9 @@ LEVEL_BUDGET_S = 200
 
 
 def process_ai_levels(rec_id, name):
-    """Chạy nền: gọi Google AI 3 lần (nhẹ/vừa/mạnh) SONG SONG trên cùng 1 ảnh,
-    lưu 3 file kết quả. Ghi đường dẫn vào params để trang poll. Mỗi mức có trần
-    riêng (Google quá tải 1 mức không kéo theo 2 mức kia)."""
+    """Chạy nền: gọi Google AI cho TỪNG mức trong LEVELS, SONG SONG trên cùng 1 ảnh,
+    lưu mỗi mức 1 file. Ghi đường dẫn vào params để trang poll. Mỗi mức có trần
+    riêng (Google quá tải 1 mức không kéo theo các mức kia)."""
     from pha.ai_enhance import enhance_image
     obj = ImageResult.objects.get(id=rec_id)
     try:

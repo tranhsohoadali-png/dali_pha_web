@@ -65,7 +65,7 @@
 
 <script>
   var dz=document.getElementById('dz'), fi=document.getElementById('image');
-  var LV=['nhe','vua','manh'];
+  var LV=[{% for lv in levels %}'{{ lv.key }}'{% if not forloop.last %},{% endif %}{% endfor %}];
   dz.addEventListener('click',function(){fi.click()});
   ['dragover','dragenter'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.style.borderColor='#198754'}));
   ['dragleave','drop'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.style.borderColor=''}));
