@@ -25,12 +25,9 @@ MAX_CIRCLE_RADIUS = config("MAX_CIRCLE_RADIUS", default=10, cast=int)
 #  - MIN: số nhỏ hơn cỡ này -> BỎ số (vùng quá bé, không lọt số).
 #  - MEAN: phóng số lớn dần tới khi chiều NHỎ của số đạt mức này (số đầy đặn, dễ đọc).
 #  - MAX: trần chiều LỚN của số (số 2-3 chữ số không phình quá).
-MIN_TEXT_SIZE = config("MIN_TEXT_SIZE", default=4, cast=int)
-MEAN_TEXT_SIZE = config("MEAN_TEXT_SIZE", default=15, cast=int)   # CHIỀU CAO ĐỀU cho MỌI số (như bản in C093)
-MAX_TEXT_SIZE = config("MAX_TEXT_SIZE", default=24, cast=int)     # (giữ cho tương thích, không dùng trong sizing đều)
-# Cho phép số tràn tối đa bao nhiêu lần đường kính vùng (vùng nhỏ hơn -> bỏ số,
-# để trống còn hơn nhồi số tí xíu). 1.0 = không tràn; 1.35 = tràn nhẹ chấp nhận.
-NUMBER_OVERFLOW_TOL = config("NUMBER_OVERFLOW_TOL", default=1.35, cast=float)
+MIN_TEXT_SIZE = config("MIN_TEXT_SIZE", default=2, cast=int)      # MỌI ô đều có số (co vừa khít, không tràn)
+MEAN_TEXT_SIZE = config("MEAN_TEXT_SIZE", default=15, cast=int)   # CHIỀU CAO CHUẨN (ô đủ rộng đạt mức này -> đều)
+MAX_TEXT_SIZE = config("MAX_TEXT_SIZE", default=24, cast=int)     # (giữ cho tương thích)
 # Thu nhỏ ảnh LÀM VIỆC để đánh số nhanh (polylabel rất chậm trên ảnh lớn -> ảnh
 # 2000px+ mất >2 phút, vượt thời gian chờ của trình duyệt -> "không ra kết quả").
 # 1400px thừa nét cho tranh tô màu; bản in được vẽ lại theo DPI khi tải. 0 = tắt.
@@ -137,22 +134,25 @@ def get_number_size(text: str, max_size: float,
     (min_t/mean_t/max_t để None = dùng hằng số mặc định.)"""
     min_t = MIN_TEXT_SIZE if min_t is None else min_t
     mean_t = MEAN_TEXT_SIZE if mean_t is None else mean_t
-    max_t = MAX_TEXT_SIZE if max_t is None else max_t
-    # SỐ ĐỀU NHƯ BẢN IN C093: MỌI số phóng tới CÙNG một chiều cao mean_t — KHÔNG
-    # thu nhỏ theo bề ngang ô (đó là lý do trước đây ô nhỏ ra số tí xíu, lộn xộn).
-    # Bề ngang để tự do (số 2-3 chữ số rộng hơn nhưng CAO bằng nhau -> nhìn đều).
-    text_size = (0, 0)
+    # VỪA KHÍT Ô — KHÔNG ĐÈ BIÊN: phóng số tới chiều cao mean_t (cỡ chuẩn) NHƯNG
+    # DỪNG ngay trước khi ĐƯỜNG CHÉO của số vượt VÒNG TRÒN NỘI TIẾP ô
+    # (max_size = đường kính nội tiếp = 2·khoảng cách polylabel tới biên). Số đặt
+    # giữa tâm polylabel nên đường chéo ≤ đường kính => số LUÔN nằm gọn trong ô.
+    # Ô đủ rộng -> đạt mean_t (đều nhau); ô hẹp -> co vừa khít, vẫn không tràn.
+    best = None
     scale = 0.05
-    thickness = 1
-    while text_size[1] < mean_t and scale < 6.0:
-        text_size = get_text_size(text, scale, thickness)
+    while scale < 6.0:
+        ts = get_text_size(text, scale, 1)
+        diag = (ts[0] * ts[0] + ts[1] * ts[1]) ** 0.5
+        if diag + 2 * PADDING_CIRCLE > max_size:
+            break                                    # cỡ này tràn -> dùng cỡ trước
+        best = (ts, scale)
+        if ts[1] >= mean_t:
+            break                                    # đạt chiều cao chuẩn -> dừng
         scale += 0.05
-    # BỎ số nếu vùng KHÔNG đủ chỗ chứa số cỡ đều (kể cả cho tràn nhẹ
-    # NUMBER_OVERFLOW_TOL). Vùng quá nhỏ -> để trống (tô theo cụm cùng màu) còn hơn
-    # nhồi số tí xíu/đè nhau như cũ. max_size = đường kính nội tiếp vùng.
-    if max(text_size) > max_size * NUMBER_OVERFLOW_TOL:
-        return None, None, None
-    return text_size, scale, thickness
+    if best is None or best[0][1] < min_t:
+        return None, None, None                      # ô quá nhỏ cho cả số bé nhất
+    return best[0], best[1], 1
 
 
 def draw_number(img: np.ndarray, center: Tuple[int, int], max_size: float, number: str, debug=False) -> bool:
@@ -566,6 +566,10 @@ def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4):
     H, W = img.shape[:2]
     k3 = np.ones((3, 3), np.uint8)
     feature = np.zeros((H, W), np.uint8)
+    # Vùng có bán kính dưới mức NÀY thì KHÔNG đánh được số -> GỘP luôn (dù tương
+    # phản cao), không giữ làm 'feature' rồi bỏ trống. Khớp ngưỡng đánh số -> bản
+    # đồ không còn ô không-có-số. (Giữ ngũ quan TO hơn: iris/môi rad lớn vẫn sống.)
+    r_num = max(3.0, r_keep * 0.75)
     for _ in range(max_pass):
         flat = img.reshape(-1, 3)
         colors, inv = np.unique(flat, axis=0, return_inverse=True)
@@ -615,7 +619,9 @@ def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4):
                 # elong > 6 nên KHÔNG đụng đốm TRÒN nhỏ (catch-light mắt elong ~3) và
                 # rad < 2.4 nên chừa ngũ quan to hơn (iris/môi rad >= 3).
                 thin_streak = (rad < 2.4) and (elong > 6.0)
-                if true_dust or sliver or crumb or thin_streak or de < de_keep:
+                too_small_to_number = rad < r_num         # không đủ chỗ đặt số -> gộp
+                if (true_dust or sliver or crumb or thin_streak
+                        or too_small_to_number or de < de_keep):
                     yy, xx = np.where(sub)
                     img[y0 + yy, x0 + xx] = colors[nb_ci]
                     lbl[y0 + yy, x0 + xx] = nb_ci
