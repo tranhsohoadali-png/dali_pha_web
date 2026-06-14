@@ -946,20 +946,39 @@ def _flat_work_file(path, min_area=0):
     return out
 
 
-def _chaikin(points, iters=2):
-    """Làm mượt 1 đa giác KÍN (Chaikin corner-cutting): mỗi góc cắt thành 2 điểm
-    1/4–3/4 -> đường cong mượt, hết bậc thang pixel. Trả mảng điểm float."""
+def _chaikin(points, iters=2, wh=None):
+    """Làm mượt 1 đa giác KÍN (Chaikin corner-cutting): mỗi đỉnh -> 2 điểm 1/4–3/4
+    -> đường cong mượt, hết bậc thang. Trả mảng điểm float.
+
+    wh=(W,H): NEO các điểm nằm SÁT MÉP ẢNH (giữ nguyên, không cắt góc) -> khung
+    ảnh vuông vức, KHÔNG bị vạt thành đường chéo ở 4 góc (lỗi 'dòng kẻ' lạ)."""
     p = np.asarray(points, dtype=np.float32)
+    if len(p) < 4:
+        return p
+    W = H = None
+    if wh is not None:
+        W, H = wh
     for _ in range(iters):
+        n = len(p)
+        prev = np.roll(p, 1, axis=0)
+        nxt = np.roll(p, -1, axis=0)
+        tprev = 0.75 * p + 0.25 * prev      # điểm gần đỉnh, hướng về đỉnh trước
+        tnext = 0.75 * p + 0.25 * nxt       # điểm gần đỉnh, hướng về đỉnh sau
+        if wh is not None:
+            anc = ((p[:, 0] <= 1) | (p[:, 0] >= W - 2) |
+                   (p[:, 1] <= 1) | (p[:, 1] >= H - 2))
+        else:
+            anc = np.zeros(n, dtype=bool)
+        out = []
+        for i in range(n):
+            if anc[i]:
+                out.append(p[i])             # điểm mép ảnh -> GIỮ sắc (không cắt)
+            else:
+                out.append(tprev[i])
+                out.append(tnext[i])
+        p = np.asarray(out, dtype=np.float32)
         if len(p) < 4:
             break
-        nxt = np.roll(p, -1, axis=0)
-        q = 0.75 * p + 0.25 * nxt
-        r = 0.25 * p + 0.75 * nxt
-        out = np.empty((len(p) * 2, 2), np.float32)
-        out[0::2] = q
-        out[1::2] = r
-        p = out
     return p
 
 
@@ -967,6 +986,7 @@ def _draw_smooth_contours(img, contours, iters=2):
     """Vẽ các contour đã LÀM MƯỢT (Chaikin) thay vì raster bậc thang -> nét cong
     mềm như vector. Contour quá nhiều điểm thì giảm bớt bằng approxPolyDP trước
     (tránh chậm). Vẽ 1px; thinning sau đó gộp các nét vẽ chồng về 1 nét."""
+    wh = (img.shape[1], img.shape[0])            # neo điểm mép -> khung ảnh không bị vạt góc
     for c in contours:
         if len(c) < 6:
             cv2.drawContours(img, [c], -1, 0, 1)     # quá nhỏ -> vẽ thẳng
@@ -974,7 +994,7 @@ def _draw_smooth_contours(img, contours, iters=2):
         cc = c
         if len(c) > 1500:                            # contour khổng lồ -> rút điểm trước
             cc = cv2.approxPolyDP(c, 0.7, True)
-        pts = _chaikin(cc.reshape(-1, 2), iters)
+        pts = _chaikin(cc.reshape(-1, 2), iters, wh=wh)
         cv2.polylines(img, [np.round(pts).astype(np.int32)], True, 0, 1, cv2.LINE_8)
 
 
@@ -1000,7 +1020,7 @@ def _smooth_fill(arr, iters=2):
                 pts = c.reshape(-1, 2).astype(np.int32)
             else:
                 cc = cv2.approxPolyDP(c, 0.7, True) if len(c) > 1500 else c
-                pts = np.round(_chaikin(cc.reshape(-1, 2), iters)).astype(np.int32)
+                pts = np.round(_chaikin(cc.reshape(-1, 2), iters, wh=(W, H))).astype(np.int32)
             items.append((a, col, pts))
     items.sort(key=lambda t: -t[0])                  # VÙNG TO trước, nhỏ đè lên sau
     out = arr.copy()
