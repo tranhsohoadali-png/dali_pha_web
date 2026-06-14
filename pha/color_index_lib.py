@@ -26,8 +26,11 @@ MAX_CIRCLE_RADIUS = config("MAX_CIRCLE_RADIUS", default=10, cast=int)
 #  - MEAN: phóng số lớn dần tới khi chiều NHỎ của số đạt mức này (số đầy đặn, dễ đọc).
 #  - MAX: trần chiều LỚN của số (số 2-3 chữ số không phình quá).
 MIN_TEXT_SIZE = config("MIN_TEXT_SIZE", default=4, cast=int)
-MEAN_TEXT_SIZE = config("MEAN_TEXT_SIZE", default=15, cast=int)   # nhỏ + ĐỀU (vừa đủ đọc, như bản in C093)
-MAX_TEXT_SIZE = config("MAX_TEXT_SIZE", default=24, cast=int)     # trần chiều lớn (số 2 chữ số không phình)
+MEAN_TEXT_SIZE = config("MEAN_TEXT_SIZE", default=15, cast=int)   # CHIỀU CAO ĐỀU cho MỌI số (như bản in C093)
+MAX_TEXT_SIZE = config("MAX_TEXT_SIZE", default=24, cast=int)     # (giữ cho tương thích, không dùng trong sizing đều)
+# Cho phép số tràn tối đa bao nhiêu lần đường kính vùng (vùng nhỏ hơn -> bỏ số,
+# để trống còn hơn nhồi số tí xíu). 1.0 = không tràn; 1.35 = tràn nhẹ chấp nhận.
+NUMBER_OVERFLOW_TOL = config("NUMBER_OVERFLOW_TOL", default=1.35, cast=float)
 # Thu nhỏ ảnh LÀM VIỆC để đánh số nhanh (polylabel rất chậm trên ảnh lớn -> ảnh
 # 2000px+ mất >2 phút, vượt thời gian chờ của trình duyệt -> "không ra kết quả").
 # 1400px thừa nét cho tranh tô màu; bản in được vẽ lại theo DPI khi tải. 0 = tắt.
@@ -135,18 +138,19 @@ def get_number_size(text: str, max_size: float,
     min_t = MIN_TEXT_SIZE if min_t is None else min_t
     mean_t = MEAN_TEXT_SIZE if mean_t is None else mean_t
     max_t = MAX_TEXT_SIZE if max_t is None else max_t
-    # KHOA HỌC HOÁ CỠ SỐ: phóng theo CHIỀU CAO (mọi số cao ĐỀU NHAU ~mean_t,
-    # ô to không bị số khổng lồ — số 1 chữ số trước phóng theo bề ngang nên cao
-    # gấp rưỡi số 2 chữ số). Vẫn phải LỌT vùng: cạnh lớn nhất + đệm < max_size.
-    # Ô nhỏ: chỉ cần CAO >= min_t là đánh được (bề ngang hẹp không bị loại oan).
+    # SỐ ĐỀU NHƯ BẢN IN C093: MỌI số phóng tới CÙNG một chiều cao mean_t — KHÔNG
+    # thu nhỏ theo bề ngang ô (đó là lý do trước đây ô nhỏ ra số tí xíu, lộn xộn).
+    # Bề ngang để tự do (số 2-3 chữ số rộng hơn nhưng CAO bằng nhau -> nhìn đều).
     text_size = (0, 0)
     scale = 0.05
     thickness = 1
-    while (text_size[1] < mean_t and max(text_size) < max_t
-           and max(text_size) + PADDING_CIRCLE < max_size):
+    while text_size[1] < mean_t and scale < 6.0:
         text_size = get_text_size(text, scale, thickness)
         scale += 0.05
-    if text_size[1] < min_t:
+    # BỎ số nếu vùng KHÔNG đủ chỗ chứa số cỡ đều (kể cả cho tràn nhẹ
+    # NUMBER_OVERFLOW_TOL). Vùng quá nhỏ -> để trống (tô theo cụm cùng màu) còn hơn
+    # nhồi số tí xíu/đè nhau như cũ. max_size = đường kính nội tiếp vùng.
+    if max(text_size) > max_size * NUMBER_OVERFLOW_TOL:
         return None, None, None
     return text_size, scale, thickness
 
