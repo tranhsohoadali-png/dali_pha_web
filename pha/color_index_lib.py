@@ -694,6 +694,54 @@ def _smooth_labels_voting(arr, sigma, protect=None):
     return colors[best_l.reshape(-1)].reshape(arr.shape)
 
 
+def _refine_faces(arr, im_pre, boxes, s, k_face=24):
+    """TĂNG CHI TIẾT KHUÔN MẶT NHỎ (chân dung trong ảnh rộng). Vấn đề: k-means toàn
+    ảnh dồn hết cụm màu cho thân/nền -> mặt nhỏ chỉ còn 1-2 tông xám (chảy hết nét).
+    Cách chữa: với mỗi bbox mặt, CẮT vùng mặt từ ảnh GỐC (im_pre, TRƯỚC mean-shift ->
+    còn sắc nét), phóng lên 2x cho giàu pixel, LƯỢNG TỬ RIÊNG (k_face màu) + giữ nét,
+    rồi DÁN vào arr theo hình OVAL (viền nằm trong tóc/da nên không lộ vệt vuông).
+    Nhờ vậy mặt nhỏ vẫn có bảng màu riêng -> mắt/mũi/môi/lông mày sắc như ảnh cận.
+    arr: ảnh thiết kế 2x. im_pre: RGB 1x trước mean-shift. boxes: bbox mặt (toạ độ 1x).
+    """
+    H2, W2 = arr.shape[:2]
+    H1, W1 = im_pre.shape[:2]
+    for (x, y, w, h) in boxes:
+        # CHỈ refine MẶT NHỎ (mặt bị k-means toàn ảnh bỏ đói màu -> chảy nét). Mặt LỚN
+        # (cận chân dung) đã được bảng màu toàn ảnh phục vụ đủ; refine sẽ (a) thay bằng
+        # ÍT màu hơn và (b) để lộ VỆT OVAL ngay giữa vùng da -> bỏ qua để KHÔNG làm hỏng
+        # ảnh cận (luồng vốn đã đẹp). Ngưỡng: mặt > 13% khung -> coi là cận.
+        if W1 * H1 > 0 and (w * h) > 0.13 * (W1 * H1):
+            continue
+        mx, my = int(w * 0.25), int(h * 0.25)            # nới lề (tóc/cổ làm ngữ cảnh màu)
+        bx0, by0 = max(0, x - mx), max(0, y - my)
+        bx1, by1 = min(W1, x + w + mx), min(H1, y + h + my)
+        if bx1 - bx0 < 16 or by1 - by0 < 16:
+            continue
+        crop = im_pre[by0:by1, bx0:bx1]
+        cw2 = max(2, int((bx1 - bx0) * s))
+        ch2 = max(2, int((by1 - by0) * s))
+        crop2 = cv2.resize(crop, (cw2, ch2), interpolation=cv2.INTER_LANCZOS4)
+        fq = _quantize_rarity(crop2, k=k_face)
+        fq, feat = _merge_keep_features(fq, r_keep=1.5 * s, de_keep=5.5, max_pass=2,
+                                        feature_cap=10 ** 7)
+        fq = _smooth_labels_voting(fq, sigma=0.8 * s, protect=feat)
+        ax0, ay0 = int(bx0 * s), int(by0 * s)
+        ay1 = min(H2, ay0 + fq.shape[0])
+        ax1 = min(W2, ax0 + fq.shape[1])
+        fq = fq[:ay1 - ay0, :ax1 - ax0]
+        fh, fw = fq.shape[:2]
+        if fh < 4 or fw < 4:
+            continue
+        ell = np.zeros((fh, fw), np.uint8)               # OVAL nội tiếp bbox mặt
+        cv2.ellipse(ell, (fw // 2, fh // 2), (int(fw * 0.40), int(fh * 0.46)),
+                    0, 0, 360, 255, -1)
+        reg = ell > 0
+        sub = arr[ay0:ay1, ax0:ax1]
+        sub[reg] = fq[reg]
+        arr[ay0:ay1, ax0:ax1] = sub
+    return arr
+
+
 def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=None,
                    detail=False, face_priority=False):
     """Tạo ảnh THIẾT KẾ chất lượng Illustrator-trace rồi lưu file LÀM VIỆC tạm (1x)
@@ -718,6 +766,19 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     target = max(2, n)
     W1, H1 = im.size
     sm_level = int(smooth) if (smooth and int(smooth) > 0) else 0
+
+    # CHÂN DUNG: chụp ảnh GỐC (trước mean-shift, còn sắc nét) + dò bbox mặt -> dùng
+    # cho khâu LƯỢNG TỬ CỤC BỘ vùng mặt (giữ chi tiết mặt nhỏ). Lỗi/không mặt -> bỏ.
+    im_pre, face_boxes = None, []
+    if face_priority and not detail:
+        try:
+            from pha.face_features import detect_face_boxes
+            im_pre = np.array(im)
+            face_boxes = detect_face_boxes(im_pre)
+            if not face_boxes:
+                im_pre = None
+        except Exception:
+            im_pre, face_boxes = None, []
 
     # LUÔN lọc GIỮ-BIÊN (mean-shift) trước khi tách màu — KỂ CẢ smooth=0 (mức nền
     # nhẹ). Ảnh chụp THÔ (vd AI lỗi -> dùng ảnh gốc) đầy texture (sợi tóc, nếp vải)
@@ -783,6 +844,19 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         arr = _smooth_labels_voting(arr, sigma=1.6 * s, protect=feat)
         arr, _ = _merge_keep_features(arr, r_keep=1.8 * s, de_keep=10.0, max_pass=2,
                                       protect=face_protect)
+    # CHÂN DUNG: dán vùng mặt CHI TIẾT (lượng tử cục bộ) đè lên kết quả gộp -> mặt nhỏ
+    # hết chảy. Làm TRƯỚC _smooth_fill để vệt oval được làm mượt cùng các biên khác.
+    if im_pre is not None and face_boxes:
+        try:
+            arr = _refine_faces(arr, im_pre, face_boxes, s, k_face=24)
+            # Refine thêm bảng màu RIÊNG cho mặt -> tổng màu có thể vượt trần preset
+            # (khách phải pha nhiều hũ hơn đặt). GỘP về 'target' màu, BẢO VỆ ngũ quan
+            # (mask + tông rực gộp sau cùng) -> mặt vẫn nét, nền/thân nhường suất màu.
+            # No-op nếu refine bị bỏ qua (số màu vẫn <= target).
+            arr = _reduce_palette_perceptual(arr, target, protect_mask=face_protect)
+        except Exception:
+            pass
+        im_pre = None
     # BIÊN MƯỢT NHƯ VECTOR: tô lại từng vùng theo polygon Chaikin -> đường biên ảnh
     # THIẾT KẾ cong mềm (hết bậc thang); bản đồ số lấy contour từ chính arr này nên
     # nét số khớp y biên thiết kế.
@@ -895,10 +969,9 @@ def _reduce_palette_perceptual(img_rgb, target_n, protect_mask=None):
         rep = colors[best_m]
         for m in mem:
             rep_of[m] = rep
-    out = np.zeros_like(flat)
-    for k, c in enumerate(colors):
-        out[np.all(flat == c, axis=1)] = rep_of[k]
-    return out.reshape(img_rgb.shape)
+    # Tái tạo bằng inv (đã có từ np.unique) -> O(N) vector, tránh vòng O(K*N) trên
+    # ảnh 2x lớn (khâu này nằm trong luồng chân dung, cần nhanh).
+    return rep_of[inv.reshape(-1)].reshape(img_rgb.shape)
 
 
 def _snap_to_design_palette(img_rgb):

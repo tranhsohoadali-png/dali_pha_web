@@ -147,6 +147,32 @@ def _haar_mask(rgb):
     return mask if mask.any() else None
 
 
+def detect_face_boxes(rgb):
+    """List (x,y,w,h) khuôn mặt trên ảnh RGB (toạ độ full-res). [] nếu không thấy/lỗi.
+    Dùng cho khâu LƯỢNG TỬ CỤC BỘ vùng mặt (giữ chi tiết mặt nhỏ trong ảnh rộng)."""
+    try:
+        if _OFF or rgb is None or rgb.ndim != 3:
+            return []
+        H, W = rgb.shape[:2]
+        gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        scale = 1.0
+        if max(H, W) > 900:
+            scale = 900.0 / max(H, W)
+            gray = cv2.resize(gray, (int(W * scale), int(H * scale)),
+                              interpolation=cv2.INTER_AREA)
+        faces = _detect_faces(cv2.equalizeHist(gray))
+        inv = 1.0 / scale
+        boxes = [(int(x * inv), int(y * inv), int(w * inv), int(h * inv))
+                 for (x, y, w, h) in faces]
+        # GIỚI HẠN số mặt: Haar dễ báo NHẦM trên ảnh nhiều texture (lá, vải, đám
+        # đông) -> mỗi bbox kéo theo 1 lần lượng tử cục bộ (nặng). Giữ tối đa 4 mặt
+        # TO nhất (khớp max_num_faces của mediapipe) -> chặn treo CPU trên VPS.
+        boxes.sort(key=lambda b: -b[2] * b[3])
+        return boxes[:4]
+    except Exception:
+        return []
+
+
 def feature_protect_mask(rgb):
     """Mask 0/255 (HxW) bảo vệ ngũ quan của ảnh CHÂN DUNG. None nếu tắt / không
     thấy mặt / lỗi. rgb: mảng uint8 HxWx3 (RGB)."""
