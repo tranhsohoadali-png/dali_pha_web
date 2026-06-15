@@ -178,8 +178,12 @@ def _yunet_run(model_path, rgb, conf, long_side):
     sx, sy = W / float(dw), H / float(dh)
     out = []
     for f in faces:
+        bx0, by0 = max(0, int(f[0] * sx)), max(0, int(f[1] * sy))
+        bx1, by1 = min(W, int((f[0] + f[2]) * sx)), min(H, int((f[1] + f[3]) * sy))
+        if bx1 <= bx0 or by1 <= by0:               # box ngoài khung -> bỏ
+            continue
         out.append({
-            'box': (int(f[0] * sx), int(f[1] * sy), int(f[2] * sx), int(f[3] * sy)),
+            'box': (bx0, by0, bx1 - bx0, by1 - by0),   # KẸP trong khung (YuNet có thể trả lố)
             'lms': (f[4:14].reshape(5, 2) * np.array([sx, sy], np.float32)),
             'score': float(f[14])})
     out.sort(key=lambda d: -d['box'][2] * d['box'][3])
@@ -305,34 +309,52 @@ def scale_faces(faces, k):
     return out
 
 
-def subject_crop_box(rgb, min_face_frac=0.004, max_face_frac=0.05, aspect=0.8):
-    """Khung CẮT 'tự ZOOM vào người' cho ảnh CHÂN DUNG: ảnh chụp xa mặt rất nhỏ ->
-    hệ thống hạ ảnh về ~1400px nên mặt còn ÍT pixel (mất nét). Cắt sát người -> dồn
-    'ngân sách' độ phân giải cho người -> mặt NÉT hơn nhiều (chỉ thật sự lợi khi ảnh
-    GỐC to). Trả (x0,y0,x1,y1) hoặc None nếu KHÔNG nên cắt:
-      - tắt / lỗi / KHÔNG đúng 1 mặt (0 hoặc nhiều mặt = ảnh nhóm -> để yên);
-      - mặt ĐÃ to (> max_face_frac diện tích) = ảnh đã cận -> để yên;
+def subject_crop_box(rgb, min_face_frac=0.004, max_face_frac=0.05, aspect=0.8, max_faces=3):
+    """Khung CẮT 'tự ZOOM vào (các) người' cho ảnh CHÂN DUNG: ảnh chụp xa mặt rất nhỏ
+    -> hệ thống hạ ảnh về ~1400px nên mặt còn ÍT pixel (mất nét). Cắt sát người -> dồn
+    'ngân sách' độ phân giải cho người -> mặt NÉT hơn (chỉ thật sự lợi khi ảnh GỐC to).
+    HỖ TRỢ 1..max_faces người (vd cặp đôi cõng nhau) — cắt quanh BAO của TẤT CẢ mặt.
+    Trả (x0,y0,x1,y1) hoặc None nếu KHÔNG nên cắt:
+      - tắt / lỗi / 0 mặt / > max_faces mặt (đám đông -> để yên);
+      - có mặt dò KHÔNG chắc (Haar/không điểm mốc) -> không tự recompose;
+      - có mặt quá nhỏ (người phụ/nền) hoặc đã to (cận) -> để yên;
       - khung cắt không nhỏ hơn ảnh đáng kể (>85% diện tích) -> cắt vô ích.
-    Cắt BÁN THÂN dọc: chừa tóc/đầu phía trên, lấy tới quá ngực phía dưới, rộng ôm vai;
-    bám tỉ lệ dọc 'aspect' (mặc định 4:5 cho khổ in dọc); kẹp trong biên ảnh."""
+    Cắt BÁN THÂN dọc: chừa tóc/đầu trên, lấy tới quá ngực dưới, rộng ôm vai; bám tỉ lệ
+    dọc 'aspect' (4:5 cho khổ in dọc); kẹp trong biên ảnh."""
     try:
         if _OFF or rgb is None or rgb.ndim != 3:
             return None
         faces = detect_faces(rgb)
-        if len(faces) != 1:                       # 0 / nhiều mặt (ảnh nhóm) -> không tự cắt
+        if not faces or len(faces) > max_faces:    # 0 mặt / đám đông -> không tự cắt
             return None
-        if faces[0].get('lms') is None:           # CHỈ zoom khi dò CHẮC (YuNet có điểm mốc);
-            return None                            # Haar mờ / cv2 cũ -> không tự recompose
+        if any(f.get('lms') is None for f in faces):   # PHẢI dò chắc (YuNet điểm mốc) HẾT
+            return None
         H, W = rgb.shape[:2]
-        x, y, w, h = faces[0]['box']
-        ff = w * h / float(W * H)
-        if ff < min_face_frac or ff > max_face_frac:   # quá nhỏ (người phụ/nền) | đã cận -> bỏ
-            return None
-        cx = x + w / 2.0
-        top = y - 1.0 * h                          # chừa tóc/đỉnh đầu
-        bot = y + h + 4.5 * h                       # xuống quá ngực (bán thân)
+        bxs = [f['box'] for f in faces]
+        for (x, y, w, h) in bxs:                   # mọi mặt phải nhỏ hợp lý (không có mặt cận)
+            ff = w * h / float(W * H)
+            if ff < min_face_frac or ff > max_face_frac:
+                return None
+        ux0 = min(b[0] for b in bxs)
+        uy0 = min(b[1] for b in bxs)
+        ux1 = max(b[0] + b[2] for b in bxs)
+        uy1 = max(b[1] + b[3] for b in bxs)
+        fw = max(b[2] for b in bxs)
+        fh = max(b[3] for b in bxs)
+        # PHẢI là MỘT nhóm chủ thể gắn kết (cặp đôi/ôm nhau), KHÔNG phải 2 người đứng
+        # xa hay 2 mặt tình cờ trong cảnh: (a) trải NGANG không quá ~4 bề rộng mặt;
+        # (b) các mặt CỠ gần nhau (khác nhiều = khác khoảng cách -> không cùng nhóm).
+        if len(bxs) > 1:
+            if (ux1 - ux0) > 4.0 * fw:
+                return None
+            areas = [b[2] * b[3] for b in bxs]
+            if max(areas) > 4.0 * max(1, min(areas)):
+                return None
+        cx = (ux0 + ux1) / 2.0
+        top = uy0 - 0.9 * fh                       # chừa tóc/đỉnh đầu (mặt trên cùng)
+        bot = uy1 + 3.8 * fh                       # xuống quá ngực (bán thân)
         ch = bot - top
-        cw = max(ch * aspect, 3.2 * w)             # rộng theo tỉ lệ dọc, tối thiểu ôm vai
+        cw = max((ux1 - ux0) + 2.6 * fw, ch * aspect)   # ôm hết mặt + vai; tối thiểu tỉ lệ dọc
         x0 = max(0, int(cx - cw / 2.0))
         x1 = min(W, int(cx + cw / 2.0))
         y0 = max(0, int(top))
