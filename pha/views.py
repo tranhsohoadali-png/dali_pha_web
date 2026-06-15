@@ -2864,17 +2864,20 @@ def xu_ly_anh(request):
         except ValueError:
             print_long_cm = 0
         # Chế độ CHI TIẾT (preset Cây/Hoa): giữ nhiều ô nhỏ, số nhỏ — ít gộp mảng.
+        # face_priority: CHỈ preset chân dung 'photo' -> dò & bảo vệ ngũ quan.
         from pha.ai_enhance import get_preset as _gp
-        detail = bool(_gp(preset_key).get('detail'))
+        _ps = _gp(preset_key)
+        detail = bool(_ps.get('detail'))
+        face_priority = bool(_ps.get('face_priority'))
         rec = ImageResult.objects.create(
             name=name, status=ImageResult.STATUS_PROCESSING, user=request.user.username,
             params={'enhance': enhance, 'color_limit': color_limit, 'min_area': min_area,
                     'smooth': smooth, 'style_category': style_category or '',
                     'preset': preset_key, 'print_size': size_str, 'ai_level': ai_level,
-                    'detail': detail})
+                    'detail': detail, 'face_priority': face_priority})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
                              color_limit, min_area, smooth, ai_prompt, use_refs,
-                             print_long_cm, detail)
+                             print_long_cm, detail, face_priority)
         _prune_image_results()                 # giữ 10 kết quả gần nhất (bộ nhớ tạm)
         ctx = build_ctx()
         ctx['file_url'] = '/media/' + name

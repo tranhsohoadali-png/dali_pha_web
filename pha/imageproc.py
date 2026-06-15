@@ -134,13 +134,17 @@ def _boost_lip_color(path):
 
 def process_image(rec_id, name, enhance=False, style_category=None, color_limit=0,
                   min_area=0, smooth=0, ai_prompt=None, use_refs=False, print_long_cm=0,
-                  detail=False):
+                  detail=False, face_priority=False):
     """Chạy nền: (tùy chọn) tăng cường ảnh bằng AI, rồi xử lý + cập nhật ImageResult.
 
     enhance=True: gọi Google AI làm sạch/nâng cấp ảnh khách trước khi đánh số.
     style_category: nếu có, chọn ảnh mẫu trong kho cùng nhãn làm tham chiếu phong cách.
     color_limit: số màu tối đa (áp cho cả AI vẽ lại lẫn bước tách màu; 0 = không giới hạn).
     min_area: bỏ các mảng màu nhỏ hơn N pixel ở bản đồ đánh số (0 = không lọc).
+    face_priority=True: ảnh CHÂN DUNG thật (preset 'photo') — dò & bảo vệ ngũ quan
+    (mắt/mũi/miệng) khi tách màu + đánh số. CHỈ bật cho preset chân dung.
+    (Cứu màu môi _boost_lip_color vẫn chạy cho MỌI ảnh enhance như cũ — tự no-op
+    nếu không có mặt — nên luồng API bán hàng không đổi.)
     Khâu đánh số + khớp mã DALI luôn chạy như cũ trên ảnh (đã hoặc chưa tăng cường).
     """
     obj = ImageResult.objects.get(id=rec_id)
@@ -179,7 +183,7 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
                     raise TimeoutError(f'quá {AI_BUDGET_S}s — Google chậm/quá tải')
                 if 'err' in box:
                     raise box['err']
-                _boost_lip_color(enhanced_path)   # giữ màu môi (AI hay làm nhạt)
+                _boost_lip_color(enhanced_path)   # giữ màu môi (AI hay làm nhạt); tự no-op nếu ảnh không có mặt
                 obj.enhanced_name = enhanced_name
                 obj.save(update_fields=['enhanced_name'])
                 path = enhanced_path  # số hoá trên ảnh đã tăng cường
@@ -189,7 +193,8 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
         design_path = os.path.join(settings.MEDIA_ROOT, design_name)
         edge_img, color_mapping, percentages = index_color(
             path, debug=False, num_colors=color_limit, min_area=min_area, smooth=smooth,
-            design_out=design_path, print_long_cm=print_long_cm, detail=detail)
+            design_out=design_path, print_long_cm=print_long_cm, detail=detail,
+            face_priority=face_priority)
         dpi = Image.open(path).info.get('dpi', (72, 72))
         name_output = save_img(edge_img, dpi)
         colors = create_image_color(color_mapping, convert_to_hex(color_mapping), percentages)

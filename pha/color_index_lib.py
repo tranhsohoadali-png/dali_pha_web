@@ -407,7 +407,7 @@ def _merge_small_regions(img_rgb, min_area=0, min_radius=5.5, max_pass=6,
 
 
 def _quantize_rarity(src_rgb, k, rar_pow=0.5, vivid_chroma=48, vivid_boost=0.02,
-                     seed=7):
+                     seed=7, face_mask=None, face_boost=0.05):
     """Chọn bảng màu bằng K-MEANS LAB CÓ TRỌNG SỐ ĐỘ HIẾM: pixel màu hiếm (môi đỏ,
     bóng mũi, má hồng — nhỏ nhưng quan trọng) được lấy mẫu nhiều hơn -> CÓ CỤM RIÊNG.
     Median-cut chia ô theo SỐ LƯỢNG pixel nên tông hiếm bị nuốt (môi đỏ 0.14% ảnh
@@ -441,6 +441,14 @@ def _quantize_rarity(src_rgb, k, rar_pow=0.5, vivid_chroma=48, vivid_boost=0.02,
         rep = viv[rng.integers(0, viv.size, size=int(N * vivid_boost))]
         samples = np.vstack([samples, flat8[rep].astype(np.float32)])
     del viv
+    # CHÂN DUNG: ép thêm pixel vùng NGŨ QUAN (mắt/lông mày/mũi/môi) chiếm >= face_boost
+    # tỉ lệ mẫu -> các tông này chắc chắn có cụm màu riêng (giống cách boost môi rực).
+    if face_mask is not None:
+        fidx = np.where(face_mask.reshape(-1) > 0)[0]
+        if fidx.size:
+            rep = fidx[rng.integers(0, fidx.size, size=int(N * face_boost))]
+            samples = np.vstack([samples, flat8[rep].astype(np.float32)])
+        del fidx
     k = max(2, min(int(k), len(np.unique(samples, axis=0))))
     crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 25, 0.5)
     _, _, centers = cv2.kmeans(samples, k, None, crit, 2, cv2.KMEANS_PP_CENTERS)
@@ -556,12 +564,17 @@ def _sweep_dust(lbl, n_colors, dust_area=4):
 FEATURE_CAP_PER_COLOR = config("FEATURE_CAP_PER_COLOR", default=10, cast=int)
 
 
-def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4, feature_cap=None):
+def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4, feature_cap=None,
+                         protect=None):
     """Gộp mảng nhỏ vào hàng xóm NHƯNG GIỮ chi tiết ngũ quan: đốm nhỏ TRÒN có màu
     TƯƠNG PHẢN CAO với xung quanh (lòng trắng mắt, lỗ mũi, viền môi) được GIỮ;
     chỉ gộp bụi thật (rad<1), sliver dẹt (thon dài sát biên) và mảng màu GẦN GIỐNG
     hàng xóm (deltaE < de_keep). Mỗi màu giữ tối đa FEATURE_CAP_PER_COLOR đốm
-    (to nhất trước) — chặn nền nhiễu trăm đốm. Trả (ảnh, mask chi tiết đã giữ)."""
+    (to nhất trước) — chặn nền nhiễu trăm đốm. Trả (ảnh, mask chi tiết đã giữ).
+
+    protect: mask 0/255 (CHỈ ảnh chân dung, từ pha.face_features) — đốm nằm CHỦ YẾU
+    trong vùng ngũ quan (>50% diện tích) thì LUÔN GIỮ (không gộp, kể cả vượt trần);
+    cả vùng protect cũng được đưa vào mask trả về -> bước làm mượt không xoá nét mặt."""
     cap = FEATURE_CAP_PER_COLOR if feature_cap is None else feature_cap
     img = arr.copy()
     H, W = img.shape[:2]
@@ -597,6 +610,15 @@ def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4, feature_c
                 x1, y1 = min(x + w + 1, W), min(y + h + 1, H)
                 sub = comp[y0:y1, x0:x1] == kk
                 rad = float(dist[y0:y1, x0:x1][sub].max())
+                # CHÂN DUNG: đốm nằm CHỦ YẾU trong vùng ngũ quan VÀ đủ to để đánh số
+                # -> LUÔN GIỮ (không gộp, kể cả vượt trần). Đốm < r_num vẫn rơi xuống
+                # nhánh gộp bên dưới (giữ luật "mọi ô đều có số" — không tạo ô trống).
+                if protect is not None and rad >= r_num:
+                    ov = protect[y0:y1, x0:x1][sub]
+                    if ov.size and float((ov > 0).mean()) > 0.5:
+                        yy, xx = np.where(sub)
+                        feature[y0 + yy, x0 + xx] = 255    # ngũ quan chân dung: GIỮ
+                        continue
                 if rad >= r_keep and (not min_area or area >= min_area):
                     continue
                 dil = cv2.dilate(sub.astype(np.uint8), k3) > 0
@@ -643,6 +665,8 @@ def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4, feature_c
                 changed = True
         if not changed:
             break
+    if protect is not None:
+        feature[protect > 0] = 255      # cả vùng ngũ quan -> bước làm mượt chừa ra
     return img, feature
 
 
@@ -671,7 +695,7 @@ def _smooth_labels_voting(arr, sigma, protect=None):
 
 
 def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=None,
-                   detail=False):
+                   detail=False, face_priority=False):
     """Tạo ảnh THIẾT KẾ chất lượng Illustrator-trace rồi lưu file LÀM VIỆC tạm (1x)
     cho khâu đánh số. Trả đường_dẫn_tạm.
 
@@ -720,7 +744,22 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         s = max(1.0, min(2.0, DESIGN_MAX_SIDE / float(max(W1, H1))))
     im2 = im.resize((int(W1 * s), int(H1 * s)), Resampling.LANCZOS) if s > 1.0 else im
 
-    arr = _quantize_rarity(np.array(im2), k=target)
+    # CHÂN DUNG (face_priority): dò NGŨ QUAN trên chính ảnh 2x -> mask bảo vệ mắt/
+    # lông mày/mũi/miệng. Chỉ áp cho ảnh thật khách hàng (preset 'photo'); lỗi/không
+    # thấy mặt -> None (chạy như cũ bằng heuristic hình học sẵn có).
+    src2x = np.array(im2)                            # 1 bản uint8 (tránh cấp phát đôi)
+    face_protect = None
+    if face_priority and not detail:
+        try:
+            from pha.face_features import feature_protect_mask
+            face_protect = feature_protect_mask(src2x)
+        except Exception:
+            face_protect = None
+
+    # face_mask: chân dung -> ép pixel ngũ quan vào mẫu chọn bảng màu (mắt/môi/mũi
+    # chắc chắn có cụm màu riêng, không bị nuốt ngay ở bước k-means).
+    arr = _quantize_rarity(src2x, k=target, face_mask=face_protect)
+    del src2x
     if detail:
         # CHI TIẾT (cây/hoa): giữ NHIỀU ô nhỏ (cánh hoa/lá) -> nhiều số nhỏ. Chỉ dọn
         # bụi/đốm gần-trùng-màu, KHÔNG gộp theo trần (feature_cap vô hạn), bán kính
@@ -734,14 +773,16 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     else:
         r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s
         arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=18.0,
-                                         min_area=int(min_area * s * s), max_pass=4)
+                                         min_area=int(min_area * s * s), max_pass=4,
+                                         protect=face_protect)
         # LÀM MƯỢT BIÊN 2 lớp: voting (cong mượt) + MEDIAN trên nhãn (nắn thẳng bậc
         # thang răng cưa còn sót). Cả hai CHỪA ngũ quan (feat) -> không mất mắt/môi.
         arr = _smooth_labels_voting(arr, sigma=2.8 * s, protect=feat)
         ks = int(round(3 * s)) | 1                      # ksize lẻ (3 ở 1x, 7 ở 2x)
         arr = _smooth_boundaries(arr, ksize=max(3, ks), protect_mask=feat)
         arr = _smooth_labels_voting(arr, sigma=1.6 * s, protect=feat)
-        arr, _ = _merge_keep_features(arr, r_keep=1.8 * s, de_keep=10.0, max_pass=2)
+        arr, _ = _merge_keep_features(arr, r_keep=1.8 * s, de_keep=10.0, max_pass=2,
+                                      protect=face_protect)
     # BIÊN MƯỢT NHƯ VECTOR: tô lại từng vùng theo polygon Chaikin -> đường biên ảnh
     # THIẾT KẾ cong mềm (hết bậc thang); bản đồ số lấy contour từ chính arr này nên
     # nét số khớp y biên thiết kế.
@@ -1151,12 +1192,13 @@ def _number_work_image(work_path, design_out=None, debug=False,
 
 
 def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_out=None,
-                print_long_cm=0, detail=False):
+                print_long_cm=0, detail=False, face_priority=False):
     """num_colors > 0: gom ảnh về tối đa N màu (để trống = DEFAULT_NUM_COLORS).
     min_area > 0: gộp các mảng màu nhỏ hơn N pixel vào hàng xóm (đỡ lấm tấm).
     smooth (0..3): làm phẳng vùng (mean-shift) trước khi gom — dọn ảnh màu nước/chụp.
     design_out: nếu có, lưu ảnh THIẾT KẾ (bản màu phẳng đã gom) ra đường dẫn này.
     detail=True: chế độ CÂY/HOA — giữ nhiều ô nhỏ, ít gộp -> số nhỏ, chi tiết.
+    face_priority=True: ảnh CHÂN DUNG thật — dò & bảo vệ ngũ quan (mắt/mũi/miệng).
     print_long_cm: nhận cho tương thích, không dùng (cỡ số cố định)."""
     effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
     # design_out được ghi NGAY trong _quantize_file (bản 2x sắc nét);
@@ -1164,7 +1206,8 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
     work_path, arr2x, s = _quantize_file(path, effective_n, smooth=smooth,
                                          min_area=min_area,
                                          print_long_cm=print_long_cm,
-                                         design_out=design_out, detail=detail)
+                                         design_out=design_out, detail=detail,
+                                         face_priority=face_priority)
     return _number_work_image(work_path, design_out=None, debug=debug,
                               render_arr=arr2x, render_scale=s)
 
