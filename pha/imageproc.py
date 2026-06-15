@@ -149,8 +149,40 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
     """
     obj = ImageResult.objects.get(id=rec_id)
     warn = ''
+    zoom_path = None                  # bản crop tạm (xoá ở finally để không rác đĩa)
     try:
         path = os.path.join(settings.MEDIA_ROOT, name)
+        orig_dpi = (72, 72)           # giữ DPI ảnh GỐC (bản zoom .png không có DPI)
+        try:
+            orig_dpi = Image.open(path).info.get('dpi', (72, 72)) or (72, 72)
+        except Exception:
+            orig_dpi = (72, 72)
+        # CHÂN DUNG: TỰ ZOOM vào người NGAY ĐẦU LUỒNG (trước AI) nếu là 1 mặt NHỎ trong
+        # ảnh rộng -> dồn độ phân giải + màu cho người -> mặt nét hơn (cả AI lẫn đánh số
+        # đều nhận mặt to). Chỉ preset 'photo' (face_priority); ảnh đã cận / nhiều mặt /
+        # ảnh GỐC nhỏ (zoom vô ích) -> tự bỏ qua. Mọi lỗi nuốt êm (giữ ảnh gốc). KHÔNG
+        # đụng luồng API bán hàng (nó không truyền face_priority -> nhánh này không chạy).
+        if face_priority and not detail:
+            try:
+                from pha.color_index_lib import WORK_MAX_SIDE
+                with Image.open(path) as _im:          # đọc CỠ, không giải mã pixel
+                    _big = max(_im.size) > (WORK_MAX_SIDE or 1400)
+                if _big:                                # ảnh nhỏ: zoom KHÔNG thêm pixel -> bỏ
+                    from pha.face_features import subject_crop_box
+                    _src = cv2.imread(path)
+                    cb = (subject_crop_box(cv2.cvtColor(_src, cv2.COLOR_BGR2RGB))
+                          if _src is not None else None)
+                    if cb is not None:
+                        x0, y0, x1, y1 = cb
+                        zpath = os.path.join(
+                            settings.MEDIA_ROOT, f'{os.path.splitext(name)[0]}_zoom.png')
+                        if cv2.imwrite(zpath, _src[y0:y1, x0:x1]):   # CHỈ đổi khi GHI THẬT
+                            path = zpath                # AI + đánh số chạy trên bản zoom
+                            zoom_path = zpath
+                            warn = 'Đã tự zoom vào người (mặt nhỏ trong ảnh rộng). '
+                    del _src                            # giải phóng ảnh gốc to NGAY
+            except Exception:
+                pass
         if enhance:
             # AI tách riêng: nếu lỗi/timeout -> BỎ QUA, xử lý ảnh gốc (không treo).
             # TRẦN CỨNG AI_BUDGET_S giây cho TOÀN BỘ khâu AI (kể cả 2 lần thử +
@@ -188,15 +220,14 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
                 obj.save(update_fields=['enhanced_name'])
                 path = enhanced_path  # số hoá trên ảnh đã tăng cường
             except Exception as e:
-                warn = 'Bỏ qua tăng cường AI (' + str(e)[:140] + '). Đã xử lý ảnh gốc.'
+                warn += 'Bỏ qua tăng cường AI (' + str(e)[:140] + '). Đã xử lý ảnh gốc.'
         design_name = f'{os.path.splitext(name)[0]}_design.png'
         design_path = os.path.join(settings.MEDIA_ROOT, design_name)
         edge_img, color_mapping, percentages = index_color(
             path, debug=False, num_colors=color_limit, min_area=min_area, smooth=smooth,
             design_out=design_path, print_long_cm=print_long_cm, detail=detail,
             face_priority=face_priority)
-        dpi = Image.open(path).info.get('dpi', (72, 72))
-        name_output = save_img(edge_img, dpi)
+        name_output = save_img(edge_img, orig_dpi)
         colors = create_image_color(color_mapping, convert_to_hex(color_mapping), percentages)
         obj.name_output = name_output
         obj.design_name = design_name if os.path.exists(design_path) else ''
@@ -208,6 +239,12 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
         obj.status = ImageResult.STATUS_ERROR
         obj.error_message = str(e)
         obj.save()
+    finally:
+        if zoom_path:                     # dọn bản crop tạm (đã xong số hoá) -> không rác đĩa
+            try:
+                os.remove(zoom_path)
+            except OSError:
+                pass
 
 
 def get_paint_image(file_path, image_name, option, orientation='portrait'):

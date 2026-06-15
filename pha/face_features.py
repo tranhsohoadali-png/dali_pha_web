@@ -305,6 +305,47 @@ def scale_faces(faces, k):
     return out
 
 
+def subject_crop_box(rgb, min_face_frac=0.004, max_face_frac=0.05, aspect=0.8):
+    """Khung CẮT 'tự ZOOM vào người' cho ảnh CHÂN DUNG: ảnh chụp xa mặt rất nhỏ ->
+    hệ thống hạ ảnh về ~1400px nên mặt còn ÍT pixel (mất nét). Cắt sát người -> dồn
+    'ngân sách' độ phân giải cho người -> mặt NÉT hơn nhiều (chỉ thật sự lợi khi ảnh
+    GỐC to). Trả (x0,y0,x1,y1) hoặc None nếu KHÔNG nên cắt:
+      - tắt / lỗi / KHÔNG đúng 1 mặt (0 hoặc nhiều mặt = ảnh nhóm -> để yên);
+      - mặt ĐÃ to (> max_face_frac diện tích) = ảnh đã cận -> để yên;
+      - khung cắt không nhỏ hơn ảnh đáng kể (>85% diện tích) -> cắt vô ích.
+    Cắt BÁN THÂN dọc: chừa tóc/đầu phía trên, lấy tới quá ngực phía dưới, rộng ôm vai;
+    bám tỉ lệ dọc 'aspect' (mặc định 4:5 cho khổ in dọc); kẹp trong biên ảnh."""
+    try:
+        if _OFF or rgb is None or rgb.ndim != 3:
+            return None
+        faces = detect_faces(rgb)
+        if len(faces) != 1:                       # 0 / nhiều mặt (ảnh nhóm) -> không tự cắt
+            return None
+        if faces[0].get('lms') is None:           # CHỈ zoom khi dò CHẮC (YuNet có điểm mốc);
+            return None                            # Haar mờ / cv2 cũ -> không tự recompose
+        H, W = rgb.shape[:2]
+        x, y, w, h = faces[0]['box']
+        ff = w * h / float(W * H)
+        if ff < min_face_frac or ff > max_face_frac:   # quá nhỏ (người phụ/nền) | đã cận -> bỏ
+            return None
+        cx = x + w / 2.0
+        top = y - 1.0 * h                          # chừa tóc/đỉnh đầu
+        bot = y + h + 4.5 * h                       # xuống quá ngực (bán thân)
+        ch = bot - top
+        cw = max(ch * aspect, 3.2 * w)             # rộng theo tỉ lệ dọc, tối thiểu ôm vai
+        x0 = max(0, int(cx - cw / 2.0))
+        x1 = min(W, int(cx + cw / 2.0))
+        y0 = max(0, int(top))
+        y1 = min(H, int(bot))
+        if x1 - x0 < 16 or y1 - y0 < 16:
+            return None
+        if (x1 - x0) * (y1 - y0) > 0.85 * W * H:   # gần bằng ảnh -> bỏ (vô ích)
+            return None
+        return (x0, y0, x1, y1)
+    except Exception:
+        return None
+
+
 def feature_protect_mask(rgb, faces=None):
     """Mask 0/255 (HxW) bảo vệ ngũ quan của ảnh CHÂN DUNG. None nếu tắt / không thấy
     mặt / lỗi. faces: kết quả detect_faces ĐÃ DÒ SẴN (toạ độ KHỚP rgb này) -> KHỎI chạy
