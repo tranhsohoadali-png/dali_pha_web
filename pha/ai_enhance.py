@@ -153,7 +153,7 @@ PRESETS = {
         'desc': 'Giữ NGUYÊN ảnh thật (đúng người/màu/mặt), chỉ giản lược thành tranh '
                 'tô màu (posterize) — KHÔNG đổi sang anime/AI. Bật AI = posterize sạch '
                 'hơn; tắt AI = giản lược thuần thuật toán. Cả hai đều giữ ảnh thật.',
-        'color_limit': 40, 'smooth': 2, 'min_area': 60, 'enhance': True,
+        'color_limit': 40, 'smooth': 2, 'min_area': 30, 'enhance': True,
         'use_refs': True, 'face_priority': True, 'prompt': _PROMPT_PHOTO,
     },
     'design': {
