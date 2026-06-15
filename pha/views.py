@@ -2263,17 +2263,44 @@ def cham_cong(request):
             return JsonResponse({'ok': False, 'wifi': False,
                                  'msg': 'Bạn cần kết nối Wifi công ty để chấm công.', 'ip': ip})
         # ----- KHOÁ THIẾT BỊ 1-1 (chống chấm hộ) -----
+        # Mã thiết bị ưu tiên lấy từ COOKIE server cấp (bền — không bị iOS xoá sau 7 ngày
+        # như localStorage). localStorage chỉ dùng để DI CƯ token cũ -> tránh khoá nhầm
+        # hàng loạt sau khi deploy.
         from pha.models import DeviceBind
+        import secrets
         u = request.user.username
-        device = (request.POST.get('device') or '').strip()
+        cookie_dev = (request.COOKIES.get('dali_dev') or '').strip()
+        ls_dev = (request.POST.get('device') or '').strip()   # localStorage (bản cũ)
+        mine = DeviceBind.objects.filter(username=u).first()
+
+        set_cookie_to = None
+        if mine and cookie_dev and cookie_dev == mine.token:
+            device = cookie_dev                       # đã có cookie bền khớp khoá
+        elif mine and ls_dev and ls_dev == mine.token:
+            device = ls_dev                           # token cũ trong localStorage -> di cư vào cookie
+            set_cookie_to = ls_dev
+        elif mine:
+            device = cookie_dev or ls_dev or ''       # không khớp -> sẽ bị chặn bên dưới (khác máy thật)
+        else:
+            device = cookie_dev or ls_dev or ('d-' + secrets.token_hex(16))   # máy mới
+            set_cookie_to = device
+        if cookie_dev != device and device:
+            set_cookie_to = device                    # đồng bộ cookie = token đang dùng
+
+        def _dev_resp(payload, status=200):
+            r = JsonResponse(payload, status=status)
+            if set_cookie_to:
+                r.set_cookie('dali_dev', set_cookie_to, max_age=63072000,   # ~2 năm
+                             samesite='Lax', secure=request.is_secure())
+            return r
+
         if not device:
-            return JsonResponse({'ok': False, 'msg': 'Không lấy được mã thiết bị. Tắt chế độ ẩn danh / bật JavaScript rồi thử lại.'})
+            return _dev_resp({'ok': False, 'msg': 'Không lấy được mã thiết bị. Tắt chế độ ẩn danh / bật JavaScript rồi thử lại.'})
         other = DeviceBind.objects.filter(token=device).exclude(username=u).first()
         if other:
-            return JsonResponse({'ok': False, 'msg': f'Điện thoại này đã gắn với tài khoản "{other.username}". Mỗi máy chỉ chấm công cho 1 người.'})
-        mine = DeviceBind.objects.filter(username=u).first()
+            return _dev_resp({'ok': False, 'msg': f'Điện thoại này đã gắn với tài khoản "{other.username}". Mỗi máy chỉ chấm công cho 1 người.'})
         if mine and mine.token != device:
-            return JsonResponse({'ok': False, 'msg': 'Tài khoản của bạn đã khoá ở một điện thoại khác. Báo quản lý để đổi sang máy này.'})
+            return _dev_resp({'ok': False, 'msg': 'Không nhận diện được thiết bị này (có thể trình duyệt vừa xoá dữ liệu). Báo quản lý mở khoá thiết bị giúp bạn (1 lần).'})
         if not mine:
             DeviceBind.objects.create(username=u, token=device,
                                       user_agent=(request.META.get('HTTP_USER_AGENT', '') or '')[:200])
@@ -2281,36 +2308,36 @@ def cham_cong(request):
             user=u, day=now.strftime('%Y-%m-%d'), defaults={'month': now.strftime('%Y-%m')})
         if action == 'in':
             if rec.check_in:
-                return JsonResponse({'ok': False, 'msg': 'Bạn đã chấm công VÀO hôm nay rồi.',
-                                     'in': _hm(rec.check_in), 'out': _hm(rec.check_out)})
+                return _dev_resp({'ok': False, 'msg': 'Bạn đã chấm công VÀO hôm nay rồi.',
+                                  'in': _hm(rec.check_in), 'out': _hm(rec.check_out)})
             rec.check_in = now; rec.ip_in = ip; rec.device_in = device; rec.save()
             import pha.motivate as _mot
-            return JsonResponse({'ok': True, 'msg': 'Đã chấm công VÀO lúc ' + _hm(now),
-                                 'in': _hm(rec.check_in), 'out': _hm(rec.check_out),
-                                 'motivate': _mot.quote_for(now)})
+            return _dev_resp({'ok': True, 'msg': 'Đã chấm công VÀO lúc ' + _hm(now),
+                              'in': _hm(rec.check_in), 'out': _hm(rec.check_out),
+                              'motivate': _mot.quote_for(now)})
         if action == 'undo_out':
             # Hoàn tác TAN LÀM bấm nhầm — chỉ trong 15 phút sau khi bấm
             if not rec.check_out:
-                return JsonResponse({'ok': False, 'msg': 'Hôm nay bạn chưa bấm tan làm.'})
+                return _dev_resp({'ok': False, 'msg': 'Hôm nay bạn chưa bấm tan làm.'})
             if (now - rec.check_out).total_seconds() > 15 * 60:
-                return JsonResponse({'ok': False, 'msg': 'Quá 15 phút — nhờ quản lý sửa giờ ra giúp.'})
+                return _dev_resp({'ok': False, 'msg': 'Quá 15 phút — nhờ quản lý sửa giờ ra giúp.'})
             rec.check_out = None; rec.ip_out = ''; rec.device_out = ''; rec.save()
-            return JsonResponse({'ok': True, 'msg': 'Đã hoàn tác tan làm — tiếp tục làm việc nhé! 💪',
-                                 'in': _hm(rec.check_in), 'out': '', 'undone': True})
+            return _dev_resp({'ok': True, 'msg': 'Đã hoàn tác tan làm — tiếp tục làm việc nhé! 💪',
+                              'in': _hm(rec.check_in), 'out': '', 'undone': True})
         if action == 'out':
             if not rec.check_in:
-                return JsonResponse({'ok': False, 'msg': 'Bạn chưa chấm công VÀO.'})
+                return _dev_resp({'ok': False, 'msg': 'Bạn chưa chấm công VÀO.'})
             # CHỐNG BẤM NHẦM: tan làm sớm bất thường / tan làm lần 2 -> phải xác nhận rõ
             if request.POST.get('confirm') != '1':
                 if rec.check_out:
-                    return JsonResponse({'ok': False, 'need_confirm': 'update',
-                                         'msg': f'Bạn đã tan làm lúc {_hm(rec.check_out)}. '
-                                                f'Cập nhật giờ ra thành {_hm(now)}?'})
+                    return _dev_resp({'ok': False, 'need_confirm': 'update',
+                                      'msg': f'Bạn đã tan làm lúc {_hm(rec.check_out)}. '
+                                             f'Cập nhật giờ ra thành {_hm(now)}?'})
                 mins = int((now - rec.check_in).total_seconds() // 60)
                 if mins < 60:
-                    return JsonResponse({'ok': False, 'need_confirm': 'early', 'mins': mins,
-                                         'msg': f'Bạn mới VÀO LÀM {mins} phút trước. '
-                                                f'Chắc chắn TAN LÀM bây giờ?'})
+                    return _dev_resp({'ok': False, 'need_confirm': 'early', 'mins': mins,
+                                      'msg': f'Bạn mới VÀO LÀM {mins} phút trước. '
+                                             f'Chắc chắn TAN LÀM bây giờ?'})
             rec.check_out = now; rec.ip_out = ip; rec.device_out = device; rec.save()
             day_s, month_s = now.strftime('%Y-%m-%d'), now.strftime('%Y-%m')
             tc = _att_calc(rec, _att_cfg())  # công hôm nay
@@ -2328,8 +2355,8 @@ def cham_cong(request):
             sal = _ketoan_salary(u, day_s, month_s)
             if sal and 'error' not in sal:
                 payload['salary'] = sal
-            return JsonResponse(payload)
-        return JsonResponse({'ok': False, 'msg': 'Hành động không hợp lệ.'})
+            return _dev_resp(payload)
+        return _dev_resp({'ok': False, 'msg': 'Hành động không hợp lệ.'})
 
     today = Attendance.objects.filter(user=request.user.username,
                                       day=now.strftime('%Y-%m-%d')).first()
