@@ -335,6 +335,12 @@ def api_xu_ly_anh(request):
         color_limit = int(_pp.get('color_limit') or 0)
     api_min_area = int(_pp.get('min_area') or 0)
     api_smooth = int(_pp.get('smooth') or 0)
+    # CHÂN DUNG: lấy cờ detail + face_priority TỪ PRESET (giống hệt luồng nhân viên).
+    # Web bán hàng chỉ gửi preset 'photo' (ảnh thật) -> face_priority=True -> tự bật
+    # YuNet bắt mặt + lượng tử cục bộ chống chảy mặt + tự zoom vào người. Preset khác
+    # (vd anime) -> face_priority=False -> KHÔNG đụng (không zoom/refine nhầm).
+    api_detail = bool(_pp.get('detail'))
+    api_face_priority = bool(_pp.get('face_priority'))
 
     fss = FileSystemStorage()
     name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_api_{upload.name}'
@@ -343,12 +349,14 @@ def api_xu_ly_anh(request):
         name=name, status=ImageResult.STATUS_PROCESSING, user='api',
         params={'enhance': enhance, 'preset': preset_key, 'color_limit': color_limit,
                 'min_area': api_min_area, 'smooth': api_smooth,
+                'detail': api_detail, 'face_priority': api_face_priority,
                 'print_size': size_str, 'source': 'thiet-ke'})
 
     # Chạy NỀN (qua thread như luồng nhân viên) rồi trả id ngay — request chỉ
     # sống ~1-2s nên không dính timeout proxy/nginx/gunicorn nào (AI mất 20-150s).
     _img_executor.submit(process_image, rec.id, name, enhance, None, color_limit,
-                         api_min_area, api_smooth, ai_prompt, use_refs, print_long_cm)
+                         api_min_area, api_smooth, ai_prompt, use_refs, print_long_cm,
+                         api_detail, api_face_priority)
     _prune_image_results()
     return _cors(JsonResponse({'ok': True, 'status': 'processing', 'id': rec.id}))
 
