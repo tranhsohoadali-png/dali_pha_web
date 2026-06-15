@@ -147,12 +147,126 @@ def _haar_mask(rgb):
     return mask if mask.any() else None
 
 
-def detect_face_boxes(rgb):
-    """List (x,y,w,h) khuôn mặt trên ảnh RGB (toạ độ full-res). [] nếu không thấy/lỗi.
-    Dùng cho khâu LƯỢNG TỬ CỤC BỘ vùng mặt (giữ chi tiết mặt nhỏ trong ảnh rộng)."""
+# ---- YuNet (DNN) — dò mặt CHẮC hơn Haar rất nhiều (mặt nhỏ/nghiêng/che một phần)
+# + trả 5 ĐIỂM MỐC (2 mắt, mũi, 2 khoé miệng) -> khoanh ngũ quan CHÍNH XÁC.
+# NẠP 2 MODEL kèm repo: 2023mar (cho cv2 >= ~4.7) và 2022mar (cho cv2 4.5.x). MỖI bản
+# cv2 thường chỉ chạy được 1 trong 2 (bản kia ném lỗi DNN) -> THỬ LẦN LƯỢT rồi NHỚ bản
+# chạy được. cv2 quá cũ (không có FaceDetectorYN) / không bản nào chạy -> lùi Haar.
+_MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
+_YUNET_FILES = ('yunet_2023mar.onnx', 'yunet_2022mar.onnx')   # thử bản MỚI trước
+_YUNET_HAS = hasattr(cv2, 'FaceDetectorYN')
+_yunet_pick = {'done': False, 'path': None}     # cache bản chạy được (None = không có)
+
+
+def _m32(v):
+    """Làm tròn về bội số 32 GẦN NHẤT (YuNet bắt buộc cạnh ảnh chia hết 32)."""
+    return max(32, int(round(v / 32.0)) * 32)
+
+
+def _yunet_run(model_path, rgb, conf, long_side):
+    """Chạy 1 model YuNet trên ảnh RGB -> list dict {box,lms,score} full-res. Có thể
+    NÉM lỗi nếu model không hợp cv2 hiện tại (caller bắt để thử bản khác)."""
+    H, W = rgb.shape[:2]
+    sc = float(long_side) / max(H, W) if max(H, W) > long_side else 1.0
+    dw, dh = _m32(W * sc), _m32(H * sc)
+    bgr = cv2.cvtColor(cv2.resize(rgb, (dw, dh), interpolation=cv2.INTER_AREA),
+                       cv2.COLOR_RGB2BGR)
+    det = cv2.FaceDetectorYN.create(model_path, '', (dw, dh), conf, 0.3, 5000)
+    _rv, faces = det.detect(bgr)
+    if faces is None or len(faces) == 0:
+        return []
+    sx, sy = W / float(dw), H / float(dh)
+    out = []
+    for f in faces:
+        out.append({
+            'box': (int(f[0] * sx), int(f[1] * sy), int(f[2] * sx), int(f[3] * sy)),
+            'lms': (f[4:14].reshape(5, 2) * np.array([sx, sy], np.float32)),
+            'score': float(f[14])})
+    out.sort(key=lambda d: -d['box'][2] * d['box'][3])
+    return out[:4]
+
+
+def _yunet_faces(rgb, conf=0.7, long_side=800):
+    """Dò mặt bằng YuNet. Trả list dict {box:(x,y,w,h), lms:(5,2) float, score} full-res;
+    [] nếu không có model chạy được / không thấy / lỗi. Tạo detector MỚI mỗi lần (DNN cv2
+    KHÔNG an toàn đa luồng — VPS chạy 2 job song song)."""
+    if _OFF or not _YUNET_HAS or rgb is None or rgb.ndim != 3:
+        return []
+    try:
+        if _yunet_pick['done']:                       # đã biết bản chạy được
+            mp = _yunet_pick['path']
+            return _yunet_run(mp, rgb, conf, long_side) if mp else []
+        for name in _YUNET_FILES:                      # lần đầu: thử từng bản, nhớ lại
+            mp = os.path.join(_MODEL_DIR, name)
+            if not os.path.exists(mp):
+                continue
+            try:
+                res = _yunet_run(mp, rgb, conf, long_side)
+                _yunet_pick['path'], _yunet_pick['done'] = mp, True
+                return res
+            except Exception:
+                continue
+        _yunet_pick['path'], _yunet_pick['done'] = None, True   # không bản nào hợp
+        return []
+    except Exception:
+        return []
+
+
+def _landmark_mask(rgb, faces):
+    """Mask 0/255 NGŨ QUAN dựng từ 5 điểm mốc YuNet — chính xác hơn suy luận hình học.
+    Khoanh: 2 mắt, 2 lông mày, mũi (sống+cánh), miệng, và 2 TAI. Xoay theo độ nghiêng
+    đầu (góc đường nối 2 mắt) -> đúng cả mặt nghiêng. Bỏ qua mặt không có điểm mốc."""
+    H, W = rgb.shape[:2]
+    mask = np.zeros((H, W), np.uint8)
+
+    def ell(c, ax, ay, ang):
+        cv2.ellipse(mask, (int(c[0]), int(c[1])),
+                    (int(max(2, ax)), int(max(2, ay))), ang, 0, 360, 255, -1)
+
+    for fa in faces:
+        if fa.get('lms') is None:
+            continue
+        x, y, w, h = fa['box']
+        reye, leye, nose, rm, lmth = [fa['lms'][i] for i in range(5)]
+        ev = leye - reye
+        eye_d = float(np.hypot(ev[0], ev[1])) or (w * 0.4)
+        up = np.array([ev[1], -ev[0]], np.float32)
+        up = up / (np.hypot(up[0], up[1]) or 1.0)
+        ang = float(np.degrees(np.arctan2(ev[1], ev[0])))
+        emid = (reye + leye) / 2.0
+        # MẮT + LÔNG MÀY (lông mày = nới LÊN theo 'up')
+        ell(reye, eye_d * 0.34, eye_d * 0.24, ang)
+        ell(leye, eye_d * 0.34, eye_d * 0.24, ang)
+        ell(reye + up * eye_d * 0.42, eye_d * 0.36, eye_d * 0.18, ang)
+        ell(leye + up * eye_d * 0.42, eye_d * 0.36, eye_d * 0.18, ang)
+        # MŨI (từ giữa 2 mắt xuống chóp mũi + cánh mũi)
+        ell((emid + nose) / 2.0, eye_d * 0.30, eye_d * 0.55, ang)
+        ell(nose, eye_d * 0.28, eye_d * 0.24, ang)
+        # MIỆNG
+        mmid = (rm + lmth) / 2.0
+        mw = float(np.hypot((lmth - rm)[0], (lmth - rm)[1])) or eye_d * 0.8
+        ell(mmid, mw * 0.78, eye_d * 0.32, ang)
+        # TAI (xấp xỉ — YuNet không có điểm mốc tai): bbox CHỈ ôm sát mặt nên kéo tâm
+        # VÀO TRONG cho ellipse nằm trên mép mặt/chân tóc (đừng lấn nền). CHỈ vẽ khi
+        # mặt gần CHÍNH DIỆN (góc nghiêng nhỏ) — mặt nghiêng thì mép bbox là nền.
+        if abs(ang) < 18:
+            ey = int((reye[1] + leye[1]) / 2.0)
+            ell((x + w * 0.08, ey), w * 0.08, h * 0.14, 0)
+            ell((x + w * 0.92, ey), w * 0.08, h * 0.14, 0)
+    return mask if mask.any() else None
+
+
+def detect_faces(rgb):
+    """ĐIỂM VÀO DUY NHẤT dò mặt: YuNet (kèm 5 điểm mốc) -> lùi Haar (chỉ bbox). Trả
+    list dict {box:(x,y,w,h), lms:(5,2)|None, score}. [] nếu tắt/không thấy/lỗi.
+    Dò 1 LẦN rồi tái dùng cho cả: cắt vùng mặt (refine) VÀ mask bảo vệ ngũ quan."""
     try:
         if _OFF or rgb is None or rgb.ndim != 3:
             return []
+        yf = _yunet_faces(rgb)
+        if yf:
+            return yf
+        # Lùi Haar (không có điểm mốc) — vẫn đủ để cắt refine vùng mặt.
         H, W = rgb.shape[:2]
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         scale = 1.0
@@ -164,26 +278,52 @@ def detect_face_boxes(rgb):
         inv = 1.0 / scale
         boxes = [(int(x * inv), int(y * inv), int(w * inv), int(h * inv))
                  for (x, y, w, h) in faces]
-        # GIỚI HẠN số mặt: Haar dễ báo NHẦM trên ảnh nhiều texture (lá, vải, đám
-        # đông) -> mỗi bbox kéo theo 1 lần lượng tử cục bộ (nặng). Giữ tối đa 4 mặt
-        # TO nhất (khớp max_num_faces của mediapipe) -> chặn treo CPU trên VPS.
+        # GIỚI HẠN số mặt: Haar dễ báo NHẦM trên ảnh nhiều texture (lá, vải, đám đông)
+        # -> mỗi bbox kéo theo 1 lần lượng tử cục bộ (nặng). Giữ tối đa 4 mặt TO nhất.
         boxes.sort(key=lambda b: -b[2] * b[3])
-        return boxes[:4]
+        return [{'box': b, 'lms': None, 'score': 0.0} for b in boxes[:4]]
     except Exception:
         return []
 
 
-def feature_protect_mask(rgb):
-    """Mask 0/255 (HxW) bảo vệ ngũ quan của ảnh CHÂN DUNG. None nếu tắt / không
-    thấy mặt / lỗi. rgb: mảng uint8 HxWx3 (RGB)."""
+def detect_face_boxes(rgb):
+    """List (x,y,w,h) khuôn mặt full-res. [] nếu không thấy/lỗi. (Tiện ích mỏng quanh
+    detect_faces — giữ cho tương thích nơi chỉ cần bbox.)"""
+    return [f['box'] for f in detect_faces(rgb)]
+
+
+def scale_faces(faces, k):
+    """Nhân toạ độ bbox + điểm mốc theo hệ số k (vd 1x -> 2x cho ảnh thiết kế). lms
+    None thì giữ None. Dùng để tái dùng kết quả dò 1 lần cho ảnh ở độ phân giải khác."""
+    out = []
+    for f in faces:
+        x, y, w, h = f['box']
+        out.append({
+            'box': (int(x * k), int(y * k), int(w * k), int(h * k)),
+            'lms': (f['lms'] * k) if f.get('lms') is not None else None,
+            'score': f.get('score', 0.0)})
+    return out
+
+
+def feature_protect_mask(rgb, faces=None):
+    """Mask 0/255 (HxW) bảo vệ ngũ quan của ảnh CHÂN DUNG. None nếu tắt / không thấy
+    mặt / lỗi. faces: kết quả detect_faces ĐÃ DÒ SẴN (toạ độ KHỚP rgb này) -> KHỎI chạy
+    lại YuNet (dùng cho luồng đã dò 1 lần). rgb: mảng uint8 HxWx3 (RGB)."""
     if _OFF:
         return None
     try:
         if rgb is None or rgb.ndim != 3:
             return None
-        m = _mediapipe_mask(rgb)
+        m = _mediapipe_mask(rgb)                 # tốt nhất nếu CÀI mediapipe
+        if m is None and faces:                  # dùng điểm mốc ĐÃ DÒ -> khỏi chạy lại
+            if any(f.get('lms') is not None for f in faces):
+                m = _landmark_mask(rgb, faces)
         if m is None:
-            m = _haar_mask(rgb)
+            yf = _yunet_faces(rgb)               # chưa có -> tự dò DNN + điểm mốc
+            if yf:
+                m = _landmark_mask(rgb, yf)
+        if m is None:
+            m = _haar_mask(rgb)                  # lùi cuối: Haar + suy luận hình học
         if m is None or not m.any():
             return None
         # Nở nhẹ cho liền nét + chừa lề an toàn quanh ngũ quan.

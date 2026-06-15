@@ -310,16 +310,6 @@ def get_center_poly_from_contours(contours, hierarchy, range_img, img, debug=Fal
     return centers, dists
 
 
-import threading as _threading
-_tls = _threading.local()
-
-
-# YuNet: nhận diện mặt + 5 ĐIỂM MỐC (2 mắt, mũi, 2 khoé miệng) -> định vị ngũ quan
-# CHÍNH XÁC (tốt hơn Haar nhiều). Model nhỏ (~230KB) kèm trong repo. cv2 cũ (<4.8)
-# có thể không nạp được -> tự fallback sang Haar.
-_YUNET_PATH = os.path.join(os.path.dirname(__file__), 'models_data', 'yunet.onnx')
-
-
 def _remove_small_components(mask, min_area):
     """Xoá các đốm (connected component) nhỏ hơn min_area pixel khỏi mask 0/255."""
     if not min_area or min_area <= 0:
@@ -767,18 +757,20 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     W1, H1 = im.size
     sm_level = int(smooth) if (smooth and int(smooth) > 0) else 0
 
-    # CHÂN DUNG: chụp ảnh GỐC (trước mean-shift, còn sắc nét) + dò bbox mặt -> dùng
-    # cho khâu LƯỢNG TỬ CỤC BỘ vùng mặt (giữ chi tiết mặt nhỏ). Lỗi/không mặt -> bỏ.
-    im_pre, face_boxes = None, []
+    # CHÂN DUNG: chụp ảnh GỐC (trước mean-shift, còn sắc nét) + DÒ MẶT 1 LẦN (YuNet kèm
+    # điểm mốc) -> dùng cho khâu LƯỢNG TỬ CỤC BỘ vùng mặt (giữ chi tiết mặt nhỏ) VÀ tái
+    # dùng cho mask bảo vệ ngũ quan (khỏi chạy DNN lần 2). Lỗi/không mặt -> bỏ.
+    im_pre, face_boxes, faces1x = None, [], []
     if face_priority and not detail:
         try:
-            from pha.face_features import detect_face_boxes
+            from pha.face_features import detect_faces
             im_pre = np.array(im)
-            face_boxes = detect_face_boxes(im_pre)
+            faces1x = detect_faces(im_pre)
+            face_boxes = [f['box'] for f in faces1x]
             if not face_boxes:
                 im_pre = None
         except Exception:
-            im_pre, face_boxes = None, []
+            im_pre, face_boxes, faces1x = None, [], []
 
     # LUÔN lọc GIỮ-BIÊN (mean-shift) trước khi tách màu — KỂ CẢ smooth=0 (mức nền
     # nhẹ). Ảnh chụp THÔ (vd AI lỗi -> dùng ảnh gốc) đầy texture (sợi tóc, nếp vải)
@@ -812,8 +804,11 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     face_protect = None
     if face_priority and not detail:
         try:
-            from pha.face_features import feature_protect_mask
-            face_protect = feature_protect_mask(src2x)
+            from pha.face_features import feature_protect_mask, scale_faces
+            # Tái dùng kết quả dò ở im_pre (nhân s -> khớp src2x 2x) -> KHỎI chạy YuNet
+            # lần 2. Không có sẵn (dò trượt) -> để feature_protect_mask tự dò/lùi Haar.
+            pre = scale_faces(faces1x, s) if faces1x else None
+            face_protect = feature_protect_mask(src2x, faces=pre)
         except Exception:
             face_protect = None
 
