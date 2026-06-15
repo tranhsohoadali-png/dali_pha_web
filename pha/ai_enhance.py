@@ -157,10 +157,12 @@ PRESETS = {
         'use_refs': True, 'face_priority': True, 'prompt': _PROMPT_PHOTO,
     },
     'design': {
-        'label': 'Tranh thiết kế (đang phát triển)',
-        'desc': 'Ảnh thiết kế phẳng/vector sẵn -> chuẩn hoá nét + màu phẳng.',
-        'color_limit': 16, 'smooth': 0, 'min_area': 40, 'enhance': False,
-        'use_refs': False, 'face_priority': False, 'prompt': _PROMPT_DESIGN,
+        'label': 'Tranh thiết kế (chi tiết, số nhỏ)',
+        'desc': 'Ảnh thiết kế phẳng/vector sẵn -> chuẩn hoá nét + màu phẳng, ĐÁNH SỐ '
+                'CHI TIẾT như cây/hoa (giữ nhiều ô nhỏ, số bé, ít gộp mảng).',
+        'color_limit': 24, 'smooth': 0, 'min_area': 0, 'enhance': False,
+        'use_refs': False, 'face_priority': False, 'detail': True,
+        'prompt': _PROMPT_DESIGN,
     },
     'cayhoa': {
         'label': 'Cây / Hoa (chi tiết, số nhỏ)',
