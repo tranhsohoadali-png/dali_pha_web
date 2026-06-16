@@ -56,7 +56,7 @@ def create_image_color(color_mapping, hex_list, percentages=None):
 # Trần cứng (giây) cho TOÀN BỘ khâu tăng cường AI trong 1 job (mọi lần thử cộng
 # lại). Quá trần -> bỏ AI, xử lý ảnh gốc ngay. Phải NHỎ hơn nhiều so với thời
 # gian khách sẵn sàng đợi; Google quá tải là chuyện thường gặp.
-AI_BUDGET_S = 210
+AI_BUDGET_S = 300
 
 # Job kẹt PROCESSING quá lâu = tiến trình nền đã chết giữa chừng (hết RAM bị kill,
 # service restart giữa lúc chạy...) hoặc xếp hàng sau quá nhiều job -> coi như

@@ -21,7 +21,7 @@ AI_ENHANCE_MODEL = config("AI_ENHANCE_MODEL", default="gemini-2.5-flash-image")
 AI_TIMEOUT_MS = config("AI_TIMEOUT_MS", default=150000, cast=int)
 # Cạnh dài tối đa của ảnh gửi cho AI. Ảnh điện thoại 4000px làm Google xử lý
 # rất lâu -> hay 504 DEADLINE_EXCEEDED; model vẽ lại nên không cần ảnh gốc to.
-AI_MAX_EDGE = config("AI_MAX_EDGE", default=1536, cast=int)
+AI_MAX_EDGE = config("AI_MAX_EDGE", default=1280, cast=int)
 
 # Prompt mặc định: ĐƠN GIẢN HOÁ ảnh khách thành tranh tô màu (paint-by-numbers),
 # nhưng GIỮ NGUYÊN tuyệt đối chủ thể/bố cục (không được vẽ sang con/vật khác).
@@ -315,7 +315,7 @@ def enhance_image(input_path, output_path, prompt=None, reference_paths=None,
         # khi gọi lại ngay sau vài giây.
         import time as _time
         resp = None
-        for _attempt in (1, 2):
+        for _attempt in (1, 2, 3):
             try:
                 resp = client.models.generate_content(
                     model=AI_ENHANCE_MODEL,
@@ -324,10 +324,13 @@ def enhance_image(input_path, output_path, prompt=None, reference_paths=None,
                 break
             except Exception as e:  # noqa: PERF203
                 _msg = str(e)
+                # Lỗi TẠM của Google -> thử lại (gồm 500 INTERNAL hay gặp lúc Google
+                # quá tải ban ngày). Trần AI_BUDGET_S vẫn chặn tổng thời gian.
                 _transient = any(t in _msg for t in (
-                    '504', '503', 'DEADLINE', 'imeout', 'UNAVAILABLE', 'overloaded'))
-                if _attempt == 1 and _transient:
-                    _time.sleep(3)
+                    '500', 'INTERNAL', '503', '504', 'DEADLINE', 'imeout',
+                    'UNAVAILABLE', 'overloaded'))
+                if _attempt < 3 and _transient:
+                    _time.sleep(3 * _attempt)   # giãn 3s, 6s
                     continue
                 raise AIEnhanceError(f"Gọi Google AI thất bại: {e}") from e
     except AIEnhanceError:
