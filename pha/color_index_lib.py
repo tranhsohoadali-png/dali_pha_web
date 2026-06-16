@@ -1051,7 +1051,7 @@ def _ensure_n_colors(arr, ref, n):
 
 # Cỡ SỐ (px @1x) tối thiểu cho cảnh/hoa: ô không chứa nổi số NGANG cao bằng đây thì
 # GỘP vào hàng xóm -> bản đồ sạch, số to & đều. Tăng = số to/ít ô hơn; giảm = chi tiết hơn.
-_DETAIL_NUM_MIN_H = 12.0
+_DETAIL_NUM_MIN_H = 5.0
 
 
 def _merge_unnumberable(arr, min_h, s, max_pass=3):
