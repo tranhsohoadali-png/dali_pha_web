@@ -861,6 +861,11 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     # nét số khớp y biên thiết kế.
     arr = _smooth_fill(arr, iters=2)
 
+    if detail:
+        # HOA/CẢNH: gộp ô không đặt nổi SỐ NGANG vào hàng xóm (sau khi mượt biên) ->
+        # bản đồ SẠCH, số ngang to & đều. Có thể rớt vài màu hiếm (ưu tiên sạch).
+        arr = _merge_unnumberable(arr, _DETAIL_NUM_MIN_H, s)
+
     if design_out:
         try:
             Image.fromarray(arr).save(design_out)      # bản thiết kế 2x biên mượt
@@ -870,11 +875,9 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     work = Image.fromarray(arr)
     if s > 1.0:
         work = work.resize((W1, H1), Resampling.NEAREST)
-        if detail:
-            # HOA/CẢNH: NEAREST có thể rớt màu hiếm -> khôi phục đủ N màu ở bản 1x
-            # (để đánh số không bỏ sót màu nào -> bảng đúng N).
-            warr = _restore_missing_colors(np.array(work), arr)
-            work = Image.fromarray(warr)
+        # HOA/CẢNH: KHÔNG khôi phục màu hiếm bị NEAREST làm rớt — sau _merge_unnumberable
+        # các màu còn lại đều có vùng ĐỦ TO (sống sót khi thu nhỏ); khôi phục 1px chỉ tạo
+        # màu không đánh số được -> ô trống. Ưu tiên SẠCH (chấp nhận màu < N với ảnh khó).
     fd, out = tempfile.mkstemp(suffix='.png', prefix='quant_')
     os.close(fd)
     work.save(out)
@@ -1044,6 +1047,71 @@ def _ensure_n_colors(arr, ref, n):
             t = tuple(int(v) for v in pal[i]); g += 1
         seen.add(t)
     return pal[labels].reshape(H, W, 3)
+
+
+# Cỡ SỐ (px @1x) tối thiểu cho cảnh/hoa: ô không chứa nổi số NGANG cao bằng đây thì
+# GỘP vào hàng xóm -> bản đồ sạch, số to & đều. Tăng = số to/ít ô hơn; giảm = chi tiết hơn.
+_DETAIL_NUM_MIN_H = 12.0
+
+
+def _merge_unnumberable(arr, min_h, s, max_pass=3):
+    """HOA/CẢNH: GỘP ô KHÔNG đặt nổi số NGANG (vòng tròn nội tiếp quá nhỏ) vào hàng xóm
+    gần nhất -> bản đồ SẠCH (không ô trống), số NGANG to & đều. Tiêu chí: bán kính nội
+    tiếp (distanceTransform, KHỚP get_number_size) < nửa đường chéo số '88' cao min_h +
+    lề. ƯU TIÊN SẠCH: chấp nhận rớt màu nếu màu đó không còn ô nào đủ to. arr 2x."""
+    need = float(min_h) * float(s)                     # CAO số tối thiểu (2x)
+    gw0 = gh0 = need
+    sc = 0.05
+    while sc < 6.0:
+        (w0, h0), _b = cv2.getTextSize('88', cv2.FONT_HERSHEY_SIMPLEX, sc, 1)
+        if h0 >= need:
+            gw0, gh0 = float(w0), float(h0)
+            break
+        sc += 0.05
+    r_need = (gw0 * gw0 + gh0 * gh0) ** 0.5 / 2.0 + PADDING_CIRCLE   # bán kính nội tiếp cần
+    area_cap = (r_need * 4.0) ** 2                      # vùng to hơn nhiều -> chắc chắn được
+    k3 = np.ones((3, 3), np.uint8)
+    img = arr.copy()
+    H, W = img.shape[:2]
+    for _ in range(max_pass):
+        flat = img.reshape(-1, 3)
+        colors, inv = np.unique(flat, axis=0, return_inverse=True)
+        lbl = inv.reshape(H, W).astype(np.int32)
+        changed = False
+        for ci in range(len(colors)):
+            mask = (lbl == ci).astype(np.uint8)
+            if not mask.any():
+                continue
+            nc, comp, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
+            for k in range(1, nc):
+                if int(stats[k, cv2.CC_STAT_AREA]) >= area_cap:
+                    continue                           # vùng to -> chắc chắn đặt số được
+                x, y = int(stats[k, cv2.CC_STAT_LEFT]), int(stats[k, cv2.CC_STAT_TOP])
+                w, h = int(stats[k, cv2.CC_STAT_WIDTH]), int(stats[k, cv2.CC_STAT_HEIGHT])
+                sub = (comp[y:y + h, x:x + w] == k).astype(np.uint8)
+                # NỚI viền 1px nền (0) trước distanceTransform: ô ĐẶC lấp đầy bbox nếu
+                # không nới sẽ KHÔNG có pixel nền -> trả FLT_MAX (tưởng to vô hạn) -> ô
+                # nhỏ đặc KHÔNG bao giờ bị gộp (lỗi). Nới viền -> bán kính nội tiếp đúng.
+                subp = cv2.copyMakeBorder(sub, 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
+                rad = float(cv2.distanceTransform(subp, cv2.DIST_L2, 3).max())
+                if rad >= r_need:
+                    continue                           # đủ to cho số ngang -> GIỮ
+                x0, y0 = max(x - 1, 0), max(y - 1, 0)
+                x1, y1 = min(x + w + 1, W), min(y + h + 1, H)
+                sub2 = comp[y0:y1, x0:x1] == k
+                ring = (cv2.dilate(sub2.astype(np.uint8), k3) > 0) & (~sub2)
+                nb = lbl[y0:y1, x0:x1][ring]
+                nb = nb[(nb != ci) & (nb >= 0)]
+                if nb.size == 0:
+                    continue
+                nbc = int(np.bincount(nb).argmax())
+                yy, xx = np.where(sub2)
+                img[y0 + yy, x0 + xx] = colors[nbc]
+                lbl[y0 + yy, x0 + xx] = nbc
+                changed = True
+        if not changed:
+            break
+    return img
 
 
 def _restore_missing_colors(small, big):
@@ -1303,6 +1371,9 @@ def _number_work_image(work_path, design_out=None, debug=False,
                                  and float(render_scale) > 1.0) else 1.0
     # Cỡ số CHUẨN theo px trên ảnh 1x — nhân theo scale khi vẽ trên nền 2x.
     min_t, mean_t, max_t = MIN_TEXT_SIZE * rs, MEAN_TEXT_SIZE * rs, MAX_TEXT_SIZE * rs
+    # HOA/CẢNH: SÀN cỡ số = _DETAIL_NUM_MIN_H (không vẽ số nhỏ hơn; ô không đủ đã được
+    # _merge_unnumberable gộp vào hàng xóm ở khâu dựng ảnh) -> số to & đều, bản đồ sạch.
+    num_min_t = (_DETAIL_NUM_MIN_H * rs) if keep_all else min_t
 
     if rs > 1.0:
         big_rgb = np.ascontiguousarray(render_arr)
@@ -1341,28 +1412,14 @@ def _number_work_image(work_path, design_out=None, debug=False,
             d = d * 2 * rs
             draw = get_draw_number(img_white, (int(c[0] * rs), int(c[1] * rs)), d,
                                    f'{len(color_mapping) + 1}',
-                                   debug=debug, min_t=min_t, mean_t=mean_t, max_t=max_t)
+                                   debug=debug, min_t=num_min_t, mean_t=mean_t, max_t=max_t)
             if draw is not None:
                 count_number += 1
                 draws.append(draw)
-        if count_number == 0 and keep_all and len(centers):
-            # HOA/CẢNH: màu HIẾM không có ô đủ to -> ÉP đặt số lên vùng LỚN NHẤT (min_t=1)
-            # để màu vẫn vào bảng + có chỗ trên bản đồ ("cài bao nhiêu ra bấy nhiêu").
-            bi = max(range(len(dists)), key=lambda i: dists[i])
-            cc = centers[bi]
-            num = f'{len(color_mapping) + 1}'
-            ctr = (int(cc[0] * rs), int(cc[1] * rs))
-            draw = get_draw_number(img_white, ctr, dists[bi] * 2 * rs, num,
-                                   debug=debug, min_t=1, mean_t=mean_t, max_t=max_t)
-            if draw is None:
-                # vùng quá nhỏ cho cả số bé nhất -> ÉP số cỡ nhỏ (bỏ ràng buộc vòng tròn)
-                # để màu hiếm VẪN có dấu trên bản đồ (khớp bảng màu, không lệch số).
-                sc = max(0.3, float(min_t) / 22.0)
-                ts = get_text_size(num, sc, 1)
-                draw = (ts, ctr, None, num, (ctr[0] - ts[0] // 2, ctr[1] + ts[1] // 2), sc, 1)
-            draws.append(draw)
-            count_number = 1
-        if count_number > 0 or keep_all:
+        # HOA/CẢNH: KHÔNG ép số tí hon nữa. Ô không đủ chỗ cho số >= sàn đã được
+        # _merge_unnumberable gộp vào hàng xóm ở khâu dựng ảnh -> ở đây mọi ô đều đủ to.
+        # Màu nào (hiếm) không còn ô đánh số được -> BỎ khỏi bảng (ưu tiên SẠCH).
+        if count_number > 0:
             color_mapping.append(color)
             color_counts.append(count)
         color_idx += 1
