@@ -815,7 +815,6 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     # face_mask: chân dung -> ép pixel ngũ quan vào mẫu chọn bảng màu (mắt/môi/mũi
     # chắc chắn có cụm màu riêng, không bị nuốt ngay ở bước k-means).
     arr = _quantize_rarity(src2x, k=target, face_mask=face_protect)
-    del src2x
     if detail:
         # CHI TIẾT (cây/hoa): giữ NHIỀU ô nhỏ (cánh hoa/lá) -> nhiều số nhỏ. Chỉ dọn
         # bụi/đốm gần-trùng-màu, KHÔNG gộp theo trần (feature_cap vô hạn), bán kính
@@ -826,7 +825,12 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         arr = _smooth_labels_voting(arr, sigma=1.3 * s, protect=feat)
         arr, _ = _merge_keep_features(arr, r_keep=1.3 * s, de_keep=6.0, max_pass=1,
                                       feature_cap=10 ** 7)
+        # HOA/CẢNH: ÉP ĐỦ 'target' màu ("cài bao nhiêu ra bấy nhiêu") — ảnh ít màu thì
+        # TÁCH màu nhiều-pixel/biến-thiên cao thành sắc gần nhau (dựa MÀU GỐC src2x).
+        arr = _ensure_n_colors(arr, src2x, target)
+        del src2x
     else:
+        del src2x
         r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s
         arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=18.0,
                                          min_area=int(min_area * s * s), max_pass=4,
@@ -866,6 +870,11 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     work = Image.fromarray(arr)
     if s > 1.0:
         work = work.resize((W1, H1), Resampling.NEAREST)
+        if detail:
+            # HOA/CẢNH: NEAREST có thể rớt màu hiếm -> khôi phục đủ N màu ở bản 1x
+            # (để đánh số không bỏ sót màu nào -> bảng đúng N).
+            warr = _restore_missing_colors(np.array(work), arr)
+            work = Image.fromarray(warr)
     fd, out = tempfile.mkstemp(suffix='.png', prefix='quant_')
     os.close(fd)
     work.save(out)
@@ -967,6 +976,112 @@ def _reduce_palette_perceptual(img_rgb, target_n, protect_mask=None):
     # Tái tạo bằng inv (đã có từ np.unique) -> O(N) vector, tránh vòng O(K*N) trên
     # ảnh 2x lớn (khâu này nằm trong luồng chân dung, cần nhanh).
     return rep_of[inv.reshape(-1)].reshape(img_rgb.shape)
+
+
+def _ensure_n_colors(arr, ref, n):
+    """ÉP ảnh về ĐÚNG n màu (Hoa/Cảnh: 'cài bao nhiêu ra bấy nhiêu'):
+    - nhiều hơn n  -> gộp gần nhau (perceptual) về n;
+    - ít hơn n     -> TÁCH dần nhãn nhiều-pixel & BIẾN THIÊN cao thành 2 sắc (k-means
+      trên MÀU GỐC 'ref' tại các pixel đó -> sắc con CÓ THẬT, không bịa) tới đủ n.
+    ref: ảnh gốc cùng kích thước arr (để tách theo biến thiên màu thật)."""
+    H, W = arr.shape[:2]
+    flat = arr.reshape(-1, 3)
+    colors, inv = np.unique(flat, axis=0, return_inverse=True)
+    cur = len(colors)
+    if cur == n:
+        return arr
+    if cur > n:
+        return _reduce_palette_perceptual(arr, n)
+    rflat = ref.reshape(-1, 3)                         # GIỮ uint8 (không copy float toàn ảnh)
+    labels = inv.reshape(-1).astype(np.int32)
+    palette = [c.astype(np.float32) for c in colors]
+    crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 12, 1.0)
+    guard = 0
+    while len(palette) < n and guard < n * 4:
+        guard += 1
+        sizes = np.bincount(labels, minlength=len(palette))
+        cand = np.argsort(-sizes)[:8]                  # 8 nhãn TO nhất làm ứng viên tách
+        best, best_var, best_idx, best_seg = -1, -1.0, None, None
+        for li in cand:
+            if sizes[li] < 4:
+                continue
+            idx = np.where(labels == li)[0]
+            seg = rflat[idx].astype(np.float32)        # CHỈ chuyển float phần nhỏ này
+            if len(np.unique(seg, axis=0)) < 2:        # không đủ 2 sắc khác -> bỏ qua
+                continue
+            var = float(seg.var(axis=0).sum())
+            if var > best_var:
+                best_var, best, best_idx, best_seg = var, int(li), idx, seg
+        if best < 0:
+            break                                      # không nhãn nào tách được nữa
+        _, lab2, cen2 = cv2.kmeans(best_seg, 2, None, crit, 3, cv2.KMEANS_PP_CENTERS)
+        lab2 = lab2.reshape(-1)
+        if not lab2.any() or lab2.all():               # k-means dồn 1 cụm -> bỏ, thử vòng sau
+            continue
+        palette[best] = cen2[0]
+        labels[best_idx[lab2 == 1]] = len(palette)
+        palette.append(cen2[1])
+    pal = np.clip(np.rint(np.array(palette)), 0, 255).astype(np.uint8)
+    # ẢNH GẦN ĐẶC (không tách nổi nữa) mà vẫn thiếu -> BÙ: nhân bản màu lớn nhất, gán nửa
+    # số pixel sang màu mới (nhích sắc) -> đủ n màu CÓ pixel ("cài bao nhiêu ra bấy nhiêu").
+    while len(pal) < n:
+        big = int(np.bincount(labels, minlength=len(pal)).argmax())
+        idxb = np.where(labels == big)[0]
+        newc = pal[big].astype(np.int32).copy()
+        newc[0] = (newc[0] + 5 + 3 * len(pal)) % 256
+        pal = np.vstack([pal, newc.astype(np.uint8)])
+        if idxb.size >= 2:
+            labels[idxb[: idxb.size // 2]] = len(pal) - 1
+        else:
+            break
+    # ĐẢM BẢO n màu KHÁC NHAU (làm tròn có thể cho 2 màu trùng) -> nhích kênh R cho khác.
+    seen = set()
+    for i in range(len(pal)):
+        t = tuple(int(v) for v in pal[i])
+        g = 0
+        while t in seen and g < 64:
+            pal[i, 0] = np.uint8((int(pal[i, 0]) + 1) % 256)
+            t = tuple(int(v) for v in pal[i]); g += 1
+        seen.add(t)
+    return pal[labels].reshape(H, W, 3)
+
+
+def _restore_missing_colors(small, big):
+    """Đảm bảo MỌI màu trong 'big' (ảnh 2x) đều có mặt ở 'small' (ảnh 1x NEAREST) —
+    màu HIẾM (vùng nhỏ/rải) có thể RỚT khi thu nhỏ NEAREST. Với mỗi màu thiếu: đặt 1
+    pixel ở vị trí 1x ứng với 1 pixel THẬT của màu đó trong big. Sửa 'small' TẠI CHỖ.
+    (Cho Hoa/Cảnh: giữ đủ N màu để khâu đánh số không bỏ sót màu nào.)"""
+    Hs, Ws = small.shape[:2]
+    Hb, Wb = big.shape[:2]
+    bcol, binv = np.unique(big.reshape(-1, 3), axis=0, return_inverse=True)
+    binv = binv.reshape(-1)
+    sset = set(map(tuple, np.unique(small.reshape(-1, 3), axis=0)))
+    for ci in range(len(bcol)):
+        if tuple(int(v) for v in bcol[ci]) in sset:
+            continue
+        idx = np.where(binv == ci)[0]
+        if idx.size == 0:
+            continue
+        p = int(idx[idx.size // 2])                    # 1 pixel THẬT của màu này trong big
+        by, bx = divmod(p, Wb)
+        sy = min(Hs - 1, max(0, by * Hs // Hb))
+        sx = min(Ws - 1, max(0, bx * Ws // Wb))
+        small[sy, sx] = bcol[ci]
+    return small
+
+
+def _sort_colors_by_tone(pairs):
+    """Sắp [(rgb, count), ...] theo NHÓM TÔNG cho dễ tô/pha: màu SẮC (chromatic) xếp
+    theo vòng hue (đỏ->cam->vàng->lục->lam->tím), rồi ĐEN/XÁM/TRẮNG (achromatic, độ
+    bão hoà thấp) xếp theo độ sáng ở CUỐI. Trả list đã sắp (giữ nguyên phần tử)."""
+    def _key(p):
+        r, g, b = p[0]
+        hsv = cv2.cvtColor(np.uint8([[[r, g, b]]]), cv2.COLOR_RGB2HSV)[0, 0]
+        h, s, v = int(hsv[0]), int(hsv[1]), int(hsv[2])
+        if s < 40:                                    # đen/xám/trắng -> nhóm cuối, theo sáng
+            return (1, 0, v)
+        return (0, h, 255 - v)                         # chromatic: theo hue; cùng hue sáng trước
+    return sorted(pairs, key=_key)
 
 
 def _snap_to_design_palette(img_rgb):
@@ -1155,7 +1270,7 @@ def _smooth_fill(arr, iters=2):
 
 
 def _number_work_image(work_path, design_out=None, debug=False,
-                       render_arr=None, render_scale=1.0):
+                       render_arr=None, render_scale=1.0, keep_all=False):
     """ĐÁNH SỐ + đếm % trên 1 ảnh LÀM VIỆC đã chuẩn bị — đây là phần index_color GỐC
     (extract màu -> contour từng màu -> polylabel -> vẽ số). design_out: lưu ảnh work
     (bản màu phẳng) để xem trước. Xoá file work tạm khi xong.
@@ -1171,10 +1286,18 @@ def _number_work_image(work_path, design_out=None, debug=False,
             shutil.copyfile(work_path, design_out)   # bản màu phẳng để xem trước
         except OSError:
             pass
-    colors, pixel_count = extract_colors(work_path)
-    colors = list(colors)
-
     img = load_image(work_path, debug=debug)
+    if keep_all:
+        # HOA/CẢNH: bảng màu = TẤT CẢ màu trong ảnh (đúng N), KHÔNG lọc bỏ màu nhỏ;
+        # SẮP theo nhóm tông (đỏ->tím, rồi đen/xám/trắng) cho dễ tô/pha.
+        _rgb0 = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).reshape(-1, 3)
+        _uniq, _cnts = np.unique(_rgb0, axis=0, return_counts=True)
+        colors = _sort_colors_by_tone([((int(c[0]), int(c[1]), int(c[2])), int(n))
+                                       for c, n in zip(_uniq, _cnts)])
+        pixel_count = int(_rgb0.shape[0])
+    else:
+        colors, pixel_count = extract_colors(work_path)
+        colors = list(colors)
 
     rs = float(render_scale) if (render_arr is not None and render_scale
                                  and float(render_scale) > 1.0) else 1.0
@@ -1222,7 +1345,24 @@ def _number_work_image(work_path, design_out=None, debug=False,
             if draw is not None:
                 count_number += 1
                 draws.append(draw)
-        if count_number > 0:
+        if count_number == 0 and keep_all and len(centers):
+            # HOA/CẢNH: màu HIẾM không có ô đủ to -> ÉP đặt số lên vùng LỚN NHẤT (min_t=1)
+            # để màu vẫn vào bảng + có chỗ trên bản đồ ("cài bao nhiêu ra bấy nhiêu").
+            bi = max(range(len(dists)), key=lambda i: dists[i])
+            cc = centers[bi]
+            num = f'{len(color_mapping) + 1}'
+            ctr = (int(cc[0] * rs), int(cc[1] * rs))
+            draw = get_draw_number(img_white, ctr, dists[bi] * 2 * rs, num,
+                                   debug=debug, min_t=1, mean_t=mean_t, max_t=max_t)
+            if draw is None:
+                # vùng quá nhỏ cho cả số bé nhất -> ÉP số cỡ nhỏ (bỏ ràng buộc vòng tròn)
+                # để màu hiếm VẪN có dấu trên bản đồ (khớp bảng màu, không lệch số).
+                sc = max(0.3, float(min_t) / 22.0)
+                ts = get_text_size(num, sc, 1)
+                draw = (ts, ctr, None, num, (ctr[0] - ts[0] // 2, ctr[1] + ts[1] // 2), sc, 1)
+            draws.append(draw)
+            count_number = 1
+        if count_number > 0 or keep_all:
             color_mapping.append(color)
             color_counts.append(count)
         color_idx += 1
@@ -1277,7 +1417,7 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
                                          design_out=design_out, detail=detail,
                                          face_priority=face_priority)
     return _number_work_image(work_path, design_out=None, debug=debug,
-                              render_arr=arr2x, render_scale=s)
+                              render_arr=arr2x, render_scale=s, keep_all=detail)
 
 
 def index_color_flat(path, min_area=0, design_out=None):
