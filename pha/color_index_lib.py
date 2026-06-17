@@ -1049,6 +1049,40 @@ def _ensure_n_colors(arr, ref, n):
     return pal[labels].reshape(H, W, 3)
 
 
+def _num_fit_v(w, h, num, min_h, mean_h):
+    """Cỡ font LỚN NHẤT để xếp SỐ DỌC (mỗi chữ số 1 dòng, chồng lên nhau) vừa khung
+    rộng w × cao h (cùng đơn vị px). Trả scale, hoặc None nếu không vừa (chữ < min_h).
+    Dùng cho ô CAO-HẸP: số ngang không vừa nhưng xếp dọc thì được (yêu cầu user)."""
+    n = len(num)
+    best = None
+    sc = 0.05
+    while sc < 6.0:
+        (dw, dh), _b = cv2.getTextSize('8', cv2.FONT_HERSHEY_SIMPLEX, sc, 1)
+        gap = max(1, int(dh * 0.18))
+        if dw > w * 0.82 or (n * dh + (n - 1) * gap) > h * 0.82:
+            break
+        best = (sc, dh)
+        if dh >= mean_h:
+            break
+        sc += 0.05
+    if best is None or best[1] < min_h:
+        return None
+    return best[0]
+
+
+def _draw_stacked_num(img, center, num, scale, thickness=1):
+    """Vẽ SỐ DỌC: từng chữ số 1 dòng, xếp chồng dọc, căn giữa tại 'center' (EDGE_COLOR).
+    Vd '21' -> '2' trên, '1' dưới — vừa ô cao-hẹp (như hình user vẽ)."""
+    (dw, dh), base = cv2.getTextSize('8', cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)
+    gap = max(1, int(dh * 0.18))
+    n = len(num)
+    top = int(center[1] - (n * dh + (n - 1) * gap) / 2.0)
+    for i, ch in enumerate(num):
+        (cw, _h), _b = cv2.getTextSize(ch, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)
+        cv2.putText(img, ch, (int(center[0] - cw / 2.0), top + i * (dh + gap) + dh),
+                    cv2.FONT_HERSHEY_SIMPLEX, scale, EDGE_COLOR, thickness, cv2.LINE_AA)
+
+
 # Cỡ SỐ (px @1x) tối thiểu cho cảnh/hoa: ô không chứa nổi số NGANG cao bằng đây thì
 # GỘP vào hàng xóm -> bản đồ sạch, số to & đều. Tăng = số to/ít ô hơn; giảm = chi tiết hơn.
 _DETAIL_NUM_MIN_H = 4.0
@@ -1069,7 +1103,7 @@ def _merge_unnumberable(arr, min_h, s, max_pass=3):
             break
         sc += 0.05
     r_need = (gw0 * gw0 + gh0 * gh0) ** 0.5 / 2.0 + PADDING_CIRCLE   # bán kính nội tiếp cần
-    area_cap = (r_need * 4.0) ** 2                      # vùng to hơn nhiều -> chắc chắn được
+    mean_2x = MEAN_TEXT_SIZE * float(s)
     k3 = np.ones((3, 3), np.uint8)
     img = arr.copy()
     H, W = img.shape[:2]
@@ -1084,18 +1118,21 @@ def _merge_unnumberable(arr, min_h, s, max_pass=3):
                 continue
             nc, comp, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
             for k in range(1, nc):
-                if int(stats[k, cv2.CC_STAT_AREA]) >= area_cap:
-                    continue                           # vùng to -> chắc chắn đặt số được
                 x, y = int(stats[k, cv2.CC_STAT_LEFT]), int(stats[k, cv2.CC_STAT_TOP])
                 w, h = int(stats[k, cv2.CC_STAT_WIDTH]), int(stats[k, cv2.CC_STAT_HEIGHT])
+                # KHÔNG dùng bbox để 'đoán to' (vệt CONG dài-mỏng có bbox lớn cả 2 chiều
+                # nhưng MỎNG khắp -> bán kính nội tiếp nhỏ). Luôn đo bán kính nội tiếp THẬT.
                 sub = (comp[y:y + h, x:x + w] == k).astype(np.uint8)
                 # NỚI viền 1px nền (0) trước distanceTransform: ô ĐẶC lấp đầy bbox nếu
                 # không nới sẽ KHÔNG có pixel nền -> trả FLT_MAX (tưởng to vô hạn) -> ô
                 # nhỏ đặc KHÔNG bao giờ bị gộp (lỗi). Nới viền -> bán kính nội tiếp đúng.
                 subp = cv2.copyMakeBorder(sub, 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
                 rad = float(cv2.distanceTransform(subp, cv2.DIST_L2, 3).max())
-                if rad >= r_need:
-                    continue                           # đủ to cho số ngang -> GIỮ
+                if rad >= r_need * 1.15:               # biên 1.15 bù làm tròn -> numbering khớp 100%
+                    continue                           # đủ to cho số NGANG -> GIỮ
+                # ô CAO-HẸP: số ngang không vừa nhưng xếp SỐ DỌC thì được -> GIỮ (không gộp)
+                if h > w * 1.15 and _num_fit_v(w, h, '88', need * 1.15, mean_2x) is not None:
+                    continue
                 x0, y0 = max(x - 1, 0), max(y - 1, 0)
                 x1, y1 = min(x + w + 1, W), min(y + h + 1, H)
                 sub2 = comp[y0:y1, x0:x1] == k
@@ -1337,6 +1374,42 @@ def _smooth_fill(arr, iters=2):
     return out
 
 
+def _place_detail_numbers(img_white, mask, num_str, draws, rs):
+    """HOA/CẢNH: đánh số TỪNG ô (connected component) — KHÔNG để sót:
+      1) thử SỐ NGANG (vừa vòng tròn nội tiếp);
+      2) không vừa + ô CAO-HẸP -> SỐ DỌC (xếp chồng chữ số) như user yêu cầu.
+    mask + img_white CÙNG ĐỘ PHÂN GIẢI (bản 2x = ĐÚNG vùng _merge_unnumberable đã quyết)
+    -> ô nào merge GIỮ thì ở đây CHẮC CHẮN đặt được số (không lệch 2x<->1x) -> 0 ô trống.
+    Cỡ số tính ở độ phân giải mask (mn/me/mx = hằng số · rs). Trả số ô đã đặt số."""
+    nc, comp, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
+    placed = 0
+    mn, me, mx = _DETAIL_NUM_MIN_H * rs, MEAN_TEXT_SIZE * rs, MAX_TEXT_SIZE * rs
+    for k in range(1, nc):
+        if int(stats[k, cv2.CC_STAT_AREA]) < 4:
+            continue
+        x, y = int(stats[k, cv2.CC_STAT_LEFT]), int(stats[k, cv2.CC_STAT_TOP])
+        w, h = int(stats[k, cv2.CC_STAT_WIDTH]), int(stats[k, cv2.CC_STAT_HEIGHT])
+        subp = cv2.copyMakeBorder((comp[y:y + h, x:x + w] == k).astype(np.uint8),
+                                  1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
+        dt = cv2.distanceTransform(subp, cv2.DIST_L2, 3)
+        ly, lx = np.unravel_index(int(dt.argmax()), dt.shape)
+        rad = float(dt[ly, lx])
+        ctr = (x + int(lx) - 1, y + int(ly) - 1)       # toạ độ Ở ĐỘ PHÂN GIẢI mask (= img_white)
+        draw = get_draw_number(img_white, ctr, rad * 2, num_str,
+                               min_t=mn, mean_t=me, max_t=mx)          # 1) SỐ NGANG
+        if draw is not None:
+            draws.append(draw)
+            placed += 1
+            continue
+        if h > w * 1.15:                                                # 2) SỐ DỌC (ô cao-hẹp)
+            scv = _num_fit_v(w, h, num_str, mn, me)
+            if scv is not None:
+                draws.append({'stack': True, 'c': ctr, 'num': num_str, 'scale': scv})
+                placed += 1
+                continue
+    return placed
+
+
 def _number_work_image(work_path, design_out=None, debug=False,
                        render_arr=None, render_scale=1.0, keep_all=False):
     """ĐÁNH SỐ + đếm % trên 1 ảnh LÀM VIỆC đã chuẩn bị — đây là phần index_color GỐC
@@ -1371,9 +1444,6 @@ def _number_work_image(work_path, design_out=None, debug=False,
                                  and float(render_scale) > 1.0) else 1.0
     # Cỡ số CHUẨN theo px trên ảnh 1x — nhân theo scale khi vẽ trên nền 2x.
     min_t, mean_t, max_t = MIN_TEXT_SIZE * rs, MEAN_TEXT_SIZE * rs, MAX_TEXT_SIZE * rs
-    # HOA/CẢNH: SÀN cỡ số = _DETAIL_NUM_MIN_H (không vẽ số nhỏ hơn; ô không đủ đã được
-    # _merge_unnumberable gộp vào hàng xóm ở khâu dựng ảnh) -> số to & đều, bản đồ sạch.
-    num_min_t = (_DETAIL_NUM_MIN_H * rs) if keep_all else min_t
 
     if rs > 1.0:
         big_rgb = np.ascontiguousarray(render_arr)
@@ -1406,18 +1476,25 @@ def _number_work_image(work_path, design_out=None, debug=False,
         else:
             _draw_smooth_contours(img_white, contours)
 
-        centers, dists = get_center_poly_from_contours(contours, hierarchy, range_img, np.array(img), debug=debug)
-        count_number = 0
-        for c, d in zip(centers, dists):
-            d = d * 2 * rs
-            draw = get_draw_number(img_white, (int(c[0] * rs), int(c[1] * rs)), d,
-                                   f'{len(color_mapping) + 1}',
-                                   debug=debug, min_t=num_min_t, mean_t=mean_t, max_t=max_t)
-            if draw is not None:
-                count_number += 1
-                draws.append(draw)
-        # HOA/CẢNH: KHÔNG ép số tí hon nữa. Ô không đủ chỗ cho số >= sàn đã được
-        # _merge_unnumberable gộp vào hàng xóm ở khâu dựng ảnh -> ở đây mọi ô đều đủ to.
+        if keep_all:
+            # HOA/CẢNH: đánh số trên MASK ở ĐỘ PHÂN GIẢI thiết kế (2x nếu có = ĐÚNG vùng
+            # _merge_unnumberable đã quyết) -> số NGANG, không vừa thì SỐ DỌC (ô cao-hẹp);
+            # ô không kiểu nào vừa đã bị gộp -> KHÔNG để sót ô (khớp 100% merge).
+            num_src = big_rgb if (rs > 1.0 and big_rgb is not None) else img_rgb
+            cmask = cv2.inRange(num_src, color, color)
+            count_number = _place_detail_numbers(img_white, cmask,
+                                                 f'{len(color_mapping) + 1}', draws, rs)
+        else:
+            centers, dists = get_center_poly_from_contours(contours, hierarchy, range_img, np.array(img), debug=debug)
+            count_number = 0
+            for c, d in zip(centers, dists):
+                d = d * 2 * rs
+                draw = get_draw_number(img_white, (int(c[0] * rs), int(c[1] * rs)), d,
+                                       f'{len(color_mapping) + 1}',
+                                       debug=debug, min_t=num_min_t, mean_t=mean_t, max_t=max_t)
+                if draw is not None:
+                    count_number += 1
+                    draws.append(draw)
         # Màu nào (hiếm) không còn ô đánh số được -> BỎ khỏi bảng (ưu tiên SẠCH).
         if count_number > 0:
             color_mapping.append(color)
@@ -1432,8 +1509,11 @@ def _number_work_image(work_path, design_out=None, debug=False,
     img_white = 255 - img_white
     img_white = cv2.cvtColor(img_white, cv2.COLOR_GRAY2RGB)
 
-    for text_size, center, radis, number, text_origin, scale, thickness in draws:
-        # print(f"Drawing number {number} at center {center} with radius {radis} and text origin {text_origin}")
+    for d in draws:
+        if isinstance(d, dict) and d.get('stack'):        # SỐ DỌC (Hoa/Cảnh, ô cao-hẹp)
+            _draw_stacked_num(img_white, d['c'], d['num'], d['scale'])
+            continue
+        text_size, center, radis, number, text_origin, scale, thickness = d
         if radis is not None:
             cv2.circle(img_white, center, radis, EDGE_COLOR, 1)
         cv2.putText(img_white, number, text_origin, cv2.FONT_HERSHEY_SIMPLEX, scale, EDGE_COLOR, thickness, cv2.LINE_AA)
