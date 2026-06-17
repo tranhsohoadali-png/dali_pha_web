@@ -20,6 +20,11 @@ except ImportError:
         return _polylabel(ring, with_distance=True)
 
 EDGE_COLOR = (0, 0, 0)
+# NÉT số (bề dày): cv2.putText chỉ nhận nét NGUYÊN >=1px. Để nét MẢNH dưới-1px (vd mỏng
+# hơn 20% = 0.8) -> render số phóng to _NUM_STROKE_SS lần (nét round(ss·frac)) rồi thu nhỏ
+# INTER_AREA -> nét hữu hiệu = frac px. Tăng frac = nét đậm; giảm = mảnh hơn (1.0 = 1px gốc).
+_NUM_STROKE_FRAC = 0.8
+_NUM_STROKE_SS = 5
 MAX_CIRCLE_RADIUS = config("MAX_CIRCLE_RADIUS", default=10, cast=int)
 # Cỡ số (px) trên ảnh làm việc — CHUẨN (số TO, tỉ lệ theo vùng, KHÔNG theo cm):
 #  - MIN: số nhỏ hơn cỡ này -> BỎ số (vùng quá bé, không lọt số).
@@ -186,6 +191,38 @@ def get_draw_number(img: np.ndarray, center: Tuple[int, int], max_size: float, n
         # cv2.circle(img, center, radis, EDGE_COLOR, 1)
     # cv2.putText(img, number, text_origin, cv2.FONT_HERSHEY_SIMPLEX, scale, EDGE_COLOR, thickness, cv2.LINE_AA)
     return text_size, center, radis, number, text_origin, scale, thickness
+
+
+def _puttext_thin(img, number, text_origin, scale, frac=_NUM_STROKE_FRAC, ss=_NUM_STROKE_SS):
+    """Vẽ SỐ (màu EDGE_COLOR) với nét hữu hiệu 'frac' px (vd 0.8 = mỏng hơn 20%). cv2.putText
+    chỉ nhận nét NGUYÊN >=1 nên: render số PHÓNG TO ss lần với nét round(ss·frac), thu nhỏ
+    INTER_AREA -> nét mảnh dưới-1px (xám AA), rồi alpha-blend vào img -> mượt, không vỡ.
+    text_origin = đáy-trái chữ (y hệt cv2.putText gốc)."""
+    if frac >= 0.999:                                    # 1.0 -> dùng putText thường (nhanh)
+        cv2.putText(img, number, text_origin, cv2.FONT_HERSHEY_SIMPLEX, scale, EDGE_COLOR, 1, cv2.LINE_AA)
+        return
+    (gw, gh), base = cv2.getTextSize(number, cv2.FONT_HERSHEY_SIMPLEX, scale, 1)
+    if gw <= 0 or gh <= 0:
+        return
+    th = max(1, int(round(ss * frac)))
+    pad = ss                                             # = 1px sau khi thu nhỏ -> chừa AA
+    cw, chh = gw * ss + 2 * pad, (gh + base) * ss + 2 * pad
+    canvas = np.zeros((chh, cw), np.uint8)
+    cv2.putText(canvas, number, (pad, gh * ss + pad), cv2.FONT_HERSHEY_SIMPLEX,
+                scale * ss, 255, th, cv2.LINE_AA)
+    small = cv2.resize(canvas, (cw // ss, chh // ss), interpolation=cv2.INTER_AREA)
+    sh, sw = small.shape
+    H, W = img.shape[:2]
+    x0, y0 = int(text_origin[0]) - pad // ss, int(text_origin[1]) - (gh + pad // ss)
+    xa0, ya0 = max(0, x0), max(0, y0)
+    xa1, ya1 = min(W, x0 + sw), min(H, y0 + sh)
+    if xa1 <= xa0 or ya1 <= ya0:
+        return
+    a = small[ya0 - y0:ya1 - y0, xa0 - x0:xa1 - x0].astype(np.float32) / 255.0
+    edge = np.array(EDGE_COLOR, np.float32)
+    reg = img[ya0:ya1, xa0:xa1].astype(np.float32)
+    reg = reg * (1.0 - a)[:, :, None] + edge[None, None, :] * a[:, :, None]
+    img[ya0:ya1, xa0:xa1] = np.clip(reg, 0, 255).astype(np.uint8)
 
 
 def _filter_color(colors: List, pixel_count: int):
@@ -1472,7 +1509,7 @@ def _number_work_image(work_path, design_out=None, debug=False,
         # print(f"Drawing number {number} at center {center} with radius {radis} and text origin {text_origin}")
         if radis is not None:
             cv2.circle(img_white, center, radis, EDGE_COLOR, 1)
-        cv2.putText(img_white, number, text_origin, cv2.FONT_HERSHEY_SIMPLEX, scale, EDGE_COLOR, thickness, cv2.LINE_AA)
+        _puttext_thin(img_white, number, text_origin, scale)   # nét mảnh _NUM_STROKE_FRAC px
 
     color_mapping = [(i + 1, c) for i, c in enumerate(color_mapping)]
     total_count = sum(color_counts) if color_counts else 0
