@@ -1056,9 +1056,13 @@ _DETAIL_NUM_MIN_H = 3.0
 # CHÉO cho to; nghiêng HƠN (ô cao-hẹp ~đứng) -> KHÔNG xoay (tránh số nằm ngả khó đọc),
 # ô đó nếu số NGANG cũng không vừa thì GỘP vào hàng xóm. 0 = tắt hẳn số chéo (chỉ ngang).
 _DETAIL_NUM_MAX_ANG = 55.0
+# Lề an toàn (px @1x) chừa giữa SỐ và biên ô: đường biên VẼ ra (Chaikin làm mượt + thinning)
+# lệch ~1-2px khỏi mask vùng -> số sát mask vẫn có thể chạm nét vẽ. Tăng = số cách biên xa
+# hơn (chắc không đè) nhưng nhỏ hơn; giảm = số to hơn nhưng dễ sát biên.
+_DETAIL_NUM_SAFETY = 0.8
 
 
-def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99):
+def _merge_unnumberable(arr, min_h, s, max_pass=12, n_colors=99):
     """HOA/CẢNH: GỘP ô KHÔNG đặt nổi số (NGANG lẫn CHÉO) vào hàng xóm gần nhất -> bản đồ
     SẠCH (không ô trống), số to & đều. Tiêu chí GIỮ: đặt được nhãn RỘNG NHẤT (n_colors
     chữ số) cao >= min_h mà KHÔNG đè biên — thử NGANG (vòng tròn nội tiếp, nhanh) rồi CHÉO
@@ -1074,7 +1078,12 @@ def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99):
             gw0, gh0 = float(w0), float(h0)
             break
         sc += 0.05
-    r_need = (gw0 * gw0 + gh0 * gh0) ** 0.5 / 2.0 + PADDING_CIRCLE   # bán kính nội tiếp cần
+    # Bán kính nội tiếp đủ cho số NGANG KÈM LỀ an toàn (KHỚP footprint _fit_number dùng):
+    # số rộng nhất 'worst' cao 'need' + lề m mỗi chiều -> nửa đường chéo + lề erode/làm tròn.
+    m_safe = 2.0 + 2.0 * (_DETAIL_NUM_SAFETY * float(s))
+    r_need = ((gw0 + m_safe) ** 2 + (gh0 + m_safe) ** 2) ** 0.5 / 2.0 + PADDING_CIRCLE + 1.0
+    r_fast = r_need + 4.0   # fast-path GIỮ chỉ khi rõ ràng dư (vòng tròn nội tiếp ~ footprint
+    #                         ở ô CONG lệch ~1-2px) -> ô sát ngưỡng để _best_placement quyết
     k3 = np.ones((3, 3), np.uint8)
     img = arr.copy()
     H, W = img.shape[:2]
@@ -1082,6 +1091,7 @@ def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99):
         flat = img.reshape(-1, 3)
         colors, inv = np.unique(flat, axis=0, return_inverse=True)
         lbl = inv.reshape(H, W).astype(np.int32)
+        area_all = np.bincount(lbl.reshape(-1), minlength=len(colors))   # diện tích từng màu
         changed = False
         for ci in range(len(colors)):
             mask = (lbl == ci).astype(np.uint8)
@@ -1100,13 +1110,13 @@ def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99):
                 # nhỏ đặc KHÔNG bao giờ bị gộp (lỗi). Nới viền -> bán kính nội tiếp đúng.
                 subp = cv2.copyMakeBorder(sub, 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
                 rad = float(cv2.distanceTransform(subp, cv2.DIST_L2, 3).max())
-                if rad >= r_need * 1.3:                # rõ ràng đủ cho số NGANG -> GIỮ (nhanh)
+                if rad >= r_fast:                     # rõ ràng dư cho số NGANG kèm lề -> GIỮ (nhanh)
                     continue
                 # ô nhỏ / dài-mỏng: dùng CHÍNH _best_placement (NGANG hoặc CHÉO, đo footprint)
                 # y như khâu đánh số -> khớp 100%. Đặt nổi số cao >= need mà KHÔNG đè biên -> GIỮ;
                 # không kiểu nào vừa -> GỘP (vào hàng xóm bên dưới).
                 er = cv2.erode(sub, k3, iterations=1)
-                if er.any() and _best_placement(er, worst, need, need) is not None:
+                if er.any() and _best_placement(er, worst, need, need, _DETAIL_NUM_SAFETY * s) is not None:
                     continue
                 x0, y0 = max(x - 1, 0), max(y - 1, 0)
                 x1, y1 = min(x + w + 1, W), min(y + h + 1, H)
@@ -1116,7 +1126,11 @@ def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99):
                 nb = nb[(nb != ci) & (nb >= 0)]
                 if nb.size == 0:
                     continue
-                nbc = int(np.bincount(nb).argmax())
+                # GỘP vào màu hàng xóm có DIỆN TÍCH LỚN NHẤT (nền ổn định) thay vì màu chung
+                # biên nhiều nhất -> 2 sliver nhỏ khác màu KHÔNG gộp qua-lại lẫn nhau (dao động,
+                # không hội tụ -> sót ô). Sliver luôn tan vào vùng to -> hội tụ, sạch.
+                unb = np.unique(nb)
+                nbc = int(unb[int(np.argmax(area_all[unb]))])
                 yy, xx = np.where(sub2)
                 img[y0 + yy, x0 + xx] = colors[nbc]
                 lbl[y0 + yy, x0 + xx] = nbc
@@ -1370,25 +1384,33 @@ def _draw_rot_num(img, center, num, scale, ang, thickness=1):
     img[ya0:ya1, xa0:xa1][patch > 110] = EDGE_COLOR
 
 
-def _fit_number(er, num, ang, min_h, max_h):
+def _fit_number(er, num, ang, min_h, max_h, safety=0.0):
     """Cỡ font LỚN NHẤT để SỐ (xoay 'ang') nằm GỌN trong vùng 'er' (uint8 đã erode lề)
     -> KHÔNG đè biên. Tâm = đỉnh distanceTransform (sâu nhất). Trả (scale, cx, cy, gh)
-    hoặc None nếu không vừa số cao >= min_h. Dừng sớm khi gh >= max_h (đỡ tốn)."""
-    dt = cv2.distanceTransform(er, cv2.DIST_L2, 3)
+    hoặc None nếu không vừa số cao >= min_h. Dừng sớm khi gh >= max_h (đỡ tốn).
+    safety: lề (px) chừa thêm quanh số (bù đường biên VẼ Chaikin/thinning lệch ~1-2px).
+
+    QUAN TRỌNG: NỚI VIỀN 0 quanh 'er' rộng hơn nửa footprint trước khi rasterize —
+    nếu không, fillConvexPoly CẮT footprint theo mép crop (bbox ô) -> phần số LÒI ra
+    ngoài ô bị cắt mất -> check tưởng vừa -> số to đè sang ô bên (bug 'đè biên')."""
+    pad = int(max_h * 1.6) + 8                       # >= nửa footprint số to nhất (kể cả xoay)
+    erp = cv2.copyMakeBorder(er, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0)
+    dt = cv2.distanceTransform(erp, cv2.DIST_L2, 3)
     if float(dt.max()) < 1.0:
         return None
-    Hc, Wc = er.shape
+    Hc, Wc = erp.shape
     cyx = np.unravel_index(int(dt.argmax()), dt.shape)
-    cx, cy = float(cyx[1]), float(cyx[0])
+    cx, cy = float(cyx[1]), float(cyx[0])             # toạ độ trong ảnh ĐÃ nới viền
+    m = 2.0 + 2.0 * float(safety)                     # lề quanh số (cách biên ô)
     best, sc = None, 0.1
     while sc < 6.0:
         (gw, gh), base = cv2.getTextSize(num, cv2.FONT_HERSHEY_SIMPLEX, sc, 1)
-        rect = cv2.boxPoints(((cx, cy), (gw + 2.0, gh + base + 2.0), -float(ang)))
+        rect = cv2.boxPoints(((cx, cy), (gw + m, gh + base + m), -float(ang)))
         fp = np.zeros((Hc, Wc), np.uint8)
         cv2.fillConvexPoly(fp, np.round(rect).astype(np.int32), 1)
-        if np.any((fp > 0) & (er == 0)):           # số LÒI ra ngoài vùng -> ĐÈ BIÊN -> dừng
+        if np.any((fp > 0) & (erp == 0)):            # số (kèm lề) LÒI ra ngoài vùng -> dừng
             break
-        best = (sc, int(cx), int(cy), gh)
+        best = (sc, int(cx - pad), int(cy - pad), gh)  # trả về toạ độ crop GỐC (bỏ pad)
         if gh >= max_h:
             break
         sc += 0.15
@@ -1413,14 +1435,14 @@ def _principal_angle(er):
     return ((ang + 90.0) % 180.0) - 90.0            # chuẩn hoá -90..90 (số không lộn ngược)
 
 
-def _best_placement(er, num, min_h, max_h):
+def _best_placement(er, num, min_h, max_h, safety=0.0):
     """Đặt số TO NHẤT mà KHÔNG đè biên: thử NGANG (ang=0) + CHÉO (trục dài). Ưu tiên NGANG;
     chỉ dùng CHÉO khi to hơn rõ (>20%). Trả (scale, cx, cy, ang) hoặc None."""
-    fh = _fit_number(er, num, 0.0, min_h, max_h)
+    fh = _fit_number(er, num, 0.0, min_h, max_h, safety)
     ang = _principal_angle(er)
     # chỉ CHÉO khi góc trong khoảng [8, MAX_ANG]: nghiêng nhẹ (đẹp) -> chéo; gần đứng
     # (ô cao-hẹp) -> bỏ chéo (tránh số nằm ngả khó đọc) -> để khâu gộp xử lý.
-    fd = _fit_number(er, num, ang, min_h, max_h) if 8.0 < abs(ang) <= _DETAIL_NUM_MAX_ANG else None
+    fd = _fit_number(er, num, ang, min_h, max_h, safety) if 8.0 < abs(ang) <= _DETAIL_NUM_MAX_ANG else None
     if fh and fd:
         return (fd[0], fd[1], fd[2], ang) if fd[3] > fh[3] * 1.2 else (fh[0], fh[1], fh[2], 0.0)
     if fh:
@@ -1447,7 +1469,7 @@ def _place_detail_numbers(img_white, mask, num_str, draws, rs):
         er = cv2.erode((comp[y:y + h, x:x + w] == k).astype(np.uint8), k3, iterations=1)
         if not er.any():
             continue
-        bp = _best_placement(er, num_str, mn, me)
+        bp = _best_placement(er, num_str, mn, me, _DETAIL_NUM_SAFETY * rs)
         if bp is None:
             continue
         sc, lx, ly, ang = bp
