@@ -1052,14 +1052,18 @@ def _ensure_n_colors(arr, ref, n):
 # Cỡ SỐ (px @1x) tối thiểu cho cảnh/hoa: ô không chứa nổi số NGANG cao bằng đây thì
 # GỘP vào hàng xóm -> bản đồ sạch, số to & đều. Tăng = số to/ít ô hơn; giảm = chi tiết hơn.
 _DETAIL_NUM_MIN_H = 3.0
+# Góc xoay TỐI ĐA cho số CHÉO (độ): ô dài-mỏng theo trục nghiêng <= góc này thì đánh số
+# CHÉO cho to; nghiêng HƠN (ô cao-hẹp ~đứng) -> KHÔNG xoay (tránh số nằm ngả khó đọc),
+# ô đó nếu số NGANG cũng không vừa thì GỘP vào hàng xóm. 0 = tắt hẳn số chéo (chỉ ngang).
+_DETAIL_NUM_MAX_ANG = 55.0
 
 
 def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99):
-    """HOA/CẢNH: GỘP ô KHÔNG đặt nổi số NGANG (vòng tròn nội tiếp quá nhỏ) vào hàng xóm
-    gần nhất -> bản đồ SẠCH (không ô trống), số NGANG to & đều. Tiêu chí: bán kính nội
-    tiếp (distanceTransform, KHỚP get_number_size) < nửa đường chéo SỐ RỘNG NHẤT có thể
-    (n_colors chữ số) cao min_h + lề. ƯU TIÊN SẠCH: chấp nhận rớt màu nếu màu đó không
-    còn ô nào đủ to. arr 2x. n_colors: số màu tối đa -> số chữ số worst-case của nhãn."""
+    """HOA/CẢNH: GỘP ô KHÔNG đặt nổi số (NGANG lẫn CHÉO) vào hàng xóm gần nhất -> bản đồ
+    SẠCH (không ô trống), số to & đều. Tiêu chí GIỮ: đặt được nhãn RỘNG NHẤT (n_colors
+    chữ số) cao >= min_h mà KHÔNG đè biên — thử NGANG (vòng tròn nội tiếp, nhanh) rồi CHÉO
+    (_best_placement, đo footprint, KHỚP 100% khâu đánh số). ƯU TIÊN SẠCH: chấp nhận rớt
+    màu nếu màu đó không còn ô nào đủ to. arr 2x. n_colors: số màu tối đa -> số chữ số."""
     need = float(min_h) * float(s)                     # CAO số tối thiểu (2x)
     worst = '9' * max(1, len(str(int(max(2, n_colors)))))   # nhãn RỘNG NHẤT (vd 24 màu -> '99')
     gw0 = gh0 = need
@@ -1096,8 +1100,14 @@ def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99):
                 # nhỏ đặc KHÔNG bao giờ bị gộp (lỗi). Nới viền -> bán kính nội tiếp đúng.
                 subp = cv2.copyMakeBorder(sub, 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
                 rad = float(cv2.distanceTransform(subp, cv2.DIST_L2, 3).max())
-                if rad >= r_need * 1.15:               # biên 1.15 bù làm tròn -> khớp 100% khâu đánh số
-                    continue                           # đủ to cho số ngang -> GIỮ
+                if rad >= r_need * 1.3:                # rõ ràng đủ cho số NGANG -> GIỮ (nhanh)
+                    continue
+                # ô nhỏ / dài-mỏng: dùng CHÍNH _best_placement (NGANG hoặc CHÉO, đo footprint)
+                # y như khâu đánh số -> khớp 100%. Đặt nổi số cao >= need mà KHÔNG đè biên -> GIỮ;
+                # không kiểu nào vừa -> GỘP (vào hàng xóm bên dưới).
+                er = cv2.erode(sub, k3, iterations=1)
+                if er.any() and _best_placement(er, worst, need, need) is not None:
+                    continue
                 x0, y0 = max(x - 1, 0), max(y - 1, 0)
                 x1, y1 = min(x + w + 1, W), min(y + h + 1, H)
                 sub2 = comp[y0:y1, x0:x1] == k
@@ -1339,29 +1349,110 @@ def _smooth_fill(arr, iters=2):
     return out
 
 
+def _draw_rot_num(img, center, num, scale, ang, thickness=1):
+    """Vẽ SỐ (xoay 'ang' độ; ang=0 = NGANG) căn giữa tại 'center' lên ảnh RGB (EDGE_COLOR)
+    — render chữ lên canvas nhỏ rồi warpAffine -> ghép vào. Dùng cho số ngang LẪN chéo."""
+    (gw, gh), base = cv2.getTextSize(num, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)
+    pad = max(2, thickness + 2)
+    cw, chh = gw + 2 * pad, gh + base + 2 * pad
+    canvas = np.zeros((chh, cw), np.uint8)
+    cv2.putText(canvas, num, (pad, gh + pad), cv2.FONT_HERSHEY_SIMPLEX, scale, 255,
+                thickness, cv2.LINE_AA)
+    if abs(ang) > 0.5:
+        M = cv2.getRotationMatrix2D((cw / 2.0, chh / 2.0), ang, 1.0)
+        canvas = cv2.warpAffine(canvas, M, (cw, chh), flags=cv2.INTER_LINEAR)
+    H, W = img.shape[:2]
+    x0, y0 = int(center[0] - cw / 2.0), int(center[1] - chh / 2.0)
+    xa0, ya0, xa1, ya1 = max(0, x0), max(0, y0), min(W, x0 + cw), min(H, y0 + chh)
+    if xa1 <= xa0 or ya1 <= ya0:
+        return
+    patch = canvas[ya0 - y0:ya1 - y0, xa0 - x0:xa1 - x0]
+    img[ya0:ya1, xa0:xa1][patch > 110] = EDGE_COLOR
+
+
+def _fit_number(er, num, ang, min_h, max_h):
+    """Cỡ font LỚN NHẤT để SỐ (xoay 'ang') nằm GỌN trong vùng 'er' (uint8 đã erode lề)
+    -> KHÔNG đè biên. Tâm = đỉnh distanceTransform (sâu nhất). Trả (scale, cx, cy, gh)
+    hoặc None nếu không vừa số cao >= min_h. Dừng sớm khi gh >= max_h (đỡ tốn)."""
+    dt = cv2.distanceTransform(er, cv2.DIST_L2, 3)
+    if float(dt.max()) < 1.0:
+        return None
+    Hc, Wc = er.shape
+    cyx = np.unravel_index(int(dt.argmax()), dt.shape)
+    cx, cy = float(cyx[1]), float(cyx[0])
+    best, sc = None, 0.1
+    while sc < 6.0:
+        (gw, gh), base = cv2.getTextSize(num, cv2.FONT_HERSHEY_SIMPLEX, sc, 1)
+        rect = cv2.boxPoints(((cx, cy), (gw + 2.0, gh + base + 2.0), -float(ang)))
+        fp = np.zeros((Hc, Wc), np.uint8)
+        cv2.fillConvexPoly(fp, np.round(rect).astype(np.int32), 1)
+        if np.any((fp > 0) & (er == 0)):           # số LÒI ra ngoài vùng -> ĐÈ BIÊN -> dừng
+            break
+        best = (sc, int(cx), int(cy), gh)
+        if gh >= max_h:
+            break
+        sc += 0.15
+    if best is None or best[3] < min_h:
+        return None
+    return best
+
+
+def _principal_angle(er):
+    """Góc trục DÀI của vùng (độ, -90..90). 0 nếu gần tròn/vuông (-> số NGANG)."""
+    cnts, _ = cv2.findContours(er, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return 0.0
+    c = max(cnts, key=cv2.contourArea)
+    if len(c) < 5:
+        return 0.0
+    (_, _), (rw, rh), a = cv2.minAreaRect(c)
+    L, S = max(rw, rh), min(rw, rh)
+    if S <= 0 or L / S < 1.4:                       # gần tròn/vuông -> NGANG
+        return 0.0
+    ang = a if rw >= rh else a + 90.0               # góc cạnh DÀI
+    return ((ang + 90.0) % 180.0) - 90.0            # chuẩn hoá -90..90 (số không lộn ngược)
+
+
+def _best_placement(er, num, min_h, max_h):
+    """Đặt số TO NHẤT mà KHÔNG đè biên: thử NGANG (ang=0) + CHÉO (trục dài). Ưu tiên NGANG;
+    chỉ dùng CHÉO khi to hơn rõ (>20%). Trả (scale, cx, cy, ang) hoặc None."""
+    fh = _fit_number(er, num, 0.0, min_h, max_h)
+    ang = _principal_angle(er)
+    # chỉ CHÉO khi góc trong khoảng [8, MAX_ANG]: nghiêng nhẹ (đẹp) -> chéo; gần đứng
+    # (ô cao-hẹp) -> bỏ chéo (tránh số nằm ngả khó đọc) -> để khâu gộp xử lý.
+    fd = _fit_number(er, num, ang, min_h, max_h) if 8.0 < abs(ang) <= _DETAIL_NUM_MAX_ANG else None
+    if fh and fd:
+        return (fd[0], fd[1], fd[2], ang) if fd[3] > fh[3] * 1.2 else (fh[0], fh[1], fh[2], 0.0)
+    if fh:
+        return (fh[0], fh[1], fh[2], 0.0)
+    if fd:
+        return (fd[0], fd[1], fd[2], ang)
+    return None
+
+
 def _place_detail_numbers(img_white, mask, num_str, draws, rs):
-    """HOA/CẢNH: đánh SỐ NGANG từng ô (connected component) của 'mask' — KHÔNG để sót.
-    mask + img_white CÙNG ĐỘ PHÂN GIẢI (bản 2x = ĐÚNG vùng _merge_unnumberable đã quyết)
-    -> ô nào merge GIỮ thì ở đây CHẮC CHẮN đặt được số (không lệch 2x<->1x) -> 0 ô trống.
-    Cỡ số tính ở độ phân giải mask (hằng số · rs). Trả số ô đã đặt số."""
+    """HOA/CẢNH: đánh số TỪNG ô (connected component) của 'mask' — số TO NHẤT có thể,
+    NGANG hoặc CHÉO (theo trục dài ô), KHÔNG đè biên. mask + img_white CÙNG ĐỘ PHÂN GIẢI
+    (= vùng _merge_unnumberable đã quyết) -> ô giữ thì chắc chắn đặt được -> 0 ô trống.
+    Trả số ô đã đặt số. (draws: dict {rot,c,num,scale,ang}.)"""
     nc, comp, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
     placed = 0
-    mn, me, mx = _DETAIL_NUM_MIN_H * rs, MEAN_TEXT_SIZE * rs, MAX_TEXT_SIZE * rs
+    mn, me = _DETAIL_NUM_MIN_H * rs, MEAN_TEXT_SIZE * rs
+    k3 = np.ones((3, 3), np.uint8)
     for k in range(1, nc):
         if int(stats[k, cv2.CC_STAT_AREA]) < 4:
             continue
         x, y = int(stats[k, cv2.CC_STAT_LEFT]), int(stats[k, cv2.CC_STAT_TOP])
         w, h = int(stats[k, cv2.CC_STAT_WIDTH]), int(stats[k, cv2.CC_STAT_HEIGHT])
-        subp = cv2.copyMakeBorder((comp[y:y + h, x:x + w] == k).astype(np.uint8),
-                                  1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
-        dt = cv2.distanceTransform(subp, cv2.DIST_L2, 3)
-        ly, lx = np.unravel_index(int(dt.argmax()), dt.shape)
-        ctr = (x + int(lx) - 1, y + int(ly) - 1)       # toạ độ ở ĐỘ PHÂN GIẢI mask (= img_white)
-        draw = get_draw_number(img_white, ctr, float(dt[ly, lx]) * 2, num_str,
-                               min_t=mn, mean_t=me, max_t=mx)
-        if draw is not None:
-            draws.append(draw)
-            placed += 1
+        er = cv2.erode((comp[y:y + h, x:x + w] == k).astype(np.uint8), k3, iterations=1)
+        if not er.any():
+            continue
+        bp = _best_placement(er, num_str, mn, me)
+        if bp is None:
+            continue
+        sc, lx, ly, ang = bp
+        draws.append({'rot': True, 'c': (x + lx, y + ly), 'num': num_str, 'scale': sc, 'ang': ang})
+        placed += 1
     return placed
 
 
@@ -1468,8 +1559,11 @@ def _number_work_image(work_path, design_out=None, debug=False,
     img_white = 255 - img_white
     img_white = cv2.cvtColor(img_white, cv2.COLOR_GRAY2RGB)
 
-    for text_size, center, radis, number, text_origin, scale, thickness in draws:
-        # print(f"Drawing number {number} at center {center} with radius {radis} and text origin {text_origin}")
+    for d in draws:
+        if isinstance(d, dict):                         # HOA/CẢNH: số NGANG hoặc CHÉO (căn giữa)
+            _draw_rot_num(img_white, d['c'], d['num'], d['scale'], d['ang'])
+            continue
+        text_size, center, radis, number, text_origin, scale, thickness = d
         if radis is not None:
             cv2.circle(img_white, center, radis, EDGE_COLOR, 1)
         cv2.putText(img_white, number, text_origin, cv2.FONT_HERSHEY_SIMPLEX, scale, EDGE_COLOR, thickness, cv2.LINE_AA)
