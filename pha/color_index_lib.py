@@ -40,6 +40,12 @@ WORK_MAX_SIDE = config("WORK_MAX_SIDE", default=1400, cast=int)
 # Ảnh THIẾT KẾ được xử lý ở 2x (ngũ quan nhỏ như mắt/mũi có gấp 4 diện tích -> giữ
 # nét như Illustrator trace), nhưng không vượt cạnh dài này (giới hạn thời gian/RAM).
 DESIGN_MAX_SIDE = config("DESIGN_MAX_SIDE", default=2800, cast=int)
+# CHẾ ĐỘ CHI TIẾT (Cây/Hoa, Tranh thiết kế): xử lý ở ĐỘ PHÂN GIẢI CAO HƠN -> biên mịn
+# hơn, bắt nét nhỏ (vd mặt người) tốt hơn. CHỈ áp cho nhánh detail (ảnh thật/đơn giản
+# giữ 1400/2800 -> không chậm oan). VPS 8GB: 2400/4800 ~1.3GB/job, 2 job ~2.6GB (dư).
+# Đổi 2 số này nhớ chỉnh _DETAIL_NUM_MIN_H theo (số tính bằng work-px, res cao -> số bé đi).
+_DETAIL_WORK_MAX = config("DETAIL_WORK_MAX", default=2400, cast=int)
+_DETAIL_DESIGN_MAX = config("DETAIL_DESIGN_MAX", default=4800, cast=int)
 GREEN = (0, 255, 0)
 BLUE = (255, 0, 0)
 PADDING_CIRCLE = config("PADDING_CIRCLE", default=1, cast=int)
@@ -786,10 +792,14 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     import os
     import tempfile
     im = Image.open(path).convert('RGB')
+    # CHI TIẾT (detail): dùng độ phân giải CAO hơn (2400/4800) -> biên mịn + bắt nét nhỏ;
+    # nhánh khác (ảnh thật/đơn giản) giữ 1400/2800 cho nhanh. (Truyền sẵn qua cờ 'detail'.)
+    wmax = _DETAIL_WORK_MAX if detail else WORK_MAX_SIDE
+    dmax = _DETAIL_DESIGN_MAX if detail else DESIGN_MAX_SIDE
     # Thu nhỏ ảnh làm việc -> đánh số nhanh, tránh treo/quá thời gian chờ trên ảnh lớn.
-    if WORK_MAX_SIDE and max(im.size) > WORK_MAX_SIDE:
+    if wmax and max(im.size) > wmax:
         im = im.copy()
-        im.thumbnail((WORK_MAX_SIDE, WORK_MAX_SIDE), Resampling.LANCZOS)
+        im.thumbnail((wmax, wmax), Resampling.LANCZOS)
     target = max(2, n)
     W1, H1 = im.size
     sm_level = int(smooth) if (smooth and int(smooth) > 0) else 0
@@ -830,8 +840,8 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
 
     # Xử lý ở 2x (giới hạn DESIGN_MAX_SIDE) -> mắt/mũi/môi có 4x diện tích, giữ nét.
     s = 1.0
-    if DESIGN_MAX_SIDE:
-        s = max(1.0, min(2.0, DESIGN_MAX_SIDE / float(max(W1, H1))))
+    if dmax:
+        s = max(1.0, min(2.0, dmax / float(max(W1, H1))))
     im2 = im.resize((int(W1 * s), int(H1 * s)), Resampling.LANCZOS) if s > 1.0 else im
 
     # CHÂN DUNG (face_priority): dò NGŨ QUAN trên chính ảnh 2x -> mask bảo vệ mắt/
@@ -1088,7 +1098,9 @@ def _ensure_n_colors(arr, ref, n):
 
 # Cỡ SỐ (px @1x) tối thiểu cho cảnh/hoa: ô không chứa nổi số NGANG cao bằng đây thì
 # GỘP vào hàng xóm -> bản đồ sạch, số to & đều. Tăng = số to/ít ô hơn; giảm = chi tiết hơn.
-_DETAIL_NUM_MIN_H = 3.0
+# Tính theo WORK-px nên PHỤ THUỘC _DETAIL_WORK_MAX: ở work 2400 + khổ in 50cm, 5px ≈ 1.0mm
+# (~bằng 3px@1400 cũ). Đổi _DETAIL_WORK_MAX nhớ chỉnh số này để giữ cỡ số vật lý mong muốn.
+_DETAIL_NUM_MIN_H = 5.0
 
 
 def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99):
