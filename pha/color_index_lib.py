@@ -1122,6 +1122,18 @@ def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99):
             break
         sc += 0.05
     r_need = (gw0 * gw0 + gh0 * gh0) ** 0.5 / 2.0 + PADDING_CIRCLE   # bán kính nội tiếp cần
+    # Bán kính TỐI THIỂU để còn nhét nổi số BÉ NHẤT (MIN_TEXT_SIZE): dùng cho LỖ KÍN
+    # (counter / lỗ trong chữ-logo) -> giữ lỗ tới cỡ này (số rất nhỏ) thay vì GỘP lấp lỗ.
+    need_f = float(MIN_TEXT_SIZE) * float(s)
+    gwf = ghf = need_f
+    scf = 0.05
+    while scf < 6.0:
+        (wf, hf), _bf = cv2.getTextSize(worst, cv2.FONT_HERSHEY_SIMPLEX, scf, 1)
+        if hf >= need_f:
+            gwf, ghf = float(wf), float(hf)
+            break
+        scf += 0.05
+    r_floor = (gwf * gwf + ghf * ghf) ** 0.5 / 2.0 + PADDING_CIRCLE
     k3 = np.ones((3, 3), np.uint8)
     img = arr.copy()
     H, W = img.shape[:2]
@@ -1156,6 +1168,12 @@ def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99):
                 nb = lbl[y0:y1, x0:x1][ring]
                 nb = nb[(nb != ci) & (nb >= 0)]
                 if nb.size == 0:
+                    continue
+                # LỖ KÍN (counter / lỗ trong chữ-logo): ô bao quanh bởi DUY NHẤT 1 màu ->
+                # KHÔNG gộp (gộp = lấp lỗ -> hỏng thiết kế chữ/logo). Giữ nguyên màu, để khâu
+                # đánh số đặt số NHỎ, miễn còn nhét nổi số bé nhất (rad >= r_floor). Quá bé
+                # (không số nổi) -> vẫn gộp. (Ô giữa 2+ màu = vệt/sliver -> gộp như cũ.)
+                if np.unique(nb).size == 1 and rad >= r_floor:
                     continue
                 nbc = int(np.bincount(nb).argmax())
                 yy, xx = np.where(sub2)
@@ -1397,7 +1415,10 @@ def _place_detail_numbers(img_white, mask, num_str, draws, rs):
     Cỡ số tính ở độ phân giải mask (hằng số · rs). Trả số ô đã đặt số."""
     nc, comp, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
     placed = 0
-    mn, me, mx = _DETAIL_NUM_MIN_H * rs, MEAN_TEXT_SIZE * rs, MAX_TEXT_SIZE * rs
+    # SÀN số = MIN_TEXT_SIZE (không phải _DETAIL_NUM_MIN_H): _merge_unnumberable đã GỘP hết ô
+    # nhỏ KHÔNG-phải-lỗ-kín; cái còn sót dưới _DETAIL_NUM_MIN_H chỉ là LỖ KÍN (counter) cố ý
+    # GIỮ -> cần cho số NHỎ ở đây. Ô thường vẫn ra số to (lớn dần tới mean), không bị bé đi.
+    mn, me, mx = MIN_TEXT_SIZE * rs, MEAN_TEXT_SIZE * rs, MAX_TEXT_SIZE * rs
     for k in range(1, nc):
         if int(stats[k, cv2.CC_STAT_AREA]) < 4:
             continue
