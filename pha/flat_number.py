@@ -13,6 +13,7 @@ Là API thuần nên KHÔNG phụ thuộc build_ctx của views.py (tách hẳn)
 mới đặt module riêng vì views.py hay bị sửa song song.
 """
 import os
+import uuid
 from datetime import datetime
 
 from django.conf import settings
@@ -75,8 +76,9 @@ def xu_ly_anh_phang(request):
 
     upload = request.FILES['image']
     fss = FileSystemStorage()
-    name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_{upload.name}'
-    fss.save(name, upload)
+    # uuid + lấy tên THẬT fss.save trả về -> tên DUY NHẤT (chống lẫn ảnh khi 2 job song song)
+    name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_{uuid.uuid4().hex[:8]}_{upload.name}'
+    name = fss.save(name, upload)
 
     rec = ImageResult.objects.create(
         name=name, status=ImageResult.STATUS_PROCESSING,

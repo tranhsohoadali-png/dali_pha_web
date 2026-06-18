@@ -4,6 +4,7 @@ Port từ phần mềm ảnh trên máy tính, chạy nền bằng ThreadPoolExe
 """
 import os
 import time
+import uuid
 from datetime import datetime
 
 import cv2
@@ -36,7 +37,10 @@ def convert_to_hex(colors):
 
 def save_img(edge_img, dpi=(72, 72)):
     now = datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d_%H-%M-%S")
-    name_output = now + "_result.png"
+    # PHẢI có thành phần DUY NHẤT (uuid): 2 job song song xong cùng GIÂY mà chỉ tên
+    # theo giây -> Image.save GHI ĐÈ file của nhau -> 2 record trỏ chung 1 file ->
+    # panel kết quả hiện ảnh của job KHÁC (bug lẫn ảnh). uuid -> mỗi job 1 file riêng.
+    name_output = f"{now}_{uuid.uuid4().hex[:8]}_result.png"
     rgb = cv2.cvtColor(edge_img, cv2.COLOR_BGR2RGB)
     os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
     Image.fromarray(rgb).save(os.path.join(settings.MEDIA_ROOT, name_output), dpi=dpi)

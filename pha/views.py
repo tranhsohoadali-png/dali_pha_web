@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+import uuid
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -343,8 +344,11 @@ def api_xu_ly_anh(request):
     api_face_priority = bool(_pp.get('face_priority'))
 
     fss = FileSystemStorage()
-    name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_api_{upload.name}'
-    fss.save(name, upload)
+    # uuid -> tên DUY NHẤT (tránh 2 upload cùng giây + cùng tên file đè/lẫn nhau);
+    # GÁN lại name = fss.save(...) để dùng tên THẬT Django đã ghi (nó tự đổi tên nếu trùng,
+    # bỏ giá trị trả về = record trỏ nhầm file job khác -> LẪN ẢNH).
+    name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_api_{uuid.uuid4().hex[:8]}_{upload.name}'
+    name = fss.save(name, upload)
     rec = ImageResult.objects.create(
         name=name, status=ImageResult.STATUS_PROCESSING, user='api',
         params={'enhance': enhance, 'preset': preset_key, 'color_limit': color_limit,
@@ -2831,8 +2835,10 @@ def xu_ly_anh(request):
     if request.method == 'POST' and request.FILES.get('image'):
         upload = request.FILES['image']
         fss = FileSystemStorage()
-        name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_{upload.name}'
-        fss.save(name, upload)
+        # uuid + lấy tên THẬT fss.save trả về -> tên DUY NHẤT, record trỏ đúng file
+        # (2 nhân viên/2 tab upload cùng giây + cùng tên file -> trước đây lẫn ảnh).
+        name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_{uuid.uuid4().hex[:8]}_{upload.name}'
+        name = fss.save(name, upload)
         enhance = request.POST.get('enhance') in ('1', 'on', 'true')
         style_category = (request.POST.get('style_category') or '').strip() or None
         try:

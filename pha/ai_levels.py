@@ -13,6 +13,7 @@ Endpoint: /anh-ai-test (trang), /anh-ai-test-run (POST chạy), /anh-ai-test-sta
 """
 import os
 import threading
+import uuid
 from datetime import datetime
 
 from django.conf import settings
@@ -197,8 +198,9 @@ def anh_ai_test_run(request):
         return JsonResponse({'ok': False, 'msg': 'Chưa cấu hình Google API key (vào Cài đặt AI).'})
     upload = request.FILES['image']
     fss = FileSystemStorage()
-    name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_aitest_{upload.name}'
-    fss.save(name, upload)
+    # uuid + lấy tên THẬT fss.save trả về -> tên DUY NHẤT (chống lẫn ảnh khi 2 job song song)
+    name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_aitest_{uuid.uuid4().hex[:8]}_{upload.name}'
+    name = fss.save(name, upload)
     rec = ImageResult.objects.create(
         name=name, status=ImageResult.STATUS_PROCESSING,
         user=getattr(request.user, 'username', ''),
