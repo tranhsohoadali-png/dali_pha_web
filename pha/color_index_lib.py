@@ -1098,9 +1098,11 @@ def _ensure_n_colors(arr, ref, n):
 
 # Cỡ SỐ (px @1x) tối thiểu cho cảnh/hoa: ô không chứa nổi số NGANG cao bằng đây thì
 # GỘP vào hàng xóm -> bản đồ sạch, số to & đều. Tăng = số to/ít ô hơn; giảm = chi tiết hơn.
-# Tính theo WORK-px nên PHỤ THUỘC _DETAIL_WORK_MAX: ở work 2400 + khổ in 50cm, 5px ≈ 1.0mm
-# (~bằng 3px@1400 cũ). Đổi _DETAIL_WORK_MAX nhớ chỉnh số này để giữ cỡ số vật lý mong muốn.
-_DETAIL_NUM_MIN_H = 5.0
+# Tính theo WORK-px nên PHỤ THUỘC _DETAIL_WORK_MAX. Quy đổi @ khổ in 50cm: cỡ số (mm) =
+# _DETAIL_NUM_MIN_H * 500 / _DETAIL_WORK_MAX. Hiện 3.4px @ work 2400 ≈ 0.71mm (= "2px@1x"
+# theo khung 1400 cũ user quen; 3px@1400=1.07mm, 5px@2400=1.04mm). User chỉnh số này theo
+# "Npx khung 1400": đặt _DETAIL_NUM_MIN_H = N * _DETAIL_WORK_MAX/1400. Số <~0.8mm KHÓ tô tay.
+_DETAIL_NUM_MIN_H = 3.4
 
 
 def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99):
