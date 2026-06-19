@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ghép khổ in</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+  <style>
+    body{font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;}
+    [data-bs-theme=light] body.bg-body-tertiary{background-color:#f4f6f6!important;}
+    .page-head h1{font-size:1.35rem;font-weight:800;letter-spacing:-.01em;margin-bottom:.1rem;}
+    .page-head .sub{color:var(--bs-secondary-color);font-size:.875rem;}
+    .page-head .bi{color:#198754;}
+    .card{border-radius:16px;box-shadow:0 2px 12px rgba(25,135,84,.07);overflow:hidden;}
+    [data-bs-theme=light] .card{border:1px solid #e9ecef;}
+    .card-header{font-weight:700;padding:.85rem 1.1rem;}
+    [data-bs-theme=light] .card-header{background:#fff;border-bottom:1px solid #f0f2f1;}
+    .card-header .bi{margin-right:.3rem;color:#198754;}
+    .btn{border-radius:12px;font-weight:700;}
+    .btn-sm{border-radius:9px;}
+    .btn-primary{--bs-btn-bg:#198754;--bs-btn-border-color:#198754;--bs-btn-hover-bg:#157347;--bs-btn-hover-border-color:#146c43;--bs-btn-active-bg:#146c43;}
+    .form-control,.form-select{border-radius:10px;}
+    .form-control:focus,.form-select:focus{border-color:#198754;box-shadow:0 0 0 .2rem rgba(25,135,84,.12);}
+    [data-bs-theme=light] .form-label{color:#495057;font-weight:600;}
+    .stat-tile{background:var(--bs-tertiary-bg);border:1px solid var(--bs-border-color-translucent);border-radius:12px;padding:.85rem .75rem;text-align:center;}
+    [data-bs-theme=light] .stat-tile{background:#f8faf9;}
+    .stat-tile .lbl{font-size:.72rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--bs-secondary-color);}
+    .stat-tile .val{font-size:1.6rem;font-weight:800;line-height:1.2;}
+    .row-line{background:var(--bs-tertiary-bg);border:1px solid var(--bs-border-color-translucent);border-radius:12px;padding:.6rem;margin-bottom:.6rem;}
+    [data-bs-theme=light] .row-line{background:#fff;}
+    #preview{max-width:100%;border:1px solid #e9ecef;border-radius:10px;background:#fff;}
+    .thumb{width:42px;height:42px;object-fit:cover;border-radius:8px;border:1px solid #e9ecef;background:#f1f3f5;}
+  </style>
+</head>
+<body class="bg-body-tertiary">
+{% include '_nav.html' %}
+
+<div class="container-fluid py-3 px-3 px-md-4" style="max-width:1200px">
+  <div class="page-head mb-3">
+    <h1><i class="bi bi-grid-1x2"></i> Ghép khổ in</h1>
+    <div class="sub">Up ảnh in (đã có viền) → tự xếp kín khổ vải → xuất PDF cho phần mềm in (Flexi)</div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="card mb-3">
+        <div class="card-header"><i class="bi bi-sliders"></i> Thiết lập khổ vải</div>
+        <div class="card-body">
+          <div class="row g-2">
+            <div class="col-6 col-md-3"><label class="form-label small mb-1">Khổ vải in (cm)</label><input type="number" id="widthCm" class="form-control form-control-sm" value="151.5" step="0.5"></div>
+            <div class="col-6 col-md-3"><label class="form-label small mb-1">Khe hở (cm)</label><input type="number" id="gapCm" class="form-control form-control-sm" value="0" step="0.1" min="0"></div>
+            <div class="col-6 col-md-3"><label class="form-label small mb-1">DPI mục tiêu</label><input type="number" id="dpi" class="form-control form-control-sm" value="150" step="10" min="72"></div>
+            <div class="col-6 col-md-3 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" id="rotate"><label class="form-check-label small" for="rotate">Cho xoay 90° (xếp gọn hơn)</label></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-images"></i> Danh sách tranh cần in</span>
+          <span class="small fw-normal text-secondary">Thêm nhanh:
+            {% for p in presets %}<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 preset" data-w="{{ p.w }}" data-h="{{ p.h }}" data-label="{{ p.label }}">{{ p.label }}</button> {% endfor %}
+          </span>
+        </div>
+        <div class="card-body">
+          <div id="lines"></div>
+          <button type="button" id="addLine" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg"></i> Thêm dòng trống</button>
+          <hr>
+          <button type="button" id="goBtn" class="btn btn-primary w-100" style="height:50px"><i class="bi bi-grid-1x2-fill"></i> GHÉP &amp; XUẤT PDF</button>
+          <div id="msg" class="small mt-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="card">
+        <div class="card-header"><i class="bi bi-eye"></i> Kết quả</div>
+        <div class="card-body">
+          <div id="stats" class="row g-2 mb-3" style="display:none">
+            <div class="col-4"><div class="stat-tile"><div class="lbl">Số tranh</div><div class="val text-success" id="sCount">0</div></div></div>
+            <div class="col-4"><div class="stat-tile"><div class="lbl">Dài vải</div><div class="val text-primary" id="sLen">0</div><div class="small text-secondary">mét</div></div></div>
+            <div class="col-4"><div class="stat-tile"><div class="lbl">Tận dụng</div><div class="val" id="sUtil">0%</div></div></div>
+          </div>
+          <a id="dlBtn" class="btn btn-success w-100 mb-3" style="display:none" download><i class="bi bi-file-earmark-pdf"></i> Tải PDF in</a>
+          <div id="warn" class="small text-danger mb-2"></div>
+          <div class="text-center text-secondary small" id="prevHint">Bấm "GHÉP" để xem bố cục xếp.</div>
+          <img id="preview" style="display:none">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var lines=document.getElementById('lines');
+  function addLine(w, h, label){
+    var div=document.createElement('div'); div.className='row-line';
+    div.innerHTML =
+      '<div class="row g-2 align-items-center">'+
+        '<div class="col-auto"><img class="thumb" src="" alt=""></div>'+
+        '<div class="col"><input type="file" accept="image/*" class="form-control form-control-sm f-img"></div>'+
+        '<div class="col-3 col-md-2"><div class="input-group input-group-sm"><input type="number" class="form-control f-w" placeholder="rộng" value="'+(w||'')+'" step="0.5"><span class="input-group-text">cm</span></div></div>'+
+        '<div class="col-3 col-md-2"><div class="input-group input-group-sm"><input type="number" class="form-control f-h" placeholder="cao" value="'+(h||'')+'" step="0.5"><span class="input-group-text">cm</span></div></div>'+
+        '<div class="col-3 col-md-2"><div class="input-group input-group-sm"><span class="input-group-text">SL</span><input type="number" class="form-control f-q" value="1" min="1"></div></div>'+
+        '<input type="hidden" class="f-label" value="'+(label||'')+'">'+
+        '<div class="col-auto"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 rm"><i class="bi bi-trash"></i></button></div>'+
+      '</div>';
+    lines.appendChild(div);
+    var fi=div.querySelector('.f-img'), th=div.querySelector('.thumb');
+    fi.addEventListener('change', function(){ if(fi.files[0]){ th.src=URL.createObjectURL(fi.files[0]); } });
+    div.querySelector('.rm').addEventListener('click', function(){ div.remove(); });
+    return div;
+  }
+  document.getElementById('addLine').addEventListener('click', function(){ addLine(); });
+  document.querySelectorAll('.preset').forEach(function(b){
+    b.addEventListener('click', function(){ addLine(this.dataset.w, this.dataset.h, this.dataset.label); });
+  });
+  addLine();  // 1 dòng sẵn
+
+  document.getElementById('goBtn').addEventListener('click', function(){
+    var msg=document.getElementById('msg'); msg.className='small mt-2 text-secondary'; msg.textContent='Đang ghép…';
+    var fd=new FormData();
+    fd.append('width_cm', document.getElementById('widthCm').value);
+    fd.append('gap_cm', document.getElementById('gapCm').value);
+    fd.append('dpi', document.getElementById('dpi').value);
+    fd.append('rotate', document.getElementById('rotate').checked?'1':'0');
+    var n=0;
+    document.querySelectorAll('#lines .row-line').forEach(function(row){
+      var f=row.querySelector('.f-img').files[0];
+      var w=row.querySelector('.f-w').value, h=row.querySelector('.f-h').value, q=row.querySelector('.f-q').value;
+      if(!f || !w || !h) return;
+      fd.append('img', f); fd.append('w', w); fd.append('h', h); fd.append('qty', q||'1');
+      fd.append('label', row.querySelector('.f-label').value||'');
+      n++;
+    });
+    if(!n){ msg.className='small mt-2 text-danger'; msg.textContent='Hãy thêm ít nhất 1 tranh (ảnh + rộng + cao).'; return; }
+    var btn=this; btn.disabled=true;
+    fetch('/ghep-in',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      btn.disabled=false;
+      if(!d.ok){ msg.className='small mt-2 text-danger'; msg.textContent=d.msg||'Lỗi'; return; }
+      msg.className='small mt-2 text-success'; msg.textContent='✓ Đã ghép xong.';
+      document.getElementById('stats').style.display='';
+      document.getElementById('sCount').textContent=d.count;
+      document.getElementById('sLen').textContent=d.meters;
+      var u=document.getElementById('sUtil'); u.textContent=d.util+'%'; u.className='val '+(d.util>=80?'text-success':(d.util>=60?'text-warning':'text-danger'));
+      var dl=document.getElementById('dlBtn'); dl.style.display=''; dl.href=d.pdf;
+      dl.innerHTML='<i class="bi bi-file-earmark-pdf"></i> Tải PDF in ('+d.width_cm+'×'+d.length_cm+'cm)';
+      document.getElementById('prevHint').style.display='none';
+      var pv=document.getElementById('preview'); pv.style.display=''; pv.src=d.preview+'?t='+Date.now();
+      var w=document.getElementById('warn'); w.innerHTML=(d.warnings&&d.warnings.length)?('<i class="bi bi-exclamation-triangle"></i> '+d.warnings.join('<br>')):'';
+    }).catch(function(){ btn.disabled=false; msg.className='small mt-2 text-danger'; msg.textContent='Lỗi kết nối.'; });
+  });
+</script>
+</body>
+</html>

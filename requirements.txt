@@ -14,3 +14,4 @@ python-polylabel>=0.6
 python-decouple>=3.6
 # --- Tăng cường ảnh bằng Google AI (tab Xử lý ảnh, tùy chọn) ---
 google-genai>=0.3
+reportlab>=4

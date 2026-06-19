@@ -10,6 +10,7 @@ from pha import ketoan_feed
 from pha import backup_lib
 from pha import extra_views
 from pha import ai_levels
+from pha import imposition
 
 urlpatterns = [
     path('login', views.login_view, name='login'),
@@ -78,6 +79,9 @@ urlpatterns = [
     path('thi-dua', extra_views.thi_dua, name='thi_dua'),
     path('chuong', extra_views.chuong, name='chuong'),
     path('chuong-config', extra_views.chuong_config, name='chuong_config'),
+
+    # Ghép khổ in (imposition / nesting -> PDF cho Flexi)
+    path('ghep-in', imposition.ghep_in, name='ghep_in'),
 
     # Sao lưu dữ liệu
     path('sao-luu', backup_lib.backup_page, name='sao_luu'),
