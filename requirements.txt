@@ -15,3 +15,5 @@ python-decouple>=3.6
 # --- Tăng cường ảnh bằng Google AI (tab Xử lý ảnh, tùy chọn) ---
 google-genai>=0.3
 reportlab>=4
+# Đọc/đổi PDF (xuất từ Illustrator) sang ảnh để ghép khổ in
+pymupdf>=1.24

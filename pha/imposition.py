@@ -20,6 +20,61 @@ from django.views.decorators.csrf import csrf_exempt
 MM_PER_CM = 10.0
 PT_PER_MM = 72.0 / 25.4   # 1 inch = 25.4mm = 72pt
 
+# Khi up file PDF (xuất từ Illustrator), rasterize trang 1 sang PNG ở độ phân giải này.
+RASTER_DPI = 200
+_MAX_RASTER_PX = 6000          # chặn ảnh quá lớn nếu khổ artboard bị đặt sai
+_IMG_EXTS = ('.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff')
+
+
+def _looks_pdf(name, data=None):
+    if (os.path.splitext(name or '')[1] or '').lower() == '.pdf':
+        return True
+    if data and data[:5] == b'%PDF-':
+        return True
+    return False
+
+
+def _save_print_image(f, abs_dir, stem):
+    """Lưu file tải lên thành ẢNH dùng được. Ảnh thường -> ghi nguyên. PDF (xuất từ
+    Illustrator) -> rasterize trang 1 sang PNG ở RASTER_DPI (theo khổ thật của trang).
+    Trả (filename, error_msg); một trong hai là None."""
+    os.makedirs(abs_dir, exist_ok=True)
+    data = f.read()
+    name = getattr(f, 'name', '') or ''
+    if _looks_pdf(name, data):
+        try:
+            try:
+                import fitz  # PyMuPDF
+            except ImportError:
+                import pymupdf as fitz
+        except Exception:
+            return None, 'Server chưa cài thư viện đọc PDF (pymupdf) — chạy update.sh, hoặc up ảnh PNG/JPG.'
+        try:
+            doc = fitz.open(stream=data, filetype='pdf')
+            if doc.page_count < 1:
+                doc.close()
+                return None, 'PDF rỗng (không có trang).'
+            page = doc.load_page(0)
+            zoom = RASTER_DPI / 72.0
+            longest = max(page.rect.width, page.rect.height) * zoom
+            if longest > _MAX_RASTER_PX:
+                zoom *= _MAX_RASTER_PX / longest
+            pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+            fn = stem + '.png'
+            pix.save(os.path.join(abs_dir, fn))
+            doc.close()
+            return fn, None
+        except Exception as e:
+            return None, 'Không đọc được PDF: ' + str(e)[:120]
+    # Ảnh bitmap thường
+    ext = (os.path.splitext(name)[1] or '.png').lower()
+    if ext not in _IMG_EXTS:
+        ext = '.png'
+    fn = stem + ext
+    with open(os.path.join(abs_dir, fn), 'wb') as out:
+        out.write(data)
+    return fn, None
+
 
 def _skyline_pack(items, width_mm, gap_mm=0, allow_rotate=False):
     """Xếp các hình chữ nhật vào dải rộng width_mm (mm). items: list dict
@@ -237,15 +292,12 @@ def ghep_in(request):
         h_cm = _f(request.POST.get('art_h'), 0)
         if f and code and w_cm > 0 and h_cm > 0:
             outdir = os.path.join(settings.MEDIA_ROOT, 'print_art')
-            os.makedirs(outdir, exist_ok=True)
-            ext = (os.path.splitext(f.name)[1] or '.png').lower()
-            if ext not in ('.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff'):
-                ext = '.png'
-            rel = 'print_art/%s_%s%s' % (_now().strftime('%Y%m%d%H%M%S'), secrets.token_hex(3), ext)
-            with open(os.path.join(settings.MEDIA_ROOT, rel), 'wb') as out:
-                for chunk in f.chunks():
-                    out.write(chunk)
-            PrintArt.objects.create(code=code, image=rel, w_cm=w_cm, h_cm=h_cm,
+            stem = '%s_%s' % (_now().strftime('%Y%m%d%H%M%S'), secrets.token_hex(3))
+            fn, err = _save_print_image(f, outdir, stem)
+            if err:
+                messages.error(request, err)
+                return redirect('/ghep-in')
+            PrintArt.objects.create(code=code, image='print_art/' + fn, w_cm=w_cm, h_cm=h_cm,
                                     note=(request.POST.get('art_note') or '').strip())
             messages.info(request, f'Đã lưu vào kho: {code} ({w_cm:g}×{h_cm:g})')
         else:
@@ -291,13 +343,11 @@ def ghep_in(request):
                 qty = 1
             if w_cm <= 0 or h_cm <= 0:
                 continue
-            ext = (os.path.splitext(f.name)[1] or '.png').lower()
-            if ext not in ('.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff'):
-                ext = '.png'
-            path = os.path.join(outdir, 'src_%s_%d%s' % (stamp, i, ext))
-            with open(path, 'wb') as out:
-                for chunk in f.chunks():
-                    out.write(chunk)
+            fn, err = _save_print_image(f, outdir, 'src_%s_%d' % (stamp, i))
+            if err:
+                warnings.append('%s: %s' % (f.name, err))
+                continue
+            path = os.path.join(outdir, fn)
             try:
                 im = Image.open(path)
                 dpi = im.size[0] / (w_cm / 2.54)

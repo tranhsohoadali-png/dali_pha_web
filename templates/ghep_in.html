@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{% load l10n %}<!DOCTYPE html>
 <html lang="vi" data-bs-theme="light">
 <head>
   <meta charset="UTF-8">
@@ -60,12 +60,12 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="save_art">
         <div class="col-6 col-md-2"><label class="form-label small mb-1">Mã tranh</label><input type="text" name="art_code" class="form-control form-control-sm" placeholder="VD: K490" required></div>
-        <div class="col-6 col-md-3"><label class="form-label small mb-1">Ảnh in (đã có viền)</label><input type="file" name="art_img" accept="image/*" class="form-control form-control-sm" required></div>
+        <div class="col-6 col-md-3"><label class="form-label small mb-1">Ảnh in (PNG/JPG/PDF, đã có viền)</label><input type="file" name="art_img" accept="image/*,application/pdf,.pdf" class="form-control form-control-sm" required></div>
         <div class="col-4 col-md-2"><label class="form-label small mb-1">Rộng (cm)</label><input type="number" name="art_w" class="form-control form-control-sm" step="0.5" value="38" required></div>
         <div class="col-4 col-md-2"><label class="form-label small mb-1">Cao (cm)</label><input type="number" name="art_h" class="form-control form-control-sm" step="0.5" value="38" required></div>
-        <div class="col-4 col-md-3"><label class="form-label small mb-1">&nbsp;</label>
+        <div class="col-8 col-md-3"><label class="form-label small mb-1">Điền nhanh cỡ in</label>
           <div class="d-flex gap-1">
-            {% for p in presets %}<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 flex-fill psz" data-w="{{ p.w }}" data-h="{{ p.h }}">{{ p.label }}</button>{% endfor %}
+            {% for p in presets %}<button type="button" class="btn btn-sm btn-outline-secondary py-1 px-1 flex-fill psz" data-w="{{ p.w|unlocalize }}" data-h="{{ p.h|unlocalize }}">{{ p.label }}<span class="d-none d-md-inline small text-muted"> →{{ p.w|unlocalize }}×{{ p.h|unlocalize }}</span></button>{% endfor %}
           </div>
         </div>
         <div class="col-12"><button class="btn btn-success btn-sm"><i class="bi bi-plus-circle"></i> Lưu vào kho</button></div>
@@ -168,14 +168,14 @@
     div.innerHTML=
       '<div class="row g-2 align-items-center">'+
         '<div class="col-auto"><img class="thumb" src=""></div>'+
-        '<div class="col"><input type="file" accept="image/*" class="form-control form-control-sm f-img"></div>'+
+        '<div class="col"><input type="file" accept="image/*,application/pdf,.pdf" class="form-control form-control-sm f-img"></div>'+
         '<div class="col-3 col-md-2"><div class="input-group input-group-sm"><input type="number" class="form-control f-w" placeholder="rộng" step="0.5"><span class="input-group-text">cm</span></div></div>'+
         '<div class="col-3 col-md-2"><div class="input-group input-group-sm"><input type="number" class="form-control f-h" placeholder="cao" step="0.5"><span class="input-group-text">cm</span></div></div>'+
         '<div class="col-3 col-md-2"><div class="input-group input-group-sm"><span class="input-group-text">SL</span><input type="number" class="form-control f-q" value="1" min="1"></div></div>'+
         '<div class="col-auto"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 rm"><i class="bi bi-x-lg"></i></button></div>'+
       '</div>';
     var fi=div.querySelector('.f-img'), th=div.querySelector('.thumb');
-    fi.addEventListener('change', function(){ if(fi.files[0]) th.src=URL.createObjectURL(fi.files[0]); });
+    fi.addEventListener('change', function(){ var x=fi.files[0]; if(x && /^image\//.test(x.type)) th.src=URL.createObjectURL(x); else th.removeAttribute('src'); });
     div.querySelector('.rm').addEventListener('click', function(){ div.remove(); refreshHint(); });
     lines.appendChild(div); refreshHint();
   }
@@ -218,11 +218,14 @@
     }).catch(function(){ btn.disabled=false; msg.className='small mt-2 text-danger'; msg.textContent='Lỗi kết nối.'; });
   });
 
-  // Preset điền nhanh kích thước cho form lưu kho
-  document.querySelectorAll('.psz').forEach(function(b){
+  // Preset điền nhanh kích thước cho form lưu kho (kèm tô sáng nút đang chọn)
+  var pszBtns=document.querySelectorAll('.psz');
+  pszBtns.forEach(function(b){
     b.addEventListener('click', function(){
       document.querySelector('input[name=art_w]').value=this.dataset.w;
       document.querySelector('input[name=art_h]').value=this.dataset.h;
+      pszBtns.forEach(function(x){ x.classList.add('btn-outline-secondary'); x.classList.remove('btn-success'); });
+      this.classList.remove('btn-outline-secondary'); this.classList.add('btn-success');
     });
   });
 </script>
