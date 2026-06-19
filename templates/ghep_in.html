@@ -35,6 +35,11 @@
     [data-bs-theme=light] .row-line{background:#fff;}
     #preview{max-width:100%;border:1px solid #e9ecef;border-radius:10px;background:#fff;}
     .thumb{width:42px;height:42px;object-fit:cover;border-radius:8px;border:1px solid #e9ecef;background:#f1f3f5;}
+    /* Kho ảnh */
+    .art-card{border:1px solid #e9ecef;border-radius:12px;padding:.5rem;text-align:center;background:#fff;height:100%}
+    .art-card img{width:100%;aspect-ratio:1;object-fit:contain;border-radius:8px;background:#f8f9fa;border:1px solid #f1f3f5}
+    .art-code{font-weight:800;font-size:.9rem;margin-top:.3rem}
+    .art-size{font-size:.72rem;color:#8a94a0}
   </style>
 </head>
 <body class="bg-body-tertiary">
@@ -43,7 +48,47 @@
 <div class="container-fluid py-3 px-3 px-md-4" style="max-width:1200px">
   <div class="page-head mb-3">
     <h1><i class="bi bi-grid-1x2"></i> Ghép khổ in</h1>
-    <div class="sub">Up ảnh in (đã có viền) → tự xếp kín khổ vải → xuất PDF cho phần mềm in (Flexi)</div>
+    <div class="sub">Chọn tranh từ <b>kho</b> (lưu sẵn) hoặc tải ảnh → tự xếp kín khổ vải → xuất PDF cho Flexi</div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="alert alert-info py-2 rounded-3">{{ m }}</div>{% endfor %}{% endif %}
+
+  <!-- KHO ẢNH IN -->
+  <div class="card mb-3">
+    <div class="card-header"><i class="bi bi-collection"></i> Kho ảnh in ({{ arts|length }}) <span class="small fw-normal text-secondary">— lưu 1 lần, lần sau khỏi tải lại</span></div>
+    <div class="card-body">
+      <form method="POST" action="/ghep-in" enctype="multipart/form-data" class="row g-2 align-items-end mb-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_art">
+        <div class="col-6 col-md-2"><label class="form-label small mb-1">Mã tranh</label><input type="text" name="art_code" class="form-control form-control-sm" placeholder="VD: K490" required></div>
+        <div class="col-6 col-md-3"><label class="form-label small mb-1">Ảnh in (đã có viền)</label><input type="file" name="art_img" accept="image/*" class="form-control form-control-sm" required></div>
+        <div class="col-4 col-md-2"><label class="form-label small mb-1">Rộng (cm)</label><input type="number" name="art_w" class="form-control form-control-sm" step="0.5" value="38" required></div>
+        <div class="col-4 col-md-2"><label class="form-label small mb-1">Cao (cm)</label><input type="number" name="art_h" class="form-control form-control-sm" step="0.5" value="38" required></div>
+        <div class="col-4 col-md-3"><label class="form-label small mb-1">&nbsp;</label>
+          <div class="d-flex gap-1">
+            {% for p in presets %}<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 flex-fill psz" data-w="{{ p.w }}" data-h="{{ p.h }}">{{ p.label }}</button>{% endfor %}
+          </div>
+        </div>
+        <div class="col-12"><button class="btn btn-success btn-sm"><i class="bi bi-plus-circle"></i> Lưu vào kho</button></div>
+      </form>
+
+      <div class="row g-2" id="artGrid">
+        {% for a in arts %}
+        <div class="col-4 col-md-2">
+          <div class="art-card">
+            <img src="{{ a.url }}" alt="{{ a.code }}">
+            <div class="art-code">{{ a.code }}</div>
+            <div class="art-size">{{ a.w|floatformat:"-2" }}×{{ a.h|floatformat:"-2" }}cm</div>
+            <button type="button" class="btn btn-sm btn-primary w-100 mt-1 py-0 add-art"
+              data-id="{{ a.id }}" data-code="{{ a.code }}" data-w="{{ a.w }}" data-h="{{ a.h }}" data-url="{{ a.url }}"><i class="bi bi-plus-lg"></i> Thêm</button>
+            <form method="POST" action="/ghep-in" class="mt-1" onsubmit="return confirm('Xoá {{ a.code }} khỏi kho?')">
+              {% csrf_token %}<input type="hidden" name="action" value="del_art"><input type="hidden" name="id" value="{{ a.id }}">
+              <button class="btn btn-sm btn-outline-danger w-100 py-0"><i class="bi bi-trash"></i></button>
+            </form>
+          </div>
+        </div>
+        {% empty %}<div class="col-12 text-secondary small">Kho trống — lưu ảnh in vào để dùng lại.</div>{% endfor %}
+      </div>
+    </div>
   </div>
 
   <div class="row g-3">
@@ -55,21 +100,18 @@
             <div class="col-6 col-md-3"><label class="form-label small mb-1">Khổ vải in (cm)</label><input type="number" id="widthCm" class="form-control form-control-sm" value="151.5" step="0.5"></div>
             <div class="col-6 col-md-3"><label class="form-label small mb-1">Khe hở (cm)</label><input type="number" id="gapCm" class="form-control form-control-sm" value="0" step="0.1" min="0"></div>
             <div class="col-6 col-md-3"><label class="form-label small mb-1">DPI mục tiêu</label><input type="number" id="dpi" class="form-control form-control-sm" value="150" step="10" min="72"></div>
-            <div class="col-6 col-md-3 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" id="rotate"><label class="form-check-label small" for="rotate">Cho xoay 90° (xếp gọn hơn)</label></div></div>
+            <div class="col-6 col-md-3 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" id="rotate"><label class="form-check-label small" for="rotate">Cho xoay 90°</label></div></div>
           </div>
         </div>
       </div>
 
       <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center">
-          <span><i class="bi bi-images"></i> Danh sách tranh cần in</span>
-          <span class="small fw-normal text-secondary">Thêm nhanh:
-            {% for p in presets %}<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 preset" data-w="{{ p.w }}" data-h="{{ p.h }}" data-label="{{ p.label }}">{{ p.label }}</button> {% endfor %}
-          </span>
+          <span><i class="bi bi-list-check"></i> Lô đang ghép</span>
+          <button type="button" id="addUpload" class="btn btn-sm btn-outline-secondary py-0"><i class="bi bi-upload"></i> Tải ảnh tạm</button>
         </div>
         <div class="card-body">
-          <div id="lines"></div>
-          <button type="button" id="addLine" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg"></i> Thêm dòng trống</button>
+          <div id="lines"><div id="emptyHint" class="text-secondary small">Bấm "Thêm" ở kho ảnh phía trên để đưa tranh vào lô.</div></div>
           <hr>
           <button type="button" id="goBtn" class="btn btn-primary w-100" style="height:50px"><i class="bi bi-grid-1x2-fill"></i> GHÉP &amp; XUẤT PDF</button>
           <div id="msg" class="small mt-2"></div>
@@ -97,30 +139,47 @@
 </div>
 
 <script>
-  var lines=document.getElementById('lines');
-  function addLine(w, h, label){
+  var lines=document.getElementById('lines'), emptyHint=document.getElementById('emptyHint');
+  function refreshHint(){ if(emptyHint) emptyHint.style.display = lines.querySelector('.row-line') ? 'none' : ''; }
+
+  // Dòng từ KHO (chọn sẵn) — không cần file
+  function addSaved(id, code, w, h, url){
     var div=document.createElement('div'); div.className='row-line';
-    div.innerHTML =
+    div.dataset.art=id; div.dataset.w=w; div.dataset.h=h;
+    div.innerHTML=
       '<div class="row g-2 align-items-center">'+
-        '<div class="col-auto"><img class="thumb" src="" alt=""></div>'+
-        '<div class="col"><input type="file" accept="image/*" class="form-control form-control-sm f-img"></div>'+
-        '<div class="col-3 col-md-2"><div class="input-group input-group-sm"><input type="number" class="form-control f-w" placeholder="rộng" value="'+(w||'')+'" step="0.5"><span class="input-group-text">cm</span></div></div>'+
-        '<div class="col-3 col-md-2"><div class="input-group input-group-sm"><input type="number" class="form-control f-h" placeholder="cao" value="'+(h||'')+'" step="0.5"><span class="input-group-text">cm</span></div></div>'+
-        '<div class="col-3 col-md-2"><div class="input-group input-group-sm"><span class="input-group-text">SL</span><input type="number" class="form-control f-q" value="1" min="1"></div></div>'+
-        '<input type="hidden" class="f-label" value="'+(label||'')+'">'+
-        '<div class="col-auto"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 rm"><i class="bi bi-trash"></i></button></div>'+
+        '<div class="col-auto"><img class="thumb" src="'+url+'"></div>'+
+        '<div class="col"><b>'+code+'</b> <span class="text-secondary small">'+w+'×'+h+'cm</span></div>'+
+        '<div class="col-4 col-md-3"><div class="input-group input-group-sm"><span class="input-group-text">SL</span><input type="number" class="form-control f-q" value="1" min="1"></div></div>'+
+        '<div class="col-auto"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 rm"><i class="bi bi-x-lg"></i></button></div>'+
       '</div>';
-    lines.appendChild(div);
-    var fi=div.querySelector('.f-img'), th=div.querySelector('.thumb');
-    fi.addEventListener('change', function(){ if(fi.files[0]){ th.src=URL.createObjectURL(fi.files[0]); } });
-    div.querySelector('.rm').addEventListener('click', function(){ div.remove(); });
-    return div;
+    div.querySelector('.rm').addEventListener('click', function(){ div.remove(); refreshHint(); });
+    lines.appendChild(div); refreshHint();
   }
-  document.getElementById('addLine').addEventListener('click', function(){ addLine(); });
-  document.querySelectorAll('.preset').forEach(function(b){
-    b.addEventListener('click', function(){ addLine(this.dataset.w, this.dataset.h, this.dataset.label); });
+  document.querySelectorAll('.add-art').forEach(function(b){
+    b.addEventListener('click', function(){
+      addSaved(this.dataset.id, this.dataset.code, this.dataset.w, this.dataset.h, this.dataset.url);
+    });
   });
-  addLine();  // 1 dòng sẵn
+
+  // Dòng TẢI ẢNH TẠM (1 lần)
+  function addUpload(){
+    var div=document.createElement('div'); div.className='row-line'; div.dataset.upload='1';
+    div.innerHTML=
+      '<div class="row g-2 align-items-center">'+
+        '<div class="col-auto"><img class="thumb" src=""></div>'+
+        '<div class="col"><input type="file" accept="image/*" class="form-control form-control-sm f-img"></div>'+
+        '<div class="col-3 col-md-2"><div class="input-group input-group-sm"><input type="number" class="form-control f-w" placeholder="rộng" step="0.5"><span class="input-group-text">cm</span></div></div>'+
+        '<div class="col-3 col-md-2"><div class="input-group input-group-sm"><input type="number" class="form-control f-h" placeholder="cao" step="0.5"><span class="input-group-text">cm</span></div></div>'+
+        '<div class="col-3 col-md-2"><div class="input-group input-group-sm"><span class="input-group-text">SL</span><input type="number" class="form-control f-q" value="1" min="1"></div></div>'+
+        '<div class="col-auto"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 rm"><i class="bi bi-x-lg"></i></button></div>'+
+      '</div>';
+    var fi=div.querySelector('.f-img'), th=div.querySelector('.thumb');
+    fi.addEventListener('change', function(){ if(fi.files[0]) th.src=URL.createObjectURL(fi.files[0]); });
+    div.querySelector('.rm').addEventListener('click', function(){ div.remove(); refreshHint(); });
+    lines.appendChild(div); refreshHint();
+  }
+  document.getElementById('addUpload').addEventListener('click', addUpload);
 
   document.getElementById('goBtn').addEventListener('click', function(){
     var msg=document.getElementById('msg'); msg.className='small mt-2 text-secondary'; msg.textContent='Đang ghép…';
@@ -130,15 +189,18 @@
     fd.append('dpi', document.getElementById('dpi').value);
     fd.append('rotate', document.getElementById('rotate').checked?'1':'0');
     var n=0;
-    document.querySelectorAll('#lines .row-line').forEach(function(row){
-      var f=row.querySelector('.f-img').files[0];
-      var w=row.querySelector('.f-w').value, h=row.querySelector('.f-h').value, q=row.querySelector('.f-q').value;
-      if(!f || !w || !h) return;
-      fd.append('img', f); fd.append('w', w); fd.append('h', h); fd.append('qty', q||'1');
-      fd.append('label', row.querySelector('.f-label').value||'');
-      n++;
+    lines.querySelectorAll('.row-line').forEach(function(row){
+      var q=(row.querySelector('.f-q')||{}).value||'1';
+      if(row.dataset.art){
+        fd.append('sel_art', row.dataset.art); fd.append('sel_qty', q); n++;
+      } else {
+        var f=row.querySelector('.f-img').files[0], w=row.querySelector('.f-w').value, h=row.querySelector('.f-h').value;
+        if(!f||!w||!h) return;
+        fd.append('img', f); fd.append('w', w); fd.append('h', h); fd.append('qty', q); fd.append('label','');
+        n++;
+      }
     });
-    if(!n){ msg.className='small mt-2 text-danger'; msg.textContent='Hãy thêm ít nhất 1 tranh (ảnh + rộng + cao).'; return; }
+    if(!n){ msg.className='small mt-2 text-danger'; msg.textContent='Hãy thêm tranh từ kho hoặc tải ảnh tạm.'; return; }
     var btn=this; btn.disabled=true;
     fetch('/ghep-in',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
       btn.disabled=false;
@@ -154,6 +216,14 @@
       var pv=document.getElementById('preview'); pv.style.display=''; pv.src=d.preview+'?t='+Date.now();
       var w=document.getElementById('warn'); w.innerHTML=(d.warnings&&d.warnings.length)?('<i class="bi bi-exclamation-triangle"></i> '+d.warnings.join('<br>')):'';
     }).catch(function(){ btn.disabled=false; msg.className='small mt-2 text-danger'; msg.textContent='Lỗi kết nối.'; });
+  });
+
+  // Preset điền nhanh kích thước cho form lưu kho
+  document.querySelectorAll('.psz').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelector('input[name=art_w]').value=this.dataset.w;
+      document.querySelector('input[name=art_h]').value=this.dataset.h;
+    });
   });
 </script>
 </body>

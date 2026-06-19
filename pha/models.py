@@ -290,3 +290,20 @@ class DefectLog(models.Model):
 
     def __str__(self):
         return f'{self.day} hỏng {self.qty} ({self.painting or self.stage})'
+
+
+class PrintArt(models.Model):
+    """KHO ẢNH IN sẵn theo mã tranh (ảnh ĐÃ có viền) để GHÉP KHỔ — up 1 lần, dùng lại
+    nhiều lần (khỏi tải ảnh mỗi lần ghép). Một mã tranh có thể có nhiều cỡ in."""
+    code = models.CharField(max_length=100, db_index=True)   # mã tranh
+    image = models.TextField(blank=True, default='')         # file in (trong MEDIA_ROOT)
+    w_cm = models.FloatField(default=38)                     # rộng IN (đã gồm viền)
+    h_cm = models.FloatField(default=38)                     # cao IN (đã gồm viền)
+    note = models.CharField(max_length=200, blank=True, default='')
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['code', 'w_cm']
+
+    def __str__(self):
+        return f'{self.code} ({self.w_cm:g}x{self.h_cm:g})'

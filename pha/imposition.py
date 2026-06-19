@@ -12,6 +12,7 @@ Mỗi tranh tự cắt rời theo viền nên không cần cắt kiểu guilloti
 """
 import os
 
+from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
@@ -218,6 +219,52 @@ def ghep_in(request):
         from django.shortcuts import redirect
         return redirect('/login')
 
+    from pha.models import PrintArt
+
+    def _f(v, d):
+        try:
+            return float(str(v).replace(',', '.'))
+        except (TypeError, ValueError):
+            return d
+
+    # ----- Quản lý KHO ẢNH IN (lưu sẵn theo mã, dùng lại) -----
+    if request.method == 'POST' and request.POST.get('action') == 'save_art':
+        import secrets
+        from django.shortcuts import redirect
+        f = request.FILES.get('art_img')
+        code = (request.POST.get('art_code') or '').strip().upper()
+        w_cm = _f(request.POST.get('art_w'), 0)
+        h_cm = _f(request.POST.get('art_h'), 0)
+        if f and code and w_cm > 0 and h_cm > 0:
+            outdir = os.path.join(settings.MEDIA_ROOT, 'print_art')
+            os.makedirs(outdir, exist_ok=True)
+            ext = (os.path.splitext(f.name)[1] or '.png').lower()
+            if ext not in ('.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff'):
+                ext = '.png'
+            rel = 'print_art/%s_%s%s' % (_now().strftime('%Y%m%d%H%M%S'), secrets.token_hex(3), ext)
+            with open(os.path.join(settings.MEDIA_ROOT, rel), 'wb') as out:
+                for chunk in f.chunks():
+                    out.write(chunk)
+            PrintArt.objects.create(code=code, image=rel, w_cm=w_cm, h_cm=h_cm,
+                                    note=(request.POST.get('art_note') or '').strip())
+            messages.info(request, f'Đã lưu vào kho: {code} ({w_cm:g}×{h_cm:g})')
+        else:
+            messages.error(request, 'Cần đủ: ảnh + mã tranh + rộng + cao.')
+        return redirect('/ghep-in')
+    if request.method == 'POST' and request.POST.get('action') == 'del_art':
+        from django.shortcuts import redirect
+        a = PrintArt.objects.filter(id=request.POST.get('id')).first()
+        if a:
+            try:
+                p = os.path.join(settings.MEDIA_ROOT, a.image)
+                if a.image and os.path.exists(p):
+                    os.remove(p)
+            except OSError:
+                pass
+            a.delete()
+            messages.info(request, 'Đã xoá khỏi kho.')
+        return redirect('/ghep-in')
+
     if request.method == 'POST':
         import secrets
         from PIL import Image
@@ -226,12 +273,6 @@ def ghep_in(request):
         hs = request.POST.getlist('h')
         qtys = request.POST.getlist('qty')
         labels = request.POST.getlist('label')
-
-        def _f(v, d):
-            try:
-                return float(str(v).replace(',', '.'))
-            except (TypeError, ValueError):
-                return d
         width_cm = _f(request.POST.get('width_cm'), 151.5)
         gap_cm = _f(request.POST.get('gap_cm'), 0.0)
         rotate = request.POST.get('rotate') == '1'
@@ -267,8 +308,37 @@ def ghep_in(request):
                 pass
             items.append({'id': f.name, 'image_path': path, 'w_cm': w_cm, 'h_cm': h_cm,
                           'qty': qty, 'label': labels[i] if i < len(labels) else ''})
+
+        # Tranh chọn TỪ KHO (lưu sẵn) — không cần tải lại
+        sel_ids = request.POST.getlist('sel_art')
+        sel_qtys = request.POST.getlist('sel_qty')
+        if sel_ids:
+            arts = {str(a.id): a for a in PrintArt.objects.filter(id__in=[s for s in sel_ids if s.isdigit()])}
+            for j, aid in enumerate(sel_ids):
+                a = arts.get(str(aid))
+                if not a:
+                    continue
+                try:
+                    qty = max(1, int(sel_qtys[j])) if j < len(sel_qtys) else 1
+                except (ValueError, TypeError):
+                    qty = 1
+                p = os.path.join(settings.MEDIA_ROOT, a.image)
+                if not os.path.exists(p):
+                    warnings.append('Kho: %s thiếu file ảnh — bỏ qua.' % a.code)
+                    continue
+                try:
+                    im = Image.open(p)
+                    dpi = im.size[0] / (a.w_cm / 2.54)
+                    if dpi < target_dpi - 5:
+                        warnings.append('%s: chỉ ~%d DPI (nên ≥ %d) — in có thể mờ'
+                                        % (a.code, int(dpi), target_dpi))
+                except Exception:
+                    pass
+                items.append({'id': a.code, 'image_path': p, 'w_cm': a.w_cm, 'h_cm': a.h_cm,
+                              'qty': qty, 'label': a.code})
+
         if not items:
-            return JsonResponse({'ok': False, 'msg': 'Chưa thêm tranh nào (cần ảnh + kích thước).'})
+            return JsonResponse({'ok': False, 'msg': 'Chưa chọn/thêm tranh nào (chọn từ kho hoặc tải ảnh + kích thước).'})
 
         planned = plan(items, width_cm=width_cm, gap_cm=gap_cm, allow_rotate=rotate)
         pdf_rel = 'ghep/ghep_%s.pdf' % stamp
@@ -285,4 +355,7 @@ def ghep_in(request):
             'width_cm': round(planned['width_cm'], 1), 'warnings': warnings,
         })
 
-    return render(request, 'ghep_in.html', {'presets': PRESETS})
+    arts = [{'id': a.id, 'code': a.code, 'url': '/media/' + a.image,
+             'w': a.w_cm, 'h': a.h_cm, 'note': a.note}
+            for a in PrintArt.objects.all()]
+    return render(request, 'ghep_in.html', {'presets': PRESETS, 'arts': arts})
