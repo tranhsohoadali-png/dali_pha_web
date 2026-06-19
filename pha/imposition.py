@@ -441,9 +441,9 @@ def plan(items, width_cm=151.5, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0):
     đúng phần viền. Khi chồng mí thì khe hở bị bỏ qua và không xoay (giữ viền trùng khít).
     """
     width_mm = round(width_cm * MM_PER_CM)
-    overlap_mm = max(0, round(overlap_cm * MM_PER_CM))
-    gap_mm = 0 if overlap_mm > 0 else max(0, round(gap_cm * MM_PER_CM))
-    if overlap_mm > 0:
+    overlap_mm = max(0.0, overlap_cm * MM_PER_CM)        # giữ độ chính xác dưới mm (vd 0.13cm = 1.3mm)
+    gap_mm = 0 if overlap_mm > 1e-9 else max(0, round(gap_cm * MM_PER_CM))
+    if overlap_mm > 1e-9:
         allow_rotate = False
     rects = []
     for it in items:
