@@ -432,7 +432,7 @@ def _pack_best(rects, width_mm, gap_mm=0, allow_rotate=False):
     return cands[0][2], cands[0][0], cands[0][1]
 
 
-def plan(items, width_cm=151.5, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0):
+def plan(items, width_cm=152.0, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0):
     """items: [{id, image_path, w_cm, h_cm, qty, label}]. Trả dict kế hoạch xếp.
 
     overlap_cm > 0: CHỒNG MÍ — các tranh đè viền lên nhau `overlap_cm` để chia sẻ viền
@@ -645,7 +645,7 @@ def ghep_in(request):
         hs = request.POST.getlist('h')
         qtys = request.POST.getlist('qty')
         labels = request.POST.getlist('label')
-        width_cm = _f(request.POST.get('width_cm'), 151.5)
+        width_cm = _f(request.POST.get('width_cm'), 152.0)
         gap_cm = _f(request.POST.get('gap_cm'), 0.0)
         overlap_cm = max(0.0, _f(request.POST.get('overlap_cm'), 0.0))
         rotate = request.POST.get('rotate') == '1'
