@@ -432,26 +432,43 @@ def _pack_best(rects, width_mm, gap_mm=0, allow_rotate=False):
     return cands[0][2], cands[0][0], cands[0][1]
 
 
-def plan(items, width_cm=151.5, gap_cm=0.0, allow_rotate=False):
-    """items: [{id, image_path, w_cm, h_cm, qty, label}]. Trả dict kế hoạch xếp."""
+def plan(items, width_cm=151.5, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0):
+    """items: [{id, image_path, w_cm, h_cm, qty, label}]. Trả dict kế hoạch xếp.
+
+    overlap_cm > 0: CHỒNG MÍ — các tranh đè viền lên nhau `overlap_cm` để chia sẻ viền
+    (tiết kiệm vải). Cách làm: xếp theo "diện tích chiếm chỗ" nhỏ hơn (cỡ thật − chồng mí)
+    nên các ô không đè footprint (layout vẫn hợp lệ), nhưng VẼ ở cỡ thật → ảnh đè nhau
+    đúng phần viền. Khi chồng mí thì khe hở bị bỏ qua và không xoay (giữ viền trùng khít).
+    """
     width_mm = round(width_cm * MM_PER_CM)
-    gap_mm = round(gap_cm * MM_PER_CM)
+    overlap_mm = max(0, round(overlap_cm * MM_PER_CM))
+    gap_mm = 0 if overlap_mm > 0 else max(0, round(gap_cm * MM_PER_CM))
+    if overlap_mm > 0:
+        allow_rotate = False
     rects = []
     for it in items:
-        w = round(it['w_cm'] * MM_PER_CM)
-        h = round(it['h_cm'] * MM_PER_CM)
+        dw = round(it['w_cm'] * MM_PER_CM)               # cỡ VẼ thật (có viền)
+        dh = round(it['h_cm'] * MM_PER_CM)
+        pw = max(1, dw - overlap_mm)                     # cỡ CHIẾM CHỖ khi xếp
+        ph = max(1, dh - overlap_mm)
         for k in range(max(1, int(it['qty']))):
             rects.append({'id': it['id'], 'image_path': it.get('image_path'),
-                          'label': it.get('label', ''), 'w': w, 'h': h,
+                          'label': it.get('label', ''), 'w': pw, 'h': ph,
+                          'dw': dw, 'dh': dh,
                           'w_cm': it['w_cm'], 'h_cm': it['h_cm']})
-    placements, length_mm, used_area = _pack_best(rects, width_mm, gap_mm, allow_rotate)
+    pack_width = max(1, width_mm - overlap_mm)
+    placements, _lf, _uf = _pack_best(rects, pack_width, gap_mm, allow_rotate)
+    # Chiều dài & độ phủ tính theo cỡ VẼ thật (gồm phần chồng mí)
+    length_mm = max((p['y'] + p.get('dh', p['h']) for p in placements), default=0)
     sheet_area = width_mm * length_mm if length_mm else 1
+    used_area = sum(p.get('dw', p['w']) * p.get('dh', p['h']) for p in placements)
     return {
         'placements': placements,
         'width_mm': width_mm, 'length_mm': length_mm,
         'width_cm': width_cm, 'length_cm': length_mm / MM_PER_CM,
         'count': len(placements),
-        'utilization': round(used_area / sheet_area * 100, 1) if sheet_area else 0.0,
+        'utilization': round(min(100.0, used_area / sheet_area * 100), 1) if sheet_area else 0.0,
+        'overlap_cm': overlap_mm / MM_PER_CM,
         'meters': round(length_mm / 1000.0, 2),
     }
 
@@ -484,8 +501,8 @@ def render_pdf(planned, out_path, title=''):
 
     for p in planned['placements']:
         x_pt = p['x'] * PT_PER_MM
-        w_pt = p['w'] * PT_PER_MM
-        h_pt = p['h'] * PT_PER_MM
+        w_pt = p.get('dw', p['w']) * PT_PER_MM          # vẽ ở cỡ THẬT (chồng mí nếu có)
+        h_pt = p.get('dh', p['h']) * PT_PER_MM
         # PDF gốc ở góc dưới-trái; y nội bộ tính từ đáy -> trùng luôn
         y_pt = p['y'] * PT_PER_MM
         label = str(p.get('label') or p.get('id') or '')
@@ -526,8 +543,8 @@ def render_preview(planned, out_path, scale=2.0, image_paths=None):
     for p in planned['placements']:
         x0 = int(p['x'] * scale / 10)
         y0 = int(p['y'] * scale / 10)
-        w = int(p['w'] * scale / 10)
-        h = int(p['h'] * scale / 10)
+        w = int(p.get('dw', p['w']) * scale / 10)
+        h = int(p.get('dh', p['h']) * scale / 10)
         # y từ đáy -> đảo trục cho ảnh (đỉnh ở trên)
         top = H - y0 - h
         thumb = None
@@ -630,6 +647,7 @@ def ghep_in(request):
         labels = request.POST.getlist('label')
         width_cm = _f(request.POST.get('width_cm'), 151.5)
         gap_cm = _f(request.POST.get('gap_cm'), 0.0)
+        overlap_cm = max(0.0, _f(request.POST.get('overlap_cm'), 0.0))
         rotate = request.POST.get('rotate') == '1'
         target_dpi = int(_f(request.POST.get('dpi'), 150))
 
@@ -692,7 +710,9 @@ def ghep_in(request):
                 msg += ' Hãy chọn từ kho hoặc tải ảnh + nhập kích thước.'
             return JsonResponse({'ok': False, 'msg': msg, 'warnings': warnings})
 
-        planned = plan(items, width_cm=width_cm, gap_cm=gap_cm, allow_rotate=rotate)
+        if overlap_cm >= 4:
+            warnings.insert(0, 'Chồng mí %g cm khá lớn — có thể đè lên phần TRANH (viền thường chỉ ~4cm).' % overlap_cm)
+        planned = plan(items, width_cm=width_cm, gap_cm=gap_cm, allow_rotate=rotate, overlap_cm=overlap_cm)
         pdf_rel = 'ghep/ghep_%s.pdf' % stamp
         prev_rel = 'ghep/ghep_%s.png' % stamp
         try:
@@ -708,11 +728,14 @@ def ghep_in(request):
         missing = planned['count'] - embedded
         if missing > 0:
             warnings.insert(0, '⚠ %d/%d ô KHÔNG có ảnh (ô đỏ trong PDF) — kiểm tra nguồn ảnh.' % (missing, planned['count']))
+        if overlap_cm > 0:
+            warnings.insert(0, '✓ Đã chồng mí %g cm (các tranh chia sẻ viền).' % overlap_cm)
         return JsonResponse({
             'ok': True, 'pdf': '/media/' + pdf_rel, 'preview': '/media/' + prev_rel,
             'count': planned['count'], 'embedded': embedded, 'meters': planned['meters'],
             'util': planned['utilization'], 'length_cm': round(planned['length_cm'], 1),
-            'width_cm': round(planned['width_cm'], 1), 'warnings': warnings,
+            'width_cm': round(planned['width_cm'], 1),
+            'overlap_cm': planned.get('overlap_cm', 0), 'warnings': warnings,
         })
 
     arts = [{'id': a.id, 'code': a.code, 'url': '/media/' + a.image,
