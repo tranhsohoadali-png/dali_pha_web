@@ -307,3 +307,26 @@ class PrintArt(models.Model):
 
     def __str__(self):
         return f'{self.code} ({self.w_cm:g}x{self.h_cm:g})'
+
+
+class PrintJob(models.Model):
+    """HÀNG ĐỢI RIP: mỗi tấm ghép gửi đi in là 1 job. Web tạo job (pending), DALI Agent
+    trên máy in kéo PDF về thả vào hot folder Flexi rồi báo trạng thái ngược lại.
+    Flexi mới là nơi RIP thật (web không tạo .prt được)."""
+    PENDING, SENT, RIPPING, DONE, ERROR = 'pending', 'sent', 'ripping', 'done', 'error'
+    name = models.CharField(max_length=200)                  # tên hiển thị (vd tên file PDF)
+    pdf = models.CharField(max_length=300)                   # đường dẫn PDF trong MEDIA_ROOT
+    meters = models.FloatField(default=0)                    # dài vải (m)
+    util = models.FloatField(default=0)                      # % tận dụng
+    count = models.IntegerField(default=0)                   # số tranh
+    status = models.CharField(max_length=20, default=PENDING, db_index=True)
+    message = models.CharField(max_length=300, blank=True, default='')
+    prt_mb = models.FloatField(default=0)                    # cỡ file .prt (MB) khi RIP xong
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created', '-id']
+
+    def __str__(self):
+        return f'{self.name} [{self.status}]'

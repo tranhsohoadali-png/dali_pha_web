@@ -11,6 +11,7 @@ from pha import backup_lib
 from pha import extra_views
 from pha import ai_levels
 from pha import imposition
+from pha import rip_views
 
 urlpatterns = [
     path('login', views.login_view, name='login'),
@@ -82,6 +83,10 @@ urlpatterns = [
 
     # Ghép khổ in (imposition / nesting -> PDF cho Flexi)
     path('ghep-in', imposition.ghep_in, name='ghep_in'),
+    # Hàng đợi RIP (web <-> DALI Print Agent <-> Flexi)
+    path('api/rip-queue', rip_views.rip_queue, name='rip_queue'),
+    path('api/rip-status', rip_views.rip_status, name='rip_status'),
+    path('api/rip-list', rip_views.rip_list, name='rip_list'),
 
     # Sao lưu dữ liệu
     path('sao-luu', backup_lib.backup_page, name='sao_luu'),

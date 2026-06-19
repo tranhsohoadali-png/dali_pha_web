@@ -136,10 +136,25 @@
             <div class="col-4"><div class="stat-tile"><div class="lbl">Dài vải</div><div class="val text-primary" id="sLen">0</div><div class="small text-secondary">mét</div></div></div>
             <div class="col-4"><div class="stat-tile"><div class="lbl">Tận dụng</div><div class="val" id="sUtil">0%</div></div></div>
           </div>
-          <a id="dlBtn" class="btn btn-success w-100 mb-3" style="display:none" download><i class="bi bi-file-earmark-pdf"></i> Tải PDF in</a>
+          <a id="dlBtn" class="btn btn-success w-100 mb-2" style="display:none" download><i class="bi bi-file-earmark-pdf"></i> Tải PDF in</a>
+          <button type="button" id="ripBtn" class="btn btn-dark w-100 mb-3" style="display:none"><i class="bi bi-printer-fill"></i> Gửi sang máy in (RIP)</button>
           <div id="warn" class="small text-danger mb-2"></div>
           <div class="text-center text-secondary small" id="prevHint">Bấm "GHÉP" để xem bố cục xếp.</div>
           <img id="preview" style="display:none">
+        </div>
+      </div>
+
+      <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-printer"></i> Hàng đợi RIP (sang Flexi)</span>
+          <button type="button" id="ripRefresh" class="btn btn-sm btn-outline-secondary py-0"><i class="bi bi-arrow-clockwise"></i></button>
+        </div>
+        <div class="card-body">
+          <div id="ripJobs"><div class="text-secondary small">Chưa có job nào.</div></div>
+          <div class="small text-secondary mt-2" id="ripKeyBox" style="display:none">
+            <i class="bi bi-key"></i> Khoá Agent: <code id="ripKey">—</code>
+            <span class="d-block">Dán khoá này vào <code>tools/dali_print_agent.py</code> (RIP_KEY) trên máy in.</span>
+          </div>
         </div>
       </div>
     </div>
@@ -221,11 +236,47 @@
       var u=document.getElementById('sUtil'); u.textContent=d.util+'%'; u.className='val '+(d.util>=80?'text-success':(d.util>=60?'text-warning':'text-danger'));
       var dl=document.getElementById('dlBtn'); dl.style.display=''; dl.href=d.pdf;
       dl.innerHTML='<i class="bi bi-file-earmark-pdf"></i> Tải PDF in ('+d.width_cm+'×'+d.length_cm+'cm)';
+      window._lastGhep={pdf:d.pdf, name:'ghep '+d.width_cm+'x'+d.length_cm+'cm '+d.count+'tranh', meters:d.meters, util:d.util, count:d.count};
+      var rb=document.getElementById('ripBtn'); rb.style.display=''; rb.disabled=false; rb.innerHTML='<i class="bi bi-printer-fill"></i> Gửi sang máy in (RIP)';
       document.getElementById('prevHint').style.display='none';
       var pv=document.getElementById('preview'); pv.style.display=''; pv.src=d.preview+'?t='+Date.now();
       var w=document.getElementById('warn'); w.innerHTML=(d.warnings&&d.warnings.length)?('<i class="bi bi-exclamation-triangle"></i> '+d.warnings.join('<br>')):'';
     }).catch(function(){ btn.disabled=false; msg.className='small mt-2 text-danger'; msg.textContent='Lỗi kết nối.'; });
   });
+
+  // ---- Hàng đợi RIP (web -> Agent -> Flexi) ----
+  function ripBadge(s){
+    var m={pending:['Đang chờ','secondary'],sent:['Đã gửi Flexi','info'],ripping:['Đang RIP','warning'],done:['✓ RIP xong','success'],error:['Lỗi','danger']};
+    var x=m[s]||[s,'secondary']; return '<span class="badge text-bg-'+x[1]+'">'+x[0]+'</span>';
+  }
+  function loadRipJobs(){
+    fetch('/api/rip-list').then(function(r){return r.ok?r.json():null;}).then(function(d){
+      if(!d||!d.ok) return;
+      var box=document.getElementById('ripJobs');
+      if(!d.jobs.length){ box.innerHTML='<div class="text-secondary small">Chưa có job nào.</div>'; }
+      else {
+        var h='<table class="table table-sm align-middle mb-0"><tbody>';
+        d.jobs.forEach(function(j){
+          h+='<tr><td class="small"><b>'+j.name+'</b><div class="text-secondary">'+j.meters+'m · '+j.count+' tranh'+(j.prt_mb?' · .prt '+j.prt_mb+'MB':'')+'</div>'+(j.message?'<div class="text-secondary" style="font-size:.7rem">'+j.message+'</div>':'')+'</td><td class="text-end" style="white-space:nowrap">'+ripBadge(j.status)+'<div class="text-secondary" style="font-size:.7rem">'+j.created+'</div></td></tr>';
+        });
+        box.innerHTML=h+'</tbody></table>';
+      }
+      if(d.key){ document.getElementById('ripKeyBox').style.display=''; document.getElementById('ripKey').textContent=d.key; }
+    }).catch(function(){});
+  }
+  document.getElementById('ripBtn').addEventListener('click', function(){
+    if(!window._lastGhep) return;
+    var rb=this; rb.disabled=true; rb.innerHTML='<i class="bi bi-hourglass-split"></i> Đang gửi…';
+    var fd=new FormData(); fd.append('action','queue_rip');
+    fd.append('pdf', window._lastGhep.pdf); fd.append('name', window._lastGhep.name);
+    fd.append('meters', window._lastGhep.meters); fd.append('util', window._lastGhep.util); fd.append('count', window._lastGhep.count);
+    fetch('/ghep-in',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      if(d.ok){ rb.disabled=true; rb.innerHTML='<i class="bi bi-check2"></i> Đã gửi vào hàng đợi'; loadRipJobs(); }
+      else { rb.disabled=false; rb.innerHTML='<i class="bi bi-printer-fill"></i> Gửi sang máy in (RIP)'; alert(d.msg||'Lỗi'); }
+    }).catch(function(){ rb.disabled=false; rb.innerHTML='<i class="bi bi-printer-fill"></i> Gửi sang máy in (RIP)'; });
+  });
+  document.getElementById('ripRefresh').addEventListener('click', loadRipJobs);
+  loadRipJobs(); setInterval(loadRipJobs, 5000);
 
   // Preset điền nhanh kích thước cho form lưu kho (kèm tô sáng nút đang chọn)
   var pszBtns=document.querySelectorAll('.psz');

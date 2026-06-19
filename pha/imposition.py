@@ -637,6 +637,22 @@ def ghep_in(request):
             else:
                 messages.error(request, 'Cỡ không hợp lệ.')
         return redirect('/ghep-in')
+    if request.method == 'POST' and request.POST.get('action') == 'queue_rip':
+        # Đưa tấm ghép (PDF đã tạo) vào HÀNG ĐỢI RIP để Agent kéo sang Flexi.
+        from pha.models import PrintJob
+        rel = (request.POST.get('pdf') or '').strip().lstrip('/')
+        if rel.startswith('media/'):
+            rel = rel[len('media/'):]
+        if not rel or not os.path.exists(os.path.join(settings.MEDIA_ROOT, rel)):
+            return JsonResponse({'ok': False, 'msg': 'Không tìm thấy PDF để gửi RIP (ghép lại trước).'})
+        j = PrintJob.objects.create(
+            name=(request.POST.get('name') or os.path.basename(rel))[:200],
+            pdf=rel,
+            meters=_f(request.POST.get('meters'), 0),
+            util=_f(request.POST.get('util'), 0),
+            count=int(_f(request.POST.get('count'), 0)),
+            status=PrintJob.PENDING)
+        return JsonResponse({'ok': True, 'id': j.id, 'msg': 'Đã đưa vào hàng đợi RIP.'})
 
     if request.method == 'POST':
         import secrets
