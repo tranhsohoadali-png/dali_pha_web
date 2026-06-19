@@ -24,6 +24,22 @@ PT_PER_MM = 72.0 / 25.4   # 1 inch = 25.4mm = 72pt
 RASTER_DPI = 200
 _MAX_RASTER_PX = 6000          # chặn ảnh quá lớn nếu khổ artboard bị đặt sai
 _IMG_EXTS = ('.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff')
+_PDF_HINT = 'là PDF nhưng server chưa cài pymupdf — chạy update.sh, hoặc up ảnh PNG/JPG'
+
+
+def _import_fitz():
+    """Trả module PyMuPDF (fitz) hoặc None nếu chưa cài."""
+    try:
+        import fitz
+        return fitz
+    except ImportError:
+        try:
+            import pymupdf as fitz
+            return fitz
+        except Exception:
+            return None
+    except Exception:
+        return None
 
 
 def _looks_pdf(name, data=None):
@@ -34,6 +50,24 @@ def _looks_pdf(name, data=None):
     return False
 
 
+def _rasterize_pdf(data, out_png, fitz):
+    """Rasterize trang 1 của PDF (bytes) -> PNG ở RASTER_DPI theo khổ thật của trang.
+    Ném lỗi nếu PDF rỗng/hỏng."""
+    doc = fitz.open(stream=data, filetype='pdf')
+    try:
+        if doc.page_count < 1:
+            raise ValueError('PDF rỗng (không có trang)')
+        page = doc.load_page(0)
+        zoom = RASTER_DPI / 72.0
+        longest = max(page.rect.width, page.rect.height) * zoom
+        if longest > _MAX_RASTER_PX:
+            zoom *= _MAX_RASTER_PX / longest
+        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+        pix.save(out_png)
+    finally:
+        doc.close()
+
+
 def _save_print_image(f, abs_dir, stem):
     """Lưu file tải lên thành ẢNH dùng được. Ảnh thường -> ghi nguyên. PDF (xuất từ
     Illustrator) -> rasterize trang 1 sang PNG ở RASTER_DPI (theo khổ thật của trang).
@@ -42,27 +76,12 @@ def _save_print_image(f, abs_dir, stem):
     data = f.read()
     name = getattr(f, 'name', '') or ''
     if _looks_pdf(name, data):
-        try:
-            try:
-                import fitz  # PyMuPDF
-            except ImportError:
-                import pymupdf as fitz
-        except Exception:
+        fitz = _import_fitz()
+        if fitz is None:
             return None, 'Server chưa cài thư viện đọc PDF (pymupdf) — chạy update.sh, hoặc up ảnh PNG/JPG.'
+        fn = stem + '.png'
         try:
-            doc = fitz.open(stream=data, filetype='pdf')
-            if doc.page_count < 1:
-                doc.close()
-                return None, 'PDF rỗng (không có trang).'
-            page = doc.load_page(0)
-            zoom = RASTER_DPI / 72.0
-            longest = max(page.rect.width, page.rect.height) * zoom
-            if longest > _MAX_RASTER_PX:
-                zoom *= _MAX_RASTER_PX / longest
-            pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
-            fn = stem + '.png'
-            pix.save(os.path.join(abs_dir, fn))
-            doc.close()
+            _rasterize_pdf(data, os.path.join(abs_dir, fn), fitz)
             return fn, None
         except Exception as e:
             return None, 'Không đọc được PDF: ' + str(e)[:120]
@@ -74,6 +93,61 @@ def _save_print_image(f, abs_dir, stem):
     with open(os.path.join(abs_dir, fn), 'wb') as out:
         out.write(data)
     return fn, None
+
+
+def _resolve_raster(abs_path, label=''):
+    """Bảo đảm abs_path là ẢNH BITMAP nhúng được. Tự sửa các trường hợp hỏng:
+      • file thực ra là PDF (vd kho cũ lưu PDF nhưng đặt tên .png) -> rasterize lại
+      • ảnh CMYK/đặc biệt -> chuyển RGB
+    Trả (path_dùng_được | None, warning | None). Nếu None thì warning nêu RÕ lý do."""
+    label = label or os.path.basename(abs_path or '?')
+    if not abs_path or not os.path.exists(abs_path):
+        return None, '%s: thiếu file ảnh' % label
+    try:
+        with open(abs_path, 'rb') as fh:
+            head = fh.read(5)
+    except OSError:
+        return None, '%s: không đọc được file' % label
+    # File thực chất là PDF (đuôi .png nhưng nội dung %PDF) -> rasterize lại
+    if head[:5] == b'%PDF-':
+        fitz = _import_fitz()
+        if fitz is None:
+            return None, '%s: %s' % (label, _PDF_HINT)
+        png = os.path.splitext(abs_path)[0] + '_r.png'
+        try:
+            if not os.path.exists(png):
+                with open(abs_path, 'rb') as fh:
+                    _rasterize_pdf(fh.read(), png, fitz)
+            abs_path = png
+        except Exception as e:
+            return None, '%s: lỗi đọc PDF (%s)' % (label, str(e)[:60])
+    # Xác thực + chuẩn hoá màu bằng Pillow
+    try:
+        from PIL import Image
+        im = Image.open(abs_path)
+        im.load()
+        if im.mode not in ('RGB', 'L'):
+            norm = os.path.splitext(abs_path)[0] + '_rgb.png'
+            if not os.path.exists(norm):
+                im.convert('RGB').save(norm)
+            abs_path = norm
+        return abs_path, None
+    except Exception as e:
+        return None, '%s: ảnh hỏng/không mở được (%s)' % (label, str(e)[:50])
+
+
+def _dpi_warning(path, w_cm, target_dpi, label):
+    """Cảnh báo nếu ảnh thấp hơn DPI mục tiêu (in dễ mờ). Trả str hoặc None."""
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            px = im.size[0]
+        dpi = px / (w_cm / 2.54)
+        if dpi < target_dpi - 5:
+            return '%s: chỉ ~%d DPI (nên ≥ %d) — in có thể mờ' % (label, int(dpi), target_dpi)
+    except Exception:
+        pass
+    return None
 
 
 def _skyline_pack(items, width_mm, gap_mm=0, allow_rotate=False):
@@ -329,13 +403,31 @@ def render_pdf(planned, out_path, title=''):
     c = canvas.Canvas(out_path, pagesize=(W_pt, L_pt))
     if title:
         c.setTitle(title)
+    embedded = 0
+
+    def _miss_box(x_pt, y_pt, w_pt, h_pt, label):
+        # Ô THIẾU ẢNH: tô đỏ nhạt + viền đỏ + chữ -> không bao giờ ra ô trắng "bí ẩn"
+        c.saveState()
+        c.setFillColorRGB(0.98, 0.86, 0.86)
+        c.setStrokeColorRGB(0.8, 0.1, 0.1)
+        c.setLineWidth(2)
+        c.rect(x_pt, y_pt, w_pt, h_pt, stroke=1, fill=1)
+        c.setFillColorRGB(0.7, 0, 0)
+        fs = max(8, min(w_pt, h_pt) * 0.12)
+        c.setFont('Helvetica-Bold', fs)
+        txt = ('%s - THIEU ANH' % label) if label else 'THIEU ANH'
+        c.drawCentredString(x_pt + w_pt / 2, y_pt + h_pt / 2 - fs / 2, txt[:40])
+        c.restoreState()
+
     for p in planned['placements']:
         x_pt = p['x'] * PT_PER_MM
         w_pt = p['w'] * PT_PER_MM
         h_pt = p['h'] * PT_PER_MM
         # PDF gốc ở góc dưới-trái; y nội bộ tính từ đáy -> trùng luôn
         y_pt = p['y'] * PT_PER_MM
+        label = str(p.get('label') or p.get('id') or '')
         img = p.get('image_path')
+        ok = False
         if img and os.path.exists(img):
             try:
                 ir = ImageReader(img)
@@ -350,13 +442,15 @@ def render_pdf(planned, out_path, title=''):
                 else:
                     c.drawImage(ir, x_pt, y_pt, width=w_pt, height=h_pt,
                                 preserveAspectRatio=False, mask='auto')
+                ok = True
+                embedded += 1
             except Exception:
-                c.rect(x_pt, y_pt, w_pt, h_pt, stroke=1, fill=0)
-        else:
-            c.rect(x_pt, y_pt, w_pt, h_pt, stroke=1, fill=0)
+                ok = False
+        if not ok:
+            _miss_box(x_pt, y_pt, w_pt, h_pt, label)
     c.showPage()
     c.save()
-    return out_path
+    return embedded
 
 
 def render_preview(planned, out_path, scale=2.0, image_paths=None):
@@ -466,7 +560,6 @@ def ghep_in(request):
 
     if request.method == 'POST':
         import secrets
-        from PIL import Image
         imgs = request.FILES.getlist('img')
         ws = request.POST.getlist('w')
         hs = request.POST.getlist('h')
@@ -494,15 +587,13 @@ def ghep_in(request):
             if err:
                 warnings.append('%s: %s' % (f.name, err))
                 continue
-            path = os.path.join(outdir, fn)
-            try:
-                im = Image.open(path)
-                dpi = im.size[0] / (w_cm / 2.54)
-                if dpi < target_dpi - 5:
-                    warnings.append('%s: chỉ ~%d DPI (nên ≥ %d) — in có thể mờ'
-                                    % (f.name, int(dpi), target_dpi))
-            except Exception:
-                pass
+            path, rerr = _resolve_raster(os.path.join(outdir, fn), f.name)
+            if rerr:
+                warnings.append(rerr)
+                continue
+            dw = _dpi_warning(path, w_cm, target_dpi, f.name)
+            if dw:
+                warnings.append(dw)
             items.append({'id': f.name, 'image_path': path, 'w_cm': w_cm, 'h_cm': h_cm,
                           'qty': qty, 'label': labels[i] if i < len(labels) else ''})
 
@@ -520,39 +611,49 @@ def ghep_in(request):
                 except (ValueError, TypeError):
                     qty = 1
                 p = os.path.join(settings.MEDIA_ROOT, a.image)
-                if not os.path.exists(p):
-                    warnings.append('Kho: %s thiếu file ảnh — bỏ qua.' % a.code)
+                rp, rerr = _resolve_raster(p, a.code)
+                if rerr:
+                    warnings.append('Kho ' + rerr)
                     continue
-                try:
-                    im = Image.open(p)
-                    dpi = im.size[0] / (a.w_cm / 2.54)
-                    if dpi < target_dpi - 5:
-                        warnings.append('%s: chỉ ~%d DPI (nên ≥ %d) — in có thể mờ'
-                                        % (a.code, int(dpi), target_dpi))
-                except Exception:
-                    pass
-                items.append({'id': a.code, 'image_path': p, 'w_cm': a.w_cm, 'h_cm': a.h_cm,
+                dw = _dpi_warning(rp, a.w_cm, target_dpi, a.code)
+                if dw:
+                    warnings.append(dw)
+                items.append({'id': a.code, 'image_path': rp, 'w_cm': a.w_cm, 'h_cm': a.h_cm,
                               'qty': qty, 'label': a.code})
 
         if not items:
-            return JsonResponse({'ok': False, 'msg': 'Chưa chọn/thêm tranh nào (chọn từ kho hoặc tải ảnh + kích thước).'})
+            msg = 'Không nạp được tranh nào.'
+            if warnings:
+                msg += ' Lý do: ' + ' | '.join(warnings[:6])
+            else:
+                msg += ' Hãy chọn từ kho hoặc tải ảnh + nhập kích thước.'
+            return JsonResponse({'ok': False, 'msg': msg, 'warnings': warnings})
 
         planned = plan(items, width_cm=width_cm, gap_cm=gap_cm, allow_rotate=rotate)
         pdf_rel = 'ghep/ghep_%s.pdf' % stamp
         prev_rel = 'ghep/ghep_%s.png' % stamp
         try:
-            render_pdf(planned, os.path.join(settings.MEDIA_ROOT, pdf_rel), title='Ghep in DALI')
+            embedded = render_pdf(planned, os.path.join(settings.MEDIA_ROOT, pdf_rel), title='Ghep in DALI')
             render_preview(planned, os.path.join(settings.MEDIA_ROOT, prev_rel))
         except Exception as e:
             return JsonResponse({'ok': False, 'msg': 'Lỗi tạo file: ' + str(e)[:160]})
+        # Chốt chặn: nếu KHÔNG nhúng được ảnh nào -> báo lỗi rõ ràng thay vì giao PDF ô trống
+        if embedded == 0:
+            msg = 'Ghép xong NHƯNG không nhúng được ảnh nào (PDF sẽ toàn ô trống). '
+            msg += ('Lý do: ' + ' | '.join(warnings[:5])) if warnings else _PDF_HINT
+            return JsonResponse({'ok': False, 'msg': msg, 'warnings': warnings})
+        missing = planned['count'] - embedded
+        if missing > 0:
+            warnings.insert(0, '⚠ %d/%d ô KHÔNG có ảnh (ô đỏ trong PDF) — kiểm tra nguồn ảnh.' % (missing, planned['count']))
         return JsonResponse({
             'ok': True, 'pdf': '/media/' + pdf_rel, 'preview': '/media/' + prev_rel,
-            'count': planned['count'], 'meters': planned['meters'],
+            'count': planned['count'], 'embedded': embedded, 'meters': planned['meters'],
             'util': planned['utilization'], 'length_cm': round(planned['length_cm'], 1),
             'width_cm': round(planned['width_cm'], 1), 'warnings': warnings,
         })
 
     arts = [{'id': a.id, 'code': a.code, 'url': '/media/' + a.image,
-             'w': a.w_cm, 'h': a.h_cm, 'note': a.note}
+             'w': a.w_cm, 'h': a.h_cm, 'note': a.note,
+             'missing': not os.path.exists(os.path.join(settings.MEDIA_ROOT, a.image or ''))}
             for a in PrintArt.objects.all()]
     return render(request, 'ghep_in.html', {'presets': PRESETS, 'arts': arts})

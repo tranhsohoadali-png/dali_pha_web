@@ -76,7 +76,7 @@
         <div class="col-4 col-md-2">
           <div class="art-card">
             <img src="{{ a.url }}" alt="{{ a.code }}">
-            <div class="art-code">{{ a.code }}</div>
+            <div class="art-code">{{ a.code }}{% if a.missing %} <span class="badge text-bg-danger" title="Mất file ảnh trên server — xoá & lưu lại">⚠ mất ảnh</span>{% endif %}</div>
             <form method="POST" action="/ghep-in" class="d-flex gap-1 mt-1 align-items-center justify-content-center" title="Sửa cỡ in (cm) rồi bấm ✓">
               {% csrf_token %}<input type="hidden" name="action" value="edit_art"><input type="hidden" name="id" value="{{ a.id }}">
               <input type="number" name="w" value="{{ a.w|unlocalize }}" step="0.5" min="1" class="form-control form-control-sm text-center px-1 py-0" style="width:3rem">
