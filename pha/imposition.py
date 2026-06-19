@@ -162,6 +162,139 @@ def _skyline_pack(items, width_mm, gap_mm=0, allow_rotate=False):
     return placements, length_mm, used_area
 
 
+def _guillotine_pack(rects, W, gap=0):
+    """Guillotine Best-Area-Fit (split trục ngắn + gộp free-rect). Thường xếp gọn
+    hơn skyline với LÔ TRỘN CÂN BẰNG (vd nhiều 28 lẫn 38), nhưng có lúc tệ hơn ->
+    dùng trong _pack_best (chạy cùng skyline rồi chọn cái ngắn hơn)."""
+    INF = float('inf')
+    placements = []
+    order = sorted(range(len(rects)), key=lambda i: (-(rects[i]['h']), -(rects[i]['w'])))
+    free = [(0, 0, W, INF)]
+
+    def split_free(fr, used_w, used_h):
+        fx, fy, fw, fh = fr
+        parts = []
+        leftover_w = fw - used_w
+        leftover_h = (fh - used_h) if fh != INF else INF
+        cmp_h = leftover_h if leftover_h != INF else (leftover_w + 1)
+        if leftover_w <= cmp_h:
+            if leftover_w > 0:
+                parts.append((fx + used_w, fy, leftover_w, used_h))
+            if leftover_h != 0:
+                parts.append((fx, fy + used_h, fw, (fh - used_h) if fh != INF else INF))
+        else:
+            if leftover_h != 0:
+                parts.append((fx, fy + used_h, used_w, (fh - used_h) if fh != INF else INF))
+            if leftover_w > 0:
+                parts.append((fx + used_w, fy, leftover_w, fh))
+        return parts
+
+    def contained(a, b):
+        ax, ay, aw, ah = a
+        bx, by, bw, bh = b
+        return bx <= ax and by <= ay and ax + aw <= bx + bw and ay + ah <= by + bh
+
+    def prune(fl):
+        n = len(fl)
+        removed = [False] * n
+        for i in range(n):
+            if removed[i]:
+                continue
+            for j in range(n):
+                if i == j or removed[j]:
+                    continue
+                if contained(fl[i], fl[j]):
+                    removed[i] = True
+                    break
+        return [fl[i] for i in range(n) if not removed[i]]
+
+    def merge_free(fl):
+        merged = True
+        fl = list(fl)
+        while merged:
+            merged = False
+            n = len(fl)
+            for i in range(n):
+                for j in range(i + 1, n):
+                    ax, ay, aw, ah = fl[i]
+                    bx, by, bw, bh = fl[j]
+                    if ay == by and ah == bh:
+                        if ax + aw == bx:
+                            fl[i] = (ax, ay, aw + bw, ah); del fl[j]; merged = True; break
+                        if bx + bw == ax:
+                            fl[i] = (bx, by, aw + bw, ah); del fl[j]; merged = True; break
+                    if ax == bx and aw == bw:
+                        if ah != INF and ay + ah == by:
+                            fl[i] = (ax, ay, aw, ah + bh if bh != INF else INF); del fl[j]; merged = True; break
+                        if bh != INF and by + bh == ay:
+                            fl[i] = (bx, by, aw, ah + bh if ah != INF else INF); del fl[j]; merged = True; break
+                if merged:
+                    break
+        return fl
+
+    for idx in order:
+        r = rects[idx]
+        rw = r['w'] + gap
+        rh = r['h'] + gap
+        best_i, best_score, best_y = -1, INF, INF
+        for i, fr in enumerate(free):
+            fx, fy, fw, fh = fr
+            if rw <= fw and rh <= fh:
+                score = (fw - rw) + 1e12 + fy if fh == INF else fw * fh - rw * rh
+                if score < best_score - 1e-9 or (abs(score - best_score) <= 1e-9 and fy < best_y):
+                    best_score, best_i, best_y = score, i, fy
+        if best_i == -1:
+            maxy = max((p['y'] + p['h'] for p in placements), default=0)
+            placements.append({**r, 'x': 0, 'y': maxy, 'w': r['w'], 'h': r['h']})
+            continue
+        fr = free[best_i]
+        placements.append({**r, 'x': fr[0], 'y': fr[1], 'w': r['w'], 'h': r['h']})
+        del free[best_i]
+        for p in split_free(fr, rw, rh):
+            if p[2] > 0 and p[3] != 0:
+                free.append(p)
+        free = prune(merge_free(prune(free)))
+
+    length = max((p['y'] + p['h'] for p in placements), default=0)
+    used_area = sum(p['w'] * p['h'] for p in placements)
+    return placements, length, used_area
+
+
+def _valid_layout(placements, width_mm, tol=0.5):
+    """Kiểm tra layout hợp lệ: trong khổ vải + KHÔNG có 2 tranh chồng nhau."""
+    for p in placements:
+        if p['x'] < -tol or p['x'] + p['w'] > width_mm + tol or p['y'] < -tol:
+            return False
+    n = len(placements)
+    for i in range(n):
+        a = placements[i]; ax, ay, aw, ah = a['x'], a['y'], a['w'], a['h']
+        for j in range(i + 1, n):
+            b = placements[j]
+            if ax < b['x'] + b['w'] - tol and b['x'] < ax + aw - tol and \
+               ay < b['y'] + b['h'] - tol and b['y'] < ay + ah - tol:
+                return False
+    return True
+
+
+def _pack_best(rects, width_mm, gap_mm=0, allow_rotate=False):
+    """Chạy NHIỀU thuật toán (skyline + guillotine), loại layout lỗi, chọn cái NGẮN
+    nhất. Skyline luôn là 1 ứng viên nên kết quả không bao giờ tệ hơn trước."""
+    cands = []
+    pl, L, u = _skyline_pack([dict(r) for r in rects], width_mm, gap_mm, allow_rotate)
+    if _valid_layout(pl, width_mm):
+        cands.append((L, u, pl))
+    try:
+        pl2, L2, u2 = _guillotine_pack([dict(r) for r in rects], width_mm, gap_mm)
+        if _valid_layout(pl2, width_mm):
+            cands.append((L2, u2, pl2))
+    except Exception:
+        pass
+    if not cands:                      # cực hiếm: trả skyline thô làm phương án cuối
+        return pl, L, u
+    cands.sort(key=lambda c: c[0])
+    return cands[0][2], cands[0][0], cands[0][1]
+
+
 def plan(items, width_cm=151.5, gap_cm=0.0, allow_rotate=False):
     """items: [{id, image_path, w_cm, h_cm, qty, label}]. Trả dict kế hoạch xếp."""
     width_mm = round(width_cm * MM_PER_CM)
@@ -174,7 +307,7 @@ def plan(items, width_cm=151.5, gap_cm=0.0, allow_rotate=False):
             rects.append({'id': it['id'], 'image_path': it.get('image_path'),
                           'label': it.get('label', ''), 'w': w, 'h': h,
                           'w_cm': it['w_cm'], 'h_cm': it['h_cm']})
-    placements, length_mm, used_area = _skyline_pack(rects, width_mm, gap_mm, allow_rotate)
+    placements, length_mm, used_area = _pack_best(rects, width_mm, gap_mm, allow_rotate)
     sheet_area = width_mm * length_mm if length_mm else 1
     return {
         'placements': placements,
