@@ -316,6 +316,20 @@ def ghep_in(request):
             a.delete()
             messages.info(request, 'Đã xoá khỏi kho.')
         return redirect('/ghep-in')
+    if request.method == 'POST' and request.POST.get('action') == 'edit_art':
+        from django.shortcuts import redirect
+        a = PrintArt.objects.filter(id=request.POST.get('id')).first()
+        if a:
+            w = _f(request.POST.get('w'), a.w_cm)
+            h = _f(request.POST.get('h'), a.h_cm)
+            if w > 0 and h > 0:
+                a.w_cm = w
+                a.h_cm = h
+                a.save()
+                messages.info(request, f'Đã cập nhật cỡ {a.code}: {w:g}×{h:g}cm')
+            else:
+                messages.error(request, 'Cỡ không hợp lệ.')
+        return redirect('/ghep-in')
 
     if request.method == 'POST':
         import secrets

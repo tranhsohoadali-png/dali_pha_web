@@ -77,9 +77,15 @@
           <div class="art-card">
             <img src="{{ a.url }}" alt="{{ a.code }}">
             <div class="art-code">{{ a.code }}</div>
-            <div class="art-size">{{ a.w|floatformat:"-2" }}×{{ a.h|floatformat:"-2" }}cm</div>
+            <form method="POST" action="/ghep-in" class="d-flex gap-1 mt-1 align-items-center justify-content-center" title="Sửa cỡ in (cm) rồi bấm ✓">
+              {% csrf_token %}<input type="hidden" name="action" value="edit_art"><input type="hidden" name="id" value="{{ a.id }}">
+              <input type="number" name="w" value="{{ a.w|unlocalize }}" step="0.5" min="1" class="form-control form-control-sm text-center px-1 py-0" style="width:3rem">
+              <span class="small text-secondary">×</span>
+              <input type="number" name="h" value="{{ a.h|unlocalize }}" step="0.5" min="1" class="form-control form-control-sm text-center px-1 py-0" style="width:3rem">
+              <button class="btn btn-sm btn-outline-success px-1 py-0"><i class="bi bi-check2"></i></button>
+            </form>
             <button type="button" class="btn btn-sm btn-primary w-100 mt-1 py-0 add-art"
-              data-id="{{ a.id }}" data-code="{{ a.code }}" data-w="{{ a.w }}" data-h="{{ a.h }}" data-url="{{ a.url }}"><i class="bi bi-plus-lg"></i> Thêm</button>
+              data-id="{{ a.id }}" data-code="{{ a.code }}" data-w="{{ a.w|unlocalize }}" data-h="{{ a.h|unlocalize }}" data-url="{{ a.url }}"><i class="bi bi-plus-lg"></i> Thêm</button>
             <form method="POST" action="/ghep-in" class="mt-1" onsubmit="return confirm('Xoá {{ a.code }} khỏi kho?')">
               {% csrf_token %}<input type="hidden" name="action" value="del_art"><input type="hidden" name="id" value="{{ a.id }}">
               <button class="btn btn-sm btn-outline-danger w-100 py-0"><i class="bi bi-trash"></i></button>
