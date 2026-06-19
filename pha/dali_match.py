@@ -58,9 +58,30 @@ def _save():
 reload_reference()
 
 
+def _now_str():
+    """Mốc thời gian thêm/sửa màu (giờ VN nếu có)."""
+    try:
+        from pha.views import _now
+        return _now().strftime('%Y-%m-%d %H:%M')
+    except Exception:
+        import datetime
+        return datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+
+
 def get_all():
     """Trả về bản sao danh sách tham chiếu [{hex, dali, rgb}, ...]."""
     return list(_REFERENCE)
+
+
+def get_recent():
+    """Danh sách màu sắp theo MỚI THÊM GẦN NHẤT: mục có mốc 'added' lên đầu (thời gian
+    giảm dần), các màu gốc (chưa có mốc) xếp sau theo thứ tự thêm vào file (mới append sau
+    = mới hơn). Trả bản sao."""
+    out = [dict(it, _i=i) for i, it in enumerate(_REFERENCE)]
+    out.sort(key=lambda x: (x.get('added', ''), x['_i']), reverse=True)
+    for it in out:
+        it.pop('_i', None)
+    return out
 
 
 def find_by_dali(code):
@@ -89,9 +110,10 @@ def add_entry(hex_value, dali):
         if item["hex"].lower() == h:
             item["dali"] = dali
             item["rgb"] = rgb
+            item["added"] = _now_str()
             _save(); _rebuild()
             return True, f"Đã cập nhật {h} -> {dali}."
-    _REFERENCE.append({"hex": h, "dali": dali, "rgb": rgb})
+    _REFERENCE.append({"hex": h, "dali": dali, "rgb": rgb, "added": _now_str()})
     _save(); _rebuild()
     return True, f"Đã thêm {h} -> {dali}."
 
@@ -106,6 +128,7 @@ def import_entries(pairs, replace=False):
         _REFERENCE = []
     index = {it["hex"].lower(): it for it in _REFERENCE}
     added = updated = 0
+    stamp = _now_str()
     for hex_value, dali in pairs:
         h = str(hex_value).strip().lstrip('#').lower()
         dali = str(dali).strip()
@@ -115,9 +138,10 @@ def import_entries(pairs, replace=False):
         if h in index:
             index[h]["dali"] = dali
             index[h]["rgb"] = rgb
+            index[h]["added"] = stamp
             updated += 1
         else:
-            item = {"hex": h, "dali": dali, "rgb": rgb}
+            item = {"hex": h, "dali": dali, "rgb": rgb, "added": stamp}
             _REFERENCE.append(item)
             index[h] = item
             added += 1

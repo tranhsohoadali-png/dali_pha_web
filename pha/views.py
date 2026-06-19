@@ -1014,14 +1014,15 @@ def dali_colors(request):
         return redirect('/dali-colors')
 
     query = (request.GET.get('q') or '').strip().lower()
-    items = dali_match.get_all()
+    recent = request.GET.get('recent') == '1'
+    items = dali_match.get_recent() if recent else dali_match.get_all()
     if query:
         items = [it for it in items if query in it['hex'].lower() or query in it['dali'].lower()]
     total = dali_match.reference_size()
     shown = items[:500]
     return render(request, 'dali_colors.html', {
         'items': shown, 'total': total, 'query': request.GET.get('q') or '',
-        'found': len(items), 'truncated': len(items) > 500,
+        'found': len(items), 'truncated': len(items) > 500, 'recent': recent,
     })
 
 
