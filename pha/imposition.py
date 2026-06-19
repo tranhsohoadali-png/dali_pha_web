@@ -334,6 +334,68 @@ def _guillotine_pack(rects, W, gap=0):
     return placements, length, used_area
 
 
+def _column_pack(rects, W, gap=0):
+    """Xếp theo CỘT cùng cỡ: gom tranh theo (rộng×cao), chọn số cột mỗi cỡ sao cho
+    tổng bề ngang lấp đầy khổ vải nhất và CHIỀU DÀI (cột cao nhất) ngắn nhất, rồi
+    rải đều tranh vào các cột. Cho layout sạch & kín như xếp tay (vd 4 cột 28 + 1 cột 38).
+    Hợp khi lô gồm ít cỡ khác nhau (≤ vài loại)."""
+    import math
+    from collections import defaultdict
+    from itertools import product
+    groups = defaultdict(list)
+    for r in rects:
+        groups[(r['w'], r['h'])].append(r)
+    glist = list(groups.items())                 # [((w,h),[rects...]), ...]
+    keys = [k for k, _ in glist]
+    counts = [len(v) for _, v in glist]
+    maxcols = [max(1, min(counts[i], int(W // max(1, keys[i][0])))) for i in range(len(keys))]
+    space = 1
+    for m in maxcols:
+        space *= m
+    if space > 200000:                           # quá nhiều tổ hợp -> nhường packer khác
+        return [], 0, 0
+
+    def width_used(alloc):
+        return sum(alloc[i] * keys[i][0] for i in range(len(keys))) + gap * (sum(alloc) - 1)
+
+    def length_of(alloc):
+        h = 0
+        for i in range(len(keys)):
+            rows = math.ceil(counts[i] / alloc[i])
+            h = max(h, rows * keys[i][1] + (rows - 1) * gap)
+        return h
+
+    best = None
+    for alloc in product(*[range(1, m + 1) for m in maxcols]):
+        if width_used(alloc) > W + 1e-6:
+            continue
+        key = (length_of(alloc), -width_used(alloc))   # dài ngắn nhất, rồi kín nhất
+        if best is None or key < best[0]:
+            best = (key, alloc)
+    if best is None:
+        return [], 0, 0
+
+    alloc = best[1]
+    placements = []
+    x = 0.0
+    for i, (k, rs) in enumerate(glist):
+        w_g, h_g = k
+        c = alloc[i]
+        n = counts[i]
+        per = [n // c + (1 if j < n % c else 0) for j in range(c)]   # rải đều
+        ri = 0
+        for j in range(c):
+            y = 0.0
+            for _ in range(per[j]):
+                r = rs[ri]; ri += 1
+                placements.append({**r, 'x': x, 'y': y, 'w': w_g, 'h': h_g})
+                y += h_g + gap
+            x += w_g + gap
+    length = max((p['y'] + p['h'] for p in placements), default=0)
+    used = sum(p['w'] * p['h'] for p in placements)
+    return placements, length, used
+
+
 def _valid_layout(placements, width_mm, tol=0.5):
     """Kiểm tra layout hợp lệ: trong khổ vải + KHÔNG có 2 tranh chồng nhau."""
     for p in placements:
@@ -357,12 +419,13 @@ def _pack_best(rects, width_mm, gap_mm=0, allow_rotate=False):
     pl, L, u = _skyline_pack([dict(r) for r in rects], width_mm, gap_mm, allow_rotate)
     if _valid_layout(pl, width_mm):
         cands.append((L, u, pl))
-    try:
-        pl2, L2, u2 = _guillotine_pack([dict(r) for r in rects], width_mm, gap_mm)
-        if _valid_layout(pl2, width_mm):
-            cands.append((L2, u2, pl2))
-    except Exception:
-        pass
+    for _pk in (_guillotine_pack, _column_pack):
+        try:
+            pl2, L2, u2 = _pk([dict(r) for r in rects], width_mm, gap_mm)
+            if pl2 and _valid_layout(pl2, width_mm):
+                cands.append((L2, u2, pl2))
+        except Exception:
+            pass
     if not cands:                      # cực hiếm: trả skyline thô làm phương án cuối
         return pl, L, u
     cands.sort(key=lambda c: c[0])
