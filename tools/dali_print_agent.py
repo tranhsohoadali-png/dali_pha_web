@@ -25,7 +25,7 @@ from collections import deque
 
 # ===================== CAU HINH (sua o day) =====================
 WEB_BASE = "https://mau.tranhdali.vn"          # dia chi web Ghep in
-RIP_KEY = ""                                    # DAN "Khoa Agent" tu trang Ghep in vao day
+RIP_KEY = ""                                    # de TRONG o day — dat khoa trong tools/dali_agent_config.json (khong commit)
 HOTFOLDER = r"C:\Program Files (x86)\SAi\FlexiPRINT 19 RIPControl Edition\Jobs and Settings\Jobs\RIPControl\PRINTTYPE-SC"
 OUTPUT_DIR = r""                                # (tuy chon) thu muc Flexi xuat .prt -> de bao 'RIP xong'. Trong = bo qua.
 DROP_DIR = r"C:\DALI_DROP"
@@ -35,6 +35,19 @@ POLL_SECONDS = 3.0
 # ================================================================
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+
+# Khoá + cấu hình bí mật đọc từ file RIÊNG (KHÔNG commit lên git) -> tránh lộ khoá.
+# Tạo tools/dali_agent_config.json: {"RIP_KEY": "rip-...", "WEB_BASE": "...", "OUTPUT_DIR": "..."}
+try:
+    _cfg = json.load(open(os.path.join(_HERE, "dali_agent_config.json"), encoding="utf-8"))
+    RIP_KEY = _cfg.get("RIP_KEY") or RIP_KEY
+    WEB_BASE = _cfg.get("WEB_BASE") or WEB_BASE
+    OUTPUT_DIR = _cfg.get("OUTPUT_DIR") or OUTPUT_DIR
+    if _cfg.get("HOTFOLDER"):
+        HOTFOLDER = _cfg["HOTFOLDER"]
+except Exception:
+    pass
+
 STATE_FILE = os.path.join(_HERE, "dali_agent_seen.json")
 LOG_FILE = os.path.join(_HERE, "dali_agent.log")
 _CTX = ssl.create_default_context()
@@ -134,6 +147,8 @@ def poll_web(job_seen):
     """Lay job PENDING tu web -> tai PDF -> tha vao hot folder -> bao 'sent'."""
     if not (RIP_KEY and WEB_BASE):
         return False
+    if not os.path.isdir(HOTFOLDER):
+        return False           # hot folder Flexi chua san sang -> giu job o trang thai cho, thu lai sau
     try:
         d = _http_json(WEB_BASE.rstrip("/") + "/api/rip-queue?key=" + urllib.parse.quote(RIP_KEY))
     except Exception as e:
@@ -194,6 +209,8 @@ def _find_files(watch):
 
 def process_folders(watch, hotfolder, file_seen, stable_wait=1.0):
     pushed = []
+    if not os.path.isdir(hotfolder):
+        return pushed          # cho hot folder Flexi san sang
     for p in _find_files(watch):
         key = os.path.normcase(os.path.abspath(p))
         if key in file_seen:

@@ -15,6 +15,7 @@ media/*
 !media/icon-ql-192.png
 !media/icon-ql-512.png
 
-# DALI Print Agent runtime
+# DALI Print Agent runtime + khoá bí mật (KHÔNG commit)
 tools/dali_agent.log
 tools/dali_agent_seen.json
+tools/dali_agent_config.json
