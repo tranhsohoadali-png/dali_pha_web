@@ -70,9 +70,9 @@
         <div class="col-6 col-md-3"><label class="form-label small mb-1">Ảnh in (PNG/JPG/PDF, đã có viền)</label><input type="file" name="art_img" accept="image/*,application/pdf,.pdf" class="form-control form-control-sm" required></div>
         <div class="col-4 col-md-2"><label class="form-label small mb-1">Rộng (cm)</label><input type="number" name="art_w" class="form-control form-control-sm" step="0.5" value="38" required></div>
         <div class="col-4 col-md-2"><label class="form-label small mb-1">Cao (cm)</label><input type="number" name="art_h" class="form-control form-control-sm" step="0.5" value="38" required></div>
-        <div class="col-8 col-md-3"><label class="form-label small mb-1">Điền nhanh cỡ in</label>
-          <div class="d-flex gap-1">
-            {% for p in presets %}<button type="button" class="btn btn-sm btn-outline-secondary py-1 px-1 flex-fill psz" data-w="{{ p.w|unlocalize }}" data-h="{{ p.h|unlocalize }}">{{ p.label }}<span class="d-none d-md-inline small text-muted"> →{{ p.w|unlocalize }}×{{ p.h|unlocalize }}</span></button>{% endfor %}
+        <div class="col-12"><label class="form-label small mb-1">Điền nhanh cỡ in <span class="text-secondary fw-normal">(cỡ tranh chưa viền → tự +viền 8cm)</span></label>
+          <div class="d-flex flex-wrap gap-1">
+            {% for p in presets %}<button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2 psz" data-w="{{ p.w|unlocalize }}" data-h="{{ p.h|unlocalize }}">{{ p.label }}<span class="small text-muted"> →{{ p.w|unlocalize }}×{{ p.h|unlocalize }}</span></button>{% endfor %}
           </div>
         </div>
         <div class="col-12"><button class="btn btn-success btn-sm"><i class="bi bi-plus-circle"></i> Lưu vào kho</button></div>

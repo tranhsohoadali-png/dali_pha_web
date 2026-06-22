@@ -564,10 +564,16 @@ def render_preview(planned, out_path, scale=2.0, image_paths=None):
 
 
 # ===================== TRANG WEB GHÉP KHỔ IN =====================
+# Cỡ NHANH: label = cỡ tranh (CHƯA viền); w/h = cỡ IN thật = cỡ tranh + viền 8cm (mỗi cạnh +4cm).
 PRESETS = [
     {'label': '20x20', 'w': 28, 'h': 28},
     {'label': '30x30', 'w': 38, 'h': 38},
     {'label': '30x37.5', 'w': 38, 'h': 45.5},
+    {'label': '40x50', 'w': 48, 'h': 58},
+    {'label': '50x65', 'w': 58, 'h': 73},
+    {'label': '60x75', 'w': 68, 'h': 83},
+    {'label': '70x90', 'w': 78, 'h': 98},
+    {'label': '80x100', 'w': 88, 'h': 108},
 ]
 
 
