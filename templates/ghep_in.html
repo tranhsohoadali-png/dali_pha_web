@@ -54,7 +54,14 @@
 
   <!-- KHO ẢNH IN -->
   <div class="card mb-3">
-    <div class="card-header"><i class="bi bi-collection"></i> Kho ảnh in ({{ arts|length }}) <span class="small fw-normal text-secondary">— lưu 1 lần, lần sau khỏi tải lại</span></div>
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <span><i class="bi bi-collection"></i> Kho ảnh in ({{ arts|length }}) <span class="small fw-normal text-secondary">— lưu 1 lần, lần sau khỏi tải lại</span></span>
+      <div class="input-group input-group-sm" style="max-width:260px">
+        <span class="input-group-text"><i class="bi bi-search"></i></span>
+        <input type="text" id="artSearch" class="form-control" placeholder="Tìm mã tranh… (vd K297)" autocomplete="off">
+        <button type="button" id="artSearchClear" class="btn btn-outline-secondary" title="Xoá tìm"><i class="bi bi-x-lg"></i></button>
+      </div>
+    </div>
     <div class="card-body">
       <form method="POST" action="/ghep-in" enctype="multipart/form-data" class="row g-2 align-items-end mb-3">
         {% csrf_token %}
@@ -73,7 +80,7 @@
 
       <div class="row g-2" id="artGrid">
         {% for a in arts %}
-        <div class="col-4 col-md-2">
+        <div class="col-4 col-md-2 art-item" data-code="{{ a.code|lower }}">
           <div class="art-card">
             <img src="{{ a.url }}" alt="{{ a.code }}">
             <div class="art-code">{{ a.code }}{% if a.missing %} <span class="badge text-bg-danger" title="Mất file ảnh trên server — xoá & lưu lại">⚠ mất ảnh</span>{% endif %}</div>
@@ -93,6 +100,7 @@
           </div>
         </div>
         {% empty %}<div class="col-12 text-secondary small">Kho trống — lưu ảnh in vào để dùng lại.</div>{% endfor %}
+        <div class="col-12 text-secondary small py-2" id="artNone" style="display:none"><i class="bi bi-search"></i> Không tìm thấy mã tranh khớp.</div>
       </div>
     </div>
   </div>
@@ -277,6 +285,23 @@
   });
   document.getElementById('ripRefresh').addEventListener('click', loadRipJobs);
   loadRipJobs(); setInterval(loadRipJobs, 5000);
+
+  // ---- Tìm trong Kho ảnh in (lọc tức thì, không tải lại) ----
+  var artSearch=document.getElementById('artSearch');
+  function filterArts(){
+    var q=(artSearch.value||'').trim().toLowerCase();
+    var items=document.querySelectorAll('#artGrid .art-item'), shown=0;
+    items.forEach(function(it){
+      var ok=!q || (it.dataset.code||'').indexOf(q)>=0;
+      it.style.display=ok?'':'none'; if(ok) shown++;
+    });
+    var none=document.getElementById('artNone');
+    if(none) none.style.display=(q && shown===0 && items.length)?'':'none';
+  }
+  if(artSearch){
+    artSearch.addEventListener('input', filterArts);
+    document.getElementById('artSearchClear').addEventListener('click', function(){ artSearch.value=''; filterArts(); artSearch.focus(); });
+  }
 
   // Preset điền nhanh kích thước cho form lưu kho (kèm tô sáng nút đang chọn)
   var pszBtns=document.querySelectorAll('.psz');
