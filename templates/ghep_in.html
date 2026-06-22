@@ -273,7 +273,7 @@
       var u=document.getElementById('sUtil'); u.textContent=d.util+'%'; u.className='val '+(d.util>=80?'text-success':(d.util>=60?'text-warning':'text-danger'));
       var dl=document.getElementById('dlBtn'); dl.style.display=''; dl.href=d.pdf;
       dl.innerHTML='<i class="bi bi-file-earmark-pdf"></i> Tải PDF in ('+d.width_cm+'×'+d.length_cm+'cm)';
-      window._lastGhep={pdf:d.pdf, name:'ghep '+d.width_cm+'x'+d.length_cm+'cm '+d.count+'tranh', meters:d.meters, util:d.util, count:d.count};
+      window._lastGhep={pdf:d.pdf, name:(d.parts_text || ('ghep '+d.width_cm+'x'+d.length_cm+'cm '+d.count+'tranh')), meters:d.meters, util:d.util, count:d.count};
       var rb=document.getElementById('ripBtn'); rb.style.display=''; rb.disabled=false; rb.innerHTML='<i class="bi bi-printer-fill"></i> Gửi sang máy in (RIP)';
       document.getElementById('prevHint').style.display='none';
       var pv=document.getElementById('preview'); pv.style.display=''; pv.src=d.preview+'?t='+Date.now();

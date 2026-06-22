@@ -732,6 +732,14 @@ def ghep_in(request):
                 msg += ' Hãy chọn từ kho hoặc tải ảnh + nhập kích thước.'
             return JsonResponse({'ok': False, 'msg': msg, 'warnings': warnings})
 
+        # Tóm tắt MÃ TRANH trong tấm ghép (gom theo mã + SL) -> hiện ở hàng đợi RIP
+        from collections import OrderedDict
+        _pm = OrderedDict()
+        for it in items:
+            code = (it.get('label') or '').strip() or os.path.splitext(os.path.basename(str(it.get('id', ''))))[0]
+            _pm[code or '?'] = _pm.get(code or '?', 0) + max(1, int(it.get('qty', 1)))
+        parts_text = ' · '.join('%s ×%d' % (k, v) for k, v in _pm.items())[:240]
+
         if overlap_cm >= 4:
             warnings.insert(0, 'Chồng mí %g cm khá lớn — có thể đè lên phần TRANH (viền thường chỉ ~4cm).' % overlap_cm)
         planned = plan(items, width_cm=width_cm, gap_cm=gap_cm, allow_rotate=rotate, overlap_cm=overlap_cm)
@@ -757,7 +765,7 @@ def ghep_in(request):
             'count': planned['count'], 'embedded': embedded, 'meters': planned['meters'],
             'util': planned['utilization'], 'length_cm': round(planned['length_cm'], 1),
             'width_cm': round(planned['width_cm'], 1),
-            'overlap_cm': planned.get('overlap_cm', 0), 'warnings': warnings,
+            'overlap_cm': planned.get('overlap_cm', 0), 'parts_text': parts_text, 'warnings': warnings,
         })
 
     # Sắp theo MỚI NHẤT trước (kho hiển thị 5 mã gần nhất; còn lại xem qua tìm kiếm / "Xem tất cả")
