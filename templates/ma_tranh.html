@@ -478,7 +478,9 @@
     fetch('/lich-su-rot').then(function(r){ return r.json(); }).then(function(res){
       if (!res.rows || !res.rows.length){ tb.innerHTML = '<tr><td colspan="6" class="text-secondary text-center py-3">Chưa có lượt rót nào.</td></tr>'; return; }
       tb.innerHTML = res.rows.map(function(x){
-        return '<tr><td>'+x.dt+'</td><td class="fw-semibold">'+esc(x.painting)+'</td><td class="text-center">'+x.qty+'</td><td class="text-center">'+x.colors+'</td><td>'+esc(x.user||'')+'</td>'+
+        var tr = x.dup ? '<tr class="table-danger">' : '<tr>';   // nghi GHI TRÙNG -> tô đỏ
+        var badge = x.dup ? ' <span class="badge text-bg-danger" title="Cùng mã + cùng người, cách nhau dưới 10 phút — kiểm tra xem có bị ghi 2 lần">trùng?</span>' : '';
+        return tr+'<td>'+x.dt+'</td><td class="fw-semibold">'+esc(x.painting)+badge+'</td><td class="text-center">'+x.qty+'</td><td class="text-center">'+x.colors+'</td><td>'+esc(x.user||'')+'</td>'+
           '<td class="text-center"><button class="btn btn-sm btn-outline-danger py-0 histdel" data-id="'+x.id+'" title="Xoá dòng này"><i class="bi bi-x-lg"></i></button></td></tr>';
       }).join('');
     }).catch(function(){});
@@ -492,7 +494,8 @@
       .then(function(r){ return r.json(); }).then(function(res){ toast(res.msg||''); loadHistory(); loadStats(); });
   });
   document.getElementById('historyClear').addEventListener('click', function(){
-    if(!confirm('XÓA TOÀN BỘ lịch sử rót màu? Không thể hoàn tác và sẽ xoá khỏi thống kê.')) return;
+    var t = prompt('XÓA TOÀN BỘ lịch sử rót màu? KHÔNG thể hoàn tác, sẽ xoá khỏi thống kê.\n\nGõ chữ  XOA  rồi bấm OK để xác nhận:');
+    if((t||'').trim().toUpperCase() !== 'XOA'){ toast('Đã huỷ — chưa xoá gì.'); return; }
     var fd = new FormData(); fd.append('all', '1');
     fetch('/xoa-lich-su-rot', {method:'POST', body:fd, headers:{'X-CSRFToken':csrf()}})
       .then(function(r){ return r.json(); }).then(function(res){ toast(res.msg||''); loadHistory(); loadStats(); });

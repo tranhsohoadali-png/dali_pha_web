@@ -1110,6 +1110,11 @@ def _norm_size(s):
     return (s or '').strip().replace(' ', '').lower()
 
 
+# Cửa sổ CHỐNG GHI TRÙNG (giây): cùng người + cùng mã trong khoảng này -> coi là bấm 2
+# lần / gửi lại / quét trùng -> hỏi lại trước khi ghi (force=1 để ghi tiếp khi cố ý).
+POUR_DEDUP_SECONDS = 45
+
+
 def _record_pour(painting, qty, color_count, user, req=None, size=''):
     """Ghi 1 lượt rót màu vào nhật ký; nếu có yêu cầu (req) thì đánh dấu đã rót."""
     from pha.models import PourLog, PourRequest
@@ -1346,6 +1351,23 @@ def rot(request):
         except ValueError:
             qty = 1
         size = (request.POST.get('size') or '').strip()
+    # CHỐNG GHI TRÙNG: cùng người vừa ghi đúng mã này trong POUR_DEDUP_SECONDS giây ->
+    # nhiều khả năng bấm 2 lần / gửi lại / quét trùng. Trả 'dup' để app HỎI LẠI; chỉ ghi
+    # tiếp khi gửi force=1 (người dùng xác nhận cố ý rót thêm). (Rót lại CÙNG yêu cầu đã
+    # bị chặn riêng bằng trạng thái DONE ở trên.)
+    if request.POST.get('force') != '1':
+        from pha.models import PourLog
+        from django.utils import timezone
+        from datetime import timedelta
+        recent = (PourLog.objects
+                  .filter(painting=painting, user=request.user.username,
+                          created_time__gte=timezone.now() - timedelta(seconds=POUR_DEDUP_SECONDS))
+                  .order_by('-created_time').first())
+        if recent:
+            secs = max(1, int((timezone.now() - recent.created_time).total_seconds()))
+            return JsonResponse({'ok': False, 'dup': True, 'painting': painting,
+                                 'msg': f'Mã {painting} vừa được ghi {secs}s trước. '
+                                        f'Bấm xác nhận nếu CHẮC CHẮN rót thêm lần nữa.'})
     cc, _ = _painting_count(painting)
     _record_pour(painting, qty, cc, request.user.username, req, size=size)
     return JsonResponse({'ok': True, 'msg': f'Đã ghi rót {painting} ×{qty}'})
@@ -1444,8 +1466,20 @@ def lich_su_rot(request):
         qs = PourLog.objects.filter(day=now.strftime('%Y-%m-%d'))
     else:
         qs = PourLog.objects.all()
+    logs = list(qs.order_by('-created_time')[:100])
+    # Cờ NGHI TRÙNG: cùng MÃ + cùng NGƯỜI, cách nhau <= 10 phút -> tô đỏ ở bảng để quản lý
+    # dễ nhận ra & xoá ĐÚNG dòng thừa (tránh nhầm). Chỉ gợi ý nhìn, không tự xoá.
+    def _is_dup(lg):
+        for o in logs:
+            if o.id != lg.id and o.painting == lg.painting and (o.user or '') == (lg.user or ''):
+                try:
+                    if abs((o.created_time - lg.created_time).total_seconds()) <= 600:
+                        return True
+                except Exception:
+                    pass
+        return False
     rows = []
-    for log in qs.order_by('-created_time')[:100]:
+    for log in logs:
         t = log.created_time
         try:
             t = t.astimezone(_VN) if _VN else t
@@ -1454,6 +1488,7 @@ def lich_su_rot(request):
         rows.append({
             'id': log.id, 'dt': t.strftime('%d/%m %H:%M'), 'painting': log.painting,
             'size': log.size, 'qty': log.qty, 'colors': log.color_count, 'user': log.user or '',
+            'dup': _is_dup(log),
         })
     return JsonResponse({'rows': rows})
 

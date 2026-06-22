@@ -401,12 +401,19 @@
     var row=lastPending.filter(function(r){return String(r.id)===String(id);})[0];
     if(!confirm('Xác nhận ĐÃ RÓT XONG mã tranh '+(row?row.painting:'')+'?')) return;
     if(rotBusy) return; rotBusy=true; d.disabled=true; d.innerHTML='Đang ghi…';
-    var fd=new FormData(); fd.append('request_id', id);
-    fetch('/rot',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(res){
-      rotBusy=false;
-      if(res.ok){ if(row) rotKept[id]=row; toast('✓ Đã rót — xem ở tab "Đã rót"'); renderRotList(); renderDoneList(); }
-      else { toast(res.msg||'Lỗi'); d.disabled=false; d.innerHTML='<i class="bi bi-check-lg"></i> Đã rót'; }
-    }).catch(function(){ rotBusy=false; toast('Lỗi kết nối'); d.disabled=false; d.innerHTML='<i class="bi bi-check-lg"></i> Đã rót'; });
+    function reset(){ rotBusy=false; d.disabled=false; d.innerHTML='<i class="bi bi-check-lg"></i> Đã rót'; }
+    function sendRot(force){
+      var fd=new FormData(); fd.append('request_id', id); if(force) fd.append('force','1');
+      fetch('/rot',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(res){
+        rotBusy=false;
+        if(res.ok){ if(row) rotKept[id]=row; toast('✓ Đã rót — xem ở tab "Đã rót"'); renderRotList(); renderDoneList(); return; }
+        reset();
+        // Server nghi GHI TRÙNG -> hỏi lại; chỉ ghi tiếp khi người dùng xác nhận (force).
+        if(res.dup){ if(confirm(res.msg||'Mã này vừa được ghi. Ghi THÊM lần nữa?')){ rotBusy=true; d.disabled=true; d.innerHTML='Đang ghi…'; sendRot(true); } return; }
+        toast(res.msg||'Lỗi');
+      }).catch(function(){ reset(); toast('Lỗi kết nối'); });
+    }
+    sendRot(false);
   });
 
   // ===== THÔNG BÁO việc rót mới: chuông + thông báo hệ thống ngoài màn hình =====
