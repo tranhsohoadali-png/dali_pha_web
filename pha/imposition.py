@@ -760,8 +760,9 @@ def ghep_in(request):
             'overlap_cm': planned.get('overlap_cm', 0), 'warnings': warnings,
         })
 
+    # Sắp theo MỚI NHẤT trước (kho hiển thị 5 mã gần nhất; còn lại xem qua tìm kiếm / "Xem tất cả")
     arts = [{'id': a.id, 'code': a.code, 'url': '/media/' + a.image,
              'w': a.w_cm, 'h': a.h_cm, 'note': a.note,
              'missing': not os.path.exists(os.path.join(settings.MEDIA_ROOT, a.image or ''))}
-            for a in PrintArt.objects.all()]
+            for a in PrintArt.objects.order_by('-created', '-id')]
     return render(request, 'ghep_in.html', {'presets': PRESETS, 'arts': arts})

@@ -82,7 +82,7 @@
         {% for a in arts %}
         <div class="col-4 col-md-2 art-item" data-code="{{ a.code|lower }}">
           <div class="art-card">
-            <img src="{{ a.url }}" alt="{{ a.code }}">
+            <img src="{{ a.url }}" alt="{{ a.code }}" loading="lazy">
             <div class="art-code">{{ a.code }}{% if a.missing %} <span class="badge text-bg-danger" title="Mất file ảnh trên server — xoá & lưu lại">⚠ mất ảnh</span>{% endif %}</div>
             <form method="POST" action="/ghep-in" class="d-flex gap-1 mt-1 align-items-center justify-content-center" title="Sửa cỡ in (cm) rồi bấm ✓">
               {% csrf_token %}<input type="hidden" name="action" value="edit_art"><input type="hidden" name="id" value="{{ a.id }}">
@@ -101,6 +101,9 @@
         </div>
         {% empty %}<div class="col-12 text-secondary small">Kho trống — lưu ảnh in vào để dùng lại.</div>{% endfor %}
         <div class="col-12 text-secondary small py-2" id="artNone" style="display:none"><i class="bi bi-search"></i> Không tìm thấy mã tranh khớp.</div>
+      </div>
+      <div class="text-center mt-2" id="khoToggleBox" style="display:none">
+        <button type="button" id="khoToggle" class="btn btn-sm btn-outline-secondary"></button>
       </div>
     </div>
   </div>
@@ -349,21 +352,32 @@
   document.getElementById('ripRefresh').addEventListener('click', function(){ loadRipJobs(); loadRipStats(); });
   loadRipJobs(); loadRipStats(); setInterval(function(){ loadRipJobs(); loadRipStats(); }, 5000);
 
-  // ---- Tìm trong Kho ảnh in (lọc tức thì, không tải lại) ----
+  // ---- Kho ảnh in: mặc định hiện 5 MÃ MỚI NHẤT; tìm kiếm lọc TOÀN BỘ; "Xem tất cả" ----
+  var RECENT_LIMIT=5, khoShowAll=false;
   var artSearch=document.getElementById('artSearch');
-  function filterArts(){
+  function applyKho(){
     var q=(artSearch.value||'').trim().toLowerCase();
-    var items=document.querySelectorAll('#artGrid .art-item'), shown=0;
+    var items=document.querySelectorAll('#artGrid .art-item');   // thứ tự = mới nhất trước
+    var total=items.length, shown=0, idx=0;
     items.forEach(function(it){
-      var ok=!q || (it.dataset.code||'').indexOf(q)>=0;
-      it.style.display=ok?'':'none'; if(ok) shown++;
+      var ok;
+      if(q){ ok=(it.dataset.code||'').indexOf(q)>=0; }            // tìm: lọc toàn bộ
+      else { ok = khoShowAll || idx < RECENT_LIMIT; }             // không tìm: 5 mới nhất (hoặc tất cả)
+      it.style.display=ok?'':'none'; if(ok) shown++; idx++;
     });
     var none=document.getElementById('artNone');
-    if(none) none.style.display=(q && shown===0 && items.length)?'':'none';
+    if(none) none.style.display=(q && shown===0 && total)?'':'none';
+    var box=document.getElementById('khoToggleBox'), btn=document.getElementById('khoToggle');
+    if(!q && total>RECENT_LIMIT){
+      box.style.display='';
+      btn.textContent = khoShowAll ? ('Thu gọn (chỉ '+RECENT_LIMIT+' mới nhất)') : ('Xem tất cả ('+total+' mã)');
+    } else { box.style.display='none'; }
   }
   if(artSearch){
-    artSearch.addEventListener('input', filterArts);
-    document.getElementById('artSearchClear').addEventListener('click', function(){ artSearch.value=''; filterArts(); artSearch.focus(); });
+    artSearch.addEventListener('input', applyKho);
+    document.getElementById('artSearchClear').addEventListener('click', function(){ artSearch.value=''; khoShowAll=false; applyKho(); artSearch.focus(); });
+    document.getElementById('khoToggle').addEventListener('click', function(){ khoShowAll=!khoShowAll; applyKho(); });
+    applyKho();
   }
 
   // Preset điền nhanh kích thước cho form lưu kho (kèm tô sáng nút đang chọn)
