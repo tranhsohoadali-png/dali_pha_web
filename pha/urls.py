@@ -87,6 +87,9 @@ urlpatterns = [
     path('api/rip-queue', rip_views.rip_queue, name='rip_queue'),
     path('api/rip-status', rip_views.rip_status, name='rip_status'),
     path('api/rip-list', rip_views.rip_list, name='rip_list'),
+    path('api/rip-action', rip_views.rip_action, name='rip_action'),
+    path('api/rip-stats', rip_views.rip_stats, name='rip_stats'),
+    path('api/rip-cost', rip_views.rip_cost, name='rip_cost'),
 
     # Sao lưu dữ liệu
     path('sao-luu', backup_lib.backup_page, name='sao_luu'),

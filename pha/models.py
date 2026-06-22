@@ -313,7 +313,7 @@ class PrintJob(models.Model):
     """HÀNG ĐỢI RIP: mỗi tấm ghép gửi đi in là 1 job. Web tạo job (pending), DALI Agent
     trên máy in kéo PDF về thả vào hot folder Flexi rồi báo trạng thái ngược lại.
     Flexi mới là nơi RIP thật (web không tạo .prt được)."""
-    PENDING, SENT, RIPPING, DONE, ERROR = 'pending', 'sent', 'ripping', 'done', 'error'
+    PENDING, SENT, RIPPING, DONE, ERROR, PRINTED = 'pending', 'sent', 'ripping', 'done', 'error', 'printed'
     name = models.CharField(max_length=200)                  # tên hiển thị (vd tên file PDF)
     pdf = models.CharField(max_length=300)                   # đường dẫn PDF trong MEDIA_ROOT
     meters = models.FloatField(default=0)                    # dài vải (m)
