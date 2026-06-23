@@ -21,8 +21,9 @@ MM_PER_CM = 10.0
 PT_PER_MM = 72.0 / 25.4   # 1 inch = 25.4mm = 72pt
 
 # Khi up file PDF (xuất từ Illustrator), rasterize trang 1 sang PNG ở độ phân giải này.
-RASTER_DPI = 200
-_MAX_RASTER_PX = 6000          # chặn ảnh quá lớn nếu khổ artboard bị đặt sai
+# 300 DPI = nét cho in canvas (200 cũ hơi mờ). Ô "DPI mục tiêu" có thể nâng cao hơn.
+RASTER_DPI = 300
+_MAX_RASTER_PX = 9000          # cho phép tile lớn vẫn ~300 DPI (chặn ảnh quá khổ khi artboard sai)
 _IMG_EXTS = ('.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff')
 _PDF_HINT = 'là PDF nhưng server chưa cài pymupdf — chạy update.sh, hoặc up ảnh PNG/JPG'
 
@@ -50,15 +51,16 @@ def _looks_pdf(name, data=None):
     return False
 
 
-def _rasterize_pdf(data, out_png, fitz):
-    """Rasterize trang 1 của PDF (bytes) -> PNG ở RASTER_DPI theo khổ thật của trang.
-    Ném lỗi nếu PDF rỗng/hỏng."""
+def _rasterize_pdf(data, out_png, fitz, dpi=None):
+    """Rasterize trang 1 của PDF (bytes) -> PNG ở `dpi` (mặc định RASTER_DPI) theo khổ
+    thật của trang. DPI cao = nét hơn nhưng file nặng hơn. Ném lỗi nếu PDF rỗng/hỏng."""
+    dpi = dpi or RASTER_DPI
     doc = fitz.open(stream=data, filetype='pdf')
     try:
         if doc.page_count < 1:
             raise ValueError('PDF rỗng (không có trang)')
         page = doc.load_page(0)
-        zoom = RASTER_DPI / 72.0
+        zoom = dpi / 72.0
         longest = max(page.rect.width, page.rect.height) * zoom
         if longest > _MAX_RASTER_PX:
             zoom *= _MAX_RASTER_PX / longest
@@ -68,9 +70,9 @@ def _rasterize_pdf(data, out_png, fitz):
         doc.close()
 
 
-def _save_print_image(f, abs_dir, stem):
+def _save_print_image(f, abs_dir, stem, dpi=None):
     """Lưu file tải lên thành ẢNH dùng được. Ảnh thường -> ghi nguyên. PDF (xuất từ
-    Illustrator) -> rasterize trang 1 sang PNG ở RASTER_DPI (theo khổ thật của trang).
+    Illustrator) -> rasterize trang 1 sang PNG ở `dpi` (mặc định RASTER_DPI).
     Trả (filename, error_msg); một trong hai là None."""
     os.makedirs(abs_dir, exist_ok=True)
     data = f.read()
@@ -81,7 +83,7 @@ def _save_print_image(f, abs_dir, stem):
             return None, 'Server chưa cài thư viện đọc PDF (pymupdf) — chạy update.sh, hoặc up ảnh PNG/JPG.'
         fn = stem + '.png'
         try:
-            _rasterize_pdf(data, os.path.join(abs_dir, fn), fitz)
+            _rasterize_pdf(data, os.path.join(abs_dir, fn), fitz, dpi)
             return fn, None
         except Exception as e:
             return None, 'Không đọc được PDF: ' + str(e)[:120]
@@ -95,9 +97,9 @@ def _save_print_image(f, abs_dir, stem):
     return fn, None
 
 
-def _resolve_raster(abs_path, label=''):
+def _resolve_raster(abs_path, label='', dpi=None):
     """Bảo đảm abs_path là ẢNH BITMAP nhúng được. Tự sửa các trường hợp hỏng:
-      • file thực ra là PDF (vd kho cũ lưu PDF nhưng đặt tên .png) -> rasterize lại
+      • file thực ra là PDF (vd kho cũ lưu PDF nhưng đặt tên .png) -> rasterize lại ở `dpi`
       • ảnh CMYK/đặc biệt -> chuyển RGB
     Trả (path_dùng_được | None, warning | None). Nếu None thì warning nêu RÕ lý do."""
     label = label or os.path.basename(abs_path or '?')
@@ -113,11 +115,11 @@ def _resolve_raster(abs_path, label=''):
         fitz = _import_fitz()
         if fitz is None:
             return None, '%s: %s' % (label, _PDF_HINT)
-        png = os.path.splitext(abs_path)[0] + '_r.png'
+        png = os.path.splitext(abs_path)[0] + ('_r%d.png' % (dpi or RASTER_DPI))
         try:
             if not os.path.exists(png):
                 with open(abs_path, 'rb') as fh:
-                    _rasterize_pdf(fh.read(), png, fitz)
+                    _rasterize_pdf(fh.read(), png, fitz, dpi)
             abs_path = png
         except Exception as e:
             return None, '%s: lỗi đọc PDF (%s)' % (label, str(e)[:60])
@@ -686,11 +688,11 @@ def ghep_in(request):
                 qty = 1
             if w_cm <= 0 or h_cm <= 0:
                 continue
-            fn, err = _save_print_image(f, outdir, 'src_%s_%d' % (stamp, i))
+            fn, err = _save_print_image(f, outdir, 'src_%s_%d' % (stamp, i), dpi=target_dpi)
             if err:
                 warnings.append('%s: %s' % (f.name, err))
                 continue
-            path, rerr = _resolve_raster(os.path.join(outdir, fn), f.name)
+            path, rerr = _resolve_raster(os.path.join(outdir, fn), f.name, dpi=target_dpi)
             if rerr:
                 warnings.append(rerr)
                 continue
@@ -714,7 +716,7 @@ def ghep_in(request):
                 except (ValueError, TypeError):
                     qty = 1
                 p = os.path.join(settings.MEDIA_ROOT, a.image)
-                rp, rerr = _resolve_raster(p, a.code)
+                rp, rerr = _resolve_raster(p, a.code, dpi=target_dpi)
                 if rerr:
                     warnings.append('Kho ' + rerr)
                     continue
