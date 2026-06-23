@@ -16,7 +16,16 @@ import re
 
 import numpy as np
 
+# dali_reference.json = SEED (commit kèm repo, chỉ ĐỌC). Mọi thêm/sửa/xoá ghi vào
+# dali_reference_runtime.json (KHÔNG commit — xem .gitignore) -> deploy/git pull không
+# bao giờ đụng dữ liệu runtime nữa => hết cảnh file bị ghi đè/xung đột/hỏng khi deploy.
 _REF_PATH = os.path.join(os.path.dirname(__file__), "dali_reference.json")
+_RUN_PATH = os.path.join(os.path.dirname(__file__), "dali_reference_runtime.json")
+
+
+def _data_path():
+    """File dữ liệu hiện hành: runtime nếu đã có, không thì seed (lần đầu)."""
+    return _RUN_PATH if os.path.exists(_RUN_PATH) else _REF_PATH
 
 # Các biến module-level được dựng lại mỗi khi _rebuild() chạy.
 _REFERENCE = []
@@ -41,16 +50,29 @@ def _rebuild():
 
 
 def reload_reference():
-    """Đọc lại dali_reference.json từ đĩa và dựng lại bộ nhớ."""
+    """Đọc lại bảng màu từ đĩa và dựng lại bộ nhớ. CHỊU LỖI: nếu file hỏng (ký tự điều
+    khiển lạ...) thì thử đọc nới lỏng (strict=False); vẫn không được thì để RỖNG và ghi log
+    -> KHÔNG bao giờ làm sập module/trang (trước đây JSON hỏng làm cả /dali-colors 500)."""
     global _REFERENCE
-    with open(_REF_PATH, "r", encoding="utf-8") as f:
-        _REFERENCE = json.load(f)
+    path = _data_path()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            _REFERENCE = json.load(f)
+    except (OSError, ValueError) as e:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                _REFERENCE = json.loads(f.read(), strict=False)   # bỏ qua ký tự điều khiển
+            print("dali_match: dali_reference đọc nới lỏng do lỗi: %s" % e)
+        except Exception as e2:
+            print("dali_match: KHÔNG đọc được %s (%s) -> tạm để 0 màu" % (path, e2))
+            _REFERENCE = []
     _rebuild()
     return len(_REFERENCE)
 
 
 def _save():
-    with open(_REF_PATH, "w", encoding="utf-8") as f:
+    # LUÔN ghi vào file runtime (không commit) -> bền qua deploy.
+    with open(_RUN_PATH, "w", encoding="utf-8") as f:
         json.dump(_REFERENCE, f, ensure_ascii=False, indent=0)
 
 

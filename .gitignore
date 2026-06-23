@@ -19,3 +19,5 @@ media/*
 tools/dali_agent.log
 tools/dali_agent_seen.json
 tools/dali_agent_config.json
+# Bảng màu DALI runtime (thêm/sửa trên server) — KHÔNG commit để deploy khỏi đụng/hỏng
+pha/dali_reference_runtime.json
