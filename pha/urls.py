@@ -11,6 +11,7 @@ from pha import backup_lib
 from pha import extra_views
 from pha import ai_levels
 from pha import imposition
+from pha import in_a3 as in_a3_views
 from pha import rip_views
 
 urlpatterns = [
@@ -83,6 +84,11 @@ urlpatterns = [
 
     # Ghép khổ in (imposition / nesting -> PDF cho Flexi)
     path('ghep-in', imposition.ghep_in, name='ghep_in'),
+    # In A3: tải file -> đặt số lượng -> 1 PDF khổ A3 in sẵn
+    path('in-a3', in_a3_views.in_a3, name='in_a3'),
+    path('in-a3/upload', in_a3_views.in_a3_upload, name='in_a3_upload'),
+    path('in-a3/xoa', in_a3_views.in_a3_xoa, name='in_a3_xoa'),
+    path('in-a3/pdf', in_a3_views.in_a3_pdf, name='in_a3_pdf'),
     # Hàng đợi RIP (web <-> DALI Print Agent <-> Flexi)
     path('api/rip-queue', rip_views.rip_queue, name='rip_queue'),
     path('api/rip-status', rip_views.rip_status, name='rip_status'),

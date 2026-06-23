@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>In A3</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+  <style>
+    body{font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;}
+    [data-bs-theme=light] body.bg-body-tertiary{background-color:#f4f6f6!important;}
+    .page-head h1{font-size:1.35rem;font-weight:800;letter-spacing:-.01em;margin-bottom:.1rem;}
+    .page-head .sub{color:var(--bs-secondary-color);font-size:.875rem;}
+    .page-head .bi{color:#198754;}
+    .card{border-radius:16px;box-shadow:0 2px 12px rgba(25,135,84,.07);overflow:hidden;}
+    [data-bs-theme=light] .card{border:1px solid #e9ecef;}
+    .card-header{font-weight:700;padding:.85rem 1.1rem;}
+    [data-bs-theme=light] .card-header{background:#fff;border-bottom:1px solid #f0f2f1;}
+    .drop{border:2px dashed #adb5bd;border-radius:14px;padding:1.4rem;text-align:center;cursor:pointer;transition:.15s;}
+    .drop:hover,.drop.drag{border-color:#198754;background:rgba(25,135,84,.05);}
+    .fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:.85rem;}
+    .fcard{border:1px solid #e3e6e8;border-radius:13px;overflow:hidden;background:var(--bs-body-bg);position:relative;}
+    .fcard.sel{outline:2px solid #198754;}
+    .fthumb{height:150px;display:flex;align-items:center;justify-content:center;background:#f1f3f4;overflow:hidden;}
+    .fthumb img{width:100%;height:100%;object-fit:contain;}
+    .fthumb .bi{font-size:3rem;color:#c0392b;}
+    .fbody{padding:.5rem .6rem;}
+    .fname{font-size:.74rem;color:var(--bs-secondary-color);word-break:break-all;line-height:1.2;max-height:2.4em;overflow:hidden;}
+    .selchk{position:absolute;top:.45rem;left:.45rem;width:1.25rem;height:1.25rem;}
+    .fdel{position:absolute;top:.4rem;right:.4rem;}
+  </style>
+</head>
+<body class="bg-body-tertiary">
+{% include '_nav.html' %}
+
+<div class="container-fluid py-3 px-3 px-md-4" style="max-width:1200px">
+  <div class="page-head mb-3">
+    <h1><i class="bi bi-printer"></i> In A3</h1>
+    <div class="sub">Tải file lên (lưu lại để lần sau khỏi tìm), đặt số lượng, rồi bấm một nút để ra PDF khổ A3 in sẵn.</div>
+  </div>
+
+  <!-- Tải file -->
+  <div class="card mb-3">
+    <div class="card-header"><i class="bi bi-cloud-arrow-up text-success"></i> Tải file lên kho in</div>
+    <div class="card-body">
+      <form id="upForm" method="post" action="/in-a3/upload" enctype="multipart/form-data">
+        {% csrf_token %}
+        <label class="drop d-block" for="upFiles">
+          <i class="bi bi-files fs-3 text-success"></i>
+          <div class="fw-semibold mt-1">Kéo–thả hoặc bấm để chọn file (ảnh hoặc PDF)</div>
+          <div class="text-secondary small">PNG · JPG · PDF — chọn được nhiều file cùng lúc</div>
+          <input type="file" id="upFiles" name="files" multiple accept="image/*,application/pdf" class="d-none">
+        </label>
+        <div id="upNames" class="small text-secondary mt-2"></div>
+        <button type="submit" id="upBtn" class="btn btn-success mt-2 d-none"><i class="bi bi-upload"></i> Tải lên</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Kho file + in -->
+  <div class="card">
+    <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+      <span><i class="bi bi-grid text-success"></i> Kho file ({{ files|length }})</span>
+      {% if files %}
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <div class="form-check m-0"><input class="form-check-input" type="checkbox" id="selAll" checked><label class="form-check-label small" for="selAll">Chọn tất cả</label></div>
+        <div class="input-group input-group-sm" style="width:170px">
+          <span class="input-group-text">SL tất cả</span>
+          <input type="number" id="qtyAll" class="form-control" value="1" min="1" max="500">
+          <button class="btn btn-outline-secondary" type="button" id="qtyApply" title="Áp dụng số lượng cho tất cả">Áp dụng</button>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      {% if not files %}
+        <div class="text-secondary text-center py-4">Chưa có file nào. Tải file lên ở ô phía trên.</div>
+      {% else %}
+      <form method="post" action="/in-a3/pdf" target="_blank" id="pdfForm">
+        {% csrf_token %}
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+          <div class="small text-secondary">Tick file cần in, đặt SỐ LƯỢNG mỗi file, rồi bấm <b>Tạo PDF in A3</b>. Mỗi file lặp đúng số lượng, canh giữa &amp; vừa khổ A3 (tự xoay ngang nếu file ngang).</div>
+          <button type="submit" class="btn btn-success btn-lg"><i class="bi bi-printer-fill"></i> Tạo PDF in A3</button>
+        </div>
+        <div class="fgrid">
+          {% for f in files %}
+          <div class="fcard sel" data-name="{{ f.name }}">
+            <input class="form-check-input selchk filechk" type="checkbox" name="names" value="{{ f.name }}" checked title="Chọn để in">
+            <button type="button" class="btn btn-sm btn-danger py-0 px-1 fdel" data-name="{{ f.name }}" title="Xoá file"><i class="bi bi-x-lg"></i></button>
+            <div class="fthumb">
+              {% if f.is_pdf %}<i class="bi bi-file-earmark-pdf"></i>{% else %}<img src="{{ f.url }}" loading="lazy" alt="">{% endif %}
+            </div>
+            <div class="fbody">
+              <div class="input-group input-group-sm mb-1">
+                <span class="input-group-text">SL</span>
+                <input type="number" class="form-control qtyinp" name="qty_{{ f.name }}" value="1" min="1" max="500">
+              </div>
+              <div class="fname" title="{{ f.name }}">{{ f.name }}</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<form id="delForm" method="post" action="/in-a3/xoa" class="d-none">{% csrf_token %}<input type="hidden" name="name" id="delName"></form>
+
+<script>
+  // ---- Tải file: hiện tên đã chọn + kéo-thả ----
+  var upFiles=document.getElementById('upFiles'), drop=document.querySelector('.drop'),
+      upNames=document.getElementById('upNames'), upBtn=document.getElementById('upBtn');
+  function showNames(){
+    if(!upFiles.files.length){ upNames.textContent=''; upBtn.classList.add('d-none'); return; }
+    upNames.textContent='Đã chọn: '+Array.prototype.map.call(upFiles.files,function(f){return f.name;}).join(', ');
+    upBtn.classList.remove('d-none');
+  }
+  upFiles.addEventListener('change', showNames);
+  ['dragenter','dragover'].forEach(function(e){ drop.addEventListener(e,function(ev){ev.preventDefault();drop.classList.add('drag');}); });
+  ['dragleave','drop'].forEach(function(e){ drop.addEventListener(e,function(ev){ev.preventDefault();drop.classList.remove('drag');}); });
+  drop.addEventListener('drop', function(ev){ if(ev.dataTransfer&&ev.dataTransfer.files.length){ upFiles.files=ev.dataTransfer.files; showNames(); } });
+
+  // ---- Chọn tất cả + đặt SL tất cả + tô viền khi chọn ----
+  function refreshSel(){ document.querySelectorAll('.fcard').forEach(function(c){ var ch=c.querySelector('.filechk'); c.classList.toggle('sel', ch.checked); }); }
+  var selAll=document.getElementById('selAll');
+  if(selAll) selAll.addEventListener('change', function(){ document.querySelectorAll('.filechk').forEach(function(c){ c.checked=selAll.checked; }); refreshSel(); });
+  document.addEventListener('change', function(e){ if(e.target.classList.contains('filechk')) refreshSel(); });
+  var qtyApply=document.getElementById('qtyApply');
+  if(qtyApply) qtyApply.addEventListener('click', function(){ var v=document.getElementById('qtyAll').value||1; document.querySelectorAll('.qtyinp').forEach(function(i){ i.value=v; }); });
+
+  // ---- Xoá file ----
+  document.addEventListener('click', function(e){
+    var b=e.target.closest('.fdel'); if(!b) return;
+    if(!confirm('Xoá file này khỏi kho in A3?')) return;
+    document.getElementById('delName').value=b.dataset.name;
+    document.getElementById('delForm').submit();
+  });
+
+  // ---- Trước khi tạo PDF: phải chọn ít nhất 1 file ----
+  var pdfForm=document.getElementById('pdfForm');
+  if(pdfForm) pdfForm.addEventListener('submit', function(e){
+    if(!document.querySelectorAll('.filechk:checked').length){ e.preventDefault(); alert('Hãy tick ít nhất 1 file để in.'); }
+  });
+</script>
+</body>
+</html>
