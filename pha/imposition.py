@@ -84,6 +84,13 @@ def _save_print_image(f, abs_dir, stem, dpi=None):
         fn = stem + '.png'
         try:
             _rasterize_pdf(data, os.path.join(abs_dir, fn), fitz, dpi)
+            # GIỮ bản PDF gốc (vector) cạnh PNG -> khi ghép nhúng vector = NÉT TỐI ĐA, file nhẹ.
+            # (PNG chỉ để xem trước/thu nhỏ + dự phòng nếu server thiếu pymupdf.)
+            try:
+                with open(os.path.join(abs_dir, stem + '.pdf'), 'wb') as pf:
+                    pf.write(data)
+            except OSError:
+                pass
             return fn, None
         except Exception as e:
             return None, 'Không đọc được PDF: ' + str(e)[:120]
@@ -476,8 +483,67 @@ def plan(items, width_cm=152.0, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0):
 
 
 def render_pdf(planned, out_path, title=''):
-    """Xuất PDF đúng kích thước thật: trang = khổ rộng × dài đã dùng, đặt từng ảnh
-    đúng vị trí (cm). reportlab nhúng mỗi ảnh 1 lần ở độ phân giải gốc -> file nhẹ, nét."""
+    """Xuất PDF khổ thật, đặt từng tranh đúng vị trí. ƯU TIÊN GIỮ VECTOR: nếu nguồn có
+    bản .pdf (cạnh ảnh) thì nhúng NGUYÊN trang PDF (vector → nét tuyệt đối mọi cỡ, file
+    nhẹ) bằng PyMuPDF; không thì nhúng ảnh raster. Thiếu ảnh → ô đỏ. Trả số ô nhúng được."""
+    fitz = _import_fitz()
+    if fitz is None:
+        return _render_pdf_raster(planned, out_path, title)   # dự phòng khi server thiếu pymupdf
+    W_pt = planned['width_mm'] * PT_PER_MM
+    L_pt = max(planned['length_mm'], 1) * PT_PER_MM
+    Lmm = max(planned['length_mm'], 1)
+    doc = fitz.open()
+    page = doc.new_page(width=W_pt, height=L_pt)
+    embedded = 0
+    src_cache = {}
+    for p in planned['placements']:
+        dw, dh = p.get('dw', p['w']), p.get('dh', p['h'])
+        x0 = p['x'] * PT_PER_MM
+        # PyMuPDF: gốc TRÊN-trái, y hướng xuống -> lật trục y của bố cục (gốc dưới-trái)
+        y_top = (Lmm - (p['y'] + dh)) * PT_PER_MM
+        rect = fitz.Rect(x0, y_top, x0 + dw * PT_PER_MM, y_top + dh * PT_PER_MM)
+        rot = 90 if p.get('rot') else 0
+        img = p.get('image_path')
+        label = str(p.get('label') or p.get('id') or '')
+        pdf_sib = (os.path.splitext(img)[0] + '.pdf') if img else None
+        ok = False
+        if pdf_sib and os.path.exists(pdf_sib):           # NGUỒN VECTOR -> nhúng nguyên trang
+            try:
+                src = src_cache.get(pdf_sib)
+                if src is None:
+                    src = fitz.open(pdf_sib); src_cache[pdf_sib] = src
+                page.show_pdf_page(rect, src, 0, rotate=rot)
+                ok = True; embedded += 1
+            except Exception:
+                ok = False
+        if not ok and img and os.path.exists(img):        # ảnh raster
+            try:
+                page.insert_image(rect, filename=img, rotate=rot)
+                ok = True; embedded += 1
+            except Exception:
+                ok = False
+        if not ok:                                        # THIẾU ẢNH -> ô đỏ
+            page.draw_rect(rect, color=(0.8, 0.1, 0.1), fill=(0.98, 0.86, 0.86), width=2)
+            try:
+                page.insert_textbox(rect, ((label + ' - THIEU ANH') or 'THIEU ANH')[:40],
+                                    color=(0.7, 0, 0), fontsize=max(8, min(rect.width, rect.height) * 0.1),
+                                    align=1)
+            except Exception:
+                pass
+    for s in src_cache.values():
+        try:
+            s.close()
+        except Exception:
+            pass
+    if title:
+        doc.set_metadata({'title': title})
+    doc.save(out_path, deflate=True, garbage=3)
+    doc.close()
+    return embedded
+
+
+def _render_pdf_raster(planned, out_path, title=''):
+    """Dự phòng (server thiếu pymupdf): nhúng ảnh raster bằng reportlab."""
     from reportlab.pdfgen import canvas
     from reportlab.lib.utils import ImageReader
     W_pt = planned['width_mm'] * PT_PER_MM
