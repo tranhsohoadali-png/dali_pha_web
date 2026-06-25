@@ -746,7 +746,10 @@ def render_preview(planned, out_path, scale=2.0, image_paths=None):
         ip = p.get('image_path')
         if ip and os.path.exists(ip):
             try:
-                thumb = Image.open(ip).convert('RGB').resize((max(1, w), max(1, h)))
+                thumb = Image.open(ip).convert('RGB')
+                if p.get('rot'):            # ô ĐÃ XOAY 90° -> xoay ảnh theo (khớp render_pdf), tránh méo
+                    thumb = thumb.rotate(90, expand=True)
+                thumb = thumb.resize((max(1, w), max(1, h)))
             except Exception:
                 thumb = None
         if thumb is not None:
