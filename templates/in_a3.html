@@ -66,6 +66,11 @@
       <span><i class="bi bi-grid text-success"></i> Kho file ({{ files|length }})</span>
       {% if files %}
       <div class="d-flex flex-wrap gap-2 align-items-center">
+        <div class="input-group input-group-sm" style="width:210px">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="text" id="fileSearch" class="form-control" placeholder="Tìm tên file…" autocomplete="off">
+          <button type="button" id="fileSearchClear" class="btn btn-outline-secondary" title="Xoá tìm"><i class="bi bi-x-lg"></i></button>
+        </div>
         <div class="form-check m-0"><input class="form-check-input" type="checkbox" id="selAll" checked><label class="form-check-label small" for="selAll">Chọn tất cả</label></div>
         <div class="input-group input-group-sm" style="width:170px">
           <span class="input-group-text">SL tất cả</span>
@@ -103,6 +108,7 @@
           </div>
           {% endfor %}
         </div>
+        <div id="fileNone" class="text-secondary small py-3" style="display:none"><i class="bi bi-search"></i> Không tìm thấy file khớp.</div>
       </form>
       {% endif %}
     </div>
@@ -128,10 +134,28 @@
   // ---- Chọn tất cả + đặt SL tất cả + tô viền khi chọn ----
   function refreshSel(){ document.querySelectorAll('.fcard').forEach(function(c){ var ch=c.querySelector('.filechk'); c.classList.toggle('sel', ch.checked); }); }
   var selAll=document.getElementById('selAll');
-  if(selAll) selAll.addEventListener('change', function(){ document.querySelectorAll('.filechk').forEach(function(c){ c.checked=selAll.checked; }); refreshSel(); });
+  function visibleCards(){ return Array.prototype.filter.call(document.querySelectorAll('.fcard'), function(c){ return c.style.display!=='none'; }); }
+  if(selAll) selAll.addEventListener('change', function(){ visibleCards().forEach(function(c){ var ch=c.querySelector('.filechk'); if(ch) ch.checked=selAll.checked; }); refreshSel(); });
   document.addEventListener('change', function(e){ if(e.target.classList.contains('filechk')) refreshSel(); });
   var qtyApply=document.getElementById('qtyApply');
-  if(qtyApply) qtyApply.addEventListener('click', function(){ var v=document.getElementById('qtyAll').value||1; document.querySelectorAll('.qtyinp').forEach(function(i){ i.value=v; }); });
+  if(qtyApply) qtyApply.addEventListener('click', function(){ var v=document.getElementById('qtyAll').value||1; visibleCards().forEach(function(c){ var i=c.querySelector('.qtyinp'); if(i) i.value=v; }); });
+
+  // ---- Tìm file trong kho (lọc tức thì, không tải lại) ----
+  var fileSearch=document.getElementById('fileSearch');
+  function filterFiles(){
+    var q=(fileSearch.value||'').trim().toLowerCase();
+    var cards=document.querySelectorAll('.fcard'), shown=0;
+    cards.forEach(function(c){
+      var ok=!q || (c.dataset.name||'').toLowerCase().indexOf(q)>=0;
+      c.style.display=ok?'':'none'; if(ok) shown++;
+    });
+    var none=document.getElementById('fileNone');
+    if(none) none.style.display=(q && shown===0 && cards.length)?'':'none';
+  }
+  if(fileSearch){
+    fileSearch.addEventListener('input', filterFiles);
+    document.getElementById('fileSearchClear').addEventListener('click', function(){ fileSearch.value=''; filterFiles(); fileSearch.focus(); });
+  }
 
   // ---- Xoá file ----
   document.addEventListener('click', function(e){
