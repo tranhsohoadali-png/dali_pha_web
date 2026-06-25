@@ -10,7 +10,6 @@ import os
 import re
 import tempfile
 import time
-import uuid
 
 from django.conf import settings
 from django.http import JsonResponse, HttpResponse, HttpResponseNotFound
@@ -74,15 +73,54 @@ def in_a3_upload(request):
         ext = (os.path.splitext(f.name or '')[1] or '').lower()
         if ext not in _ALLOWED:
             continue
-        fn = (f'{time.strftime("%Y%m%d_%H%M%S")}_{uuid.uuid4().hex[:6]}_'
-              f'{_safe_stem(f.name)}{ext}')
+        # Lưu theo TÊN GỐC (đã làm sạch) cho dễ tìm; trùng tên -> ghi đè (coi như cập nhật).
+        fn = f'{_safe_stem(f.name)}{ext}'
         with open(os.path.join(_a3_dir(), fn), 'wb') as out:
             for chunk in f.chunks():
                 out.write(chunk)
+        # xoá thumbnail cũ (nếu có) để render lại đúng nội dung mới
+        tp = os.path.join(_a3_dir(), '_thumbs', fn + '.png')
+        try:
+            if os.path.exists(tp):
+                os.remove(tp)
+        except OSError:
+            pass
         saved += 1
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'ok': True, 'saved': saved})
     return redirect('/in-a3')
+
+
+@staff_required
+def in_a3_thumb(request):
+    """Ảnh thu nhỏ trang 1 của file PDF (cache) -> hiện nội dung thật trong kho thay vì
+    icon chung chung. Ảnh thường thì dùng thẳng /media nên không cần endpoint này."""
+    name = os.path.basename(request.GET.get('name') or '')
+    path = os.path.join(_a3_dir(), name)
+    ext = (os.path.splitext(name)[1] or '').lower()
+    if not name or ext != '.pdf' or not os.path.exists(path):
+        return HttpResponseNotFound('no pdf')
+    thumbs = os.path.join(_a3_dir(), '_thumbs')
+    os.makedirs(thumbs, exist_ok=True)
+    tp = os.path.join(thumbs, name + '.png')
+    if not os.path.exists(tp) or os.path.getmtime(tp) < os.path.getmtime(path):
+        fitz = _import_fitz()
+        if fitz is None:
+            return HttpResponseNotFound('no fitz')
+        try:
+            src = fitz.open(path)
+            try:
+                pg = src.load_page(0)
+                zoom = 320.0 / max(pg.rect.width, pg.rect.height, 1)   # ~320px cạnh dài
+                pix = pg.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+                pix.save(tp)
+            finally:
+                src.close()
+        except Exception:
+            return HttpResponseNotFound('thumb err')
+    resp = HttpResponse(open(tp, 'rb').read(), content_type='image/png')
+    resp['Cache-Control'] = 'max-age=86400'
+    return resp
 
 
 @staff_required
@@ -92,12 +130,13 @@ def in_a3_xoa(request):
         return HttpResponseNotFound('POST only')
     name = os.path.basename(request.POST.get('name') or '')
     if name:
-        p = os.path.join(_a3_dir(), name)
-        if os.path.exists(p):
-            try:
-                os.remove(p)
-            except OSError:
-                pass
+        for p in (os.path.join(_a3_dir(), name),
+                  os.path.join(_a3_dir(), '_thumbs', name + '.png')):
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'ok': True})
     return redirect('/in-a3')

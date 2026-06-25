@@ -96,7 +96,10 @@
             <input class="form-check-input selchk filechk" type="checkbox" name="names" value="{{ f.name }}" checked title="Chọn để in">
             <button type="button" class="btn btn-sm btn-danger py-0 px-1 fdel" data-name="{{ f.name }}" title="Xoá file"><i class="bi bi-x-lg"></i></button>
             <div class="fthumb">
-              {% if f.is_pdf %}<i class="bi bi-file-earmark-pdf"></i>{% else %}<img src="{{ f.url }}" loading="lazy" alt="">{% endif %}
+              {% if f.is_pdf %}
+                <img src="/in-a3/thumb?name={{ f.name|urlencode }}" loading="lazy" alt="{{ f.name }}" onerror="this.style.display='none';this.nextElementSibling.style.display='';">
+                <i class="bi bi-file-earmark-pdf" style="display:none"></i>
+              {% else %}<img src="{{ f.url }}" loading="lazy" alt="">{% endif %}
             </div>
             <div class="fbody">
               <div class="input-group input-group-sm mb-1">

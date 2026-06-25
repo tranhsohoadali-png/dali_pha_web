@@ -88,6 +88,7 @@ urlpatterns = [
     path('in-a3', in_a3_views.in_a3, name='in_a3'),
     path('in-a3/upload', in_a3_views.in_a3_upload, name='in_a3_upload'),
     path('in-a3/xoa', in_a3_views.in_a3_xoa, name='in_a3_xoa'),
+    path('in-a3/thumb', in_a3_views.in_a3_thumb, name='in_a3_thumb'),
     path('in-a3/pdf', in_a3_views.in_a3_pdf, name='in_a3_pdf'),
     # Hàng đợi RIP (web <-> DALI Print Agent <-> Flexi)
     path('api/rip-queue', rip_views.rip_queue, name='rip_queue'),
