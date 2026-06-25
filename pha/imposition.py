@@ -238,7 +238,10 @@ def _skyline_pack(items, width_mm, gap_mm=0, allow_rotate=False):
             continue   # không vừa (không xảy ra nếu vật <= W)
         y, x, w, h, rot = best
         _place(x, w + gap_mm, y + h + gap_mm)
-        placements.append({**it, 'x': x, 'y': y, 'w': w, 'h': h, 'rot': rot})
+        pl = {**it, 'x': x, 'y': y, 'w': w, 'h': h, 'rot': rot}
+        if rot:                                  # xoay 90° -> cỡ VẼ (dw/dh) cũng phải hoán theo
+            pl['dw'], pl['dh'] = it.get('dh', it['h']), it.get('dw', it['w'])
+        placements.append(pl)
         used_area += w * h
 
     length_mm = max((p['y'] + p['h'] for p in placements), default=0.0)
@@ -441,6 +444,42 @@ def _pack_best(rects, width_mm, gap_mm=0, allow_rotate=False):
     return cands[0][2], cands[0][0], cands[0][1]
 
 
+def _source_orientation(image_path):
+    """Hướng THẬT của tranh nguồn: 'L' = ngang (rộng>cao), 'P' = dọc, None = vuông/không rõ.
+    Đọc kích thước từ bản .pdf gốc (nếu có) hoặc ảnh raster. Dùng để TỰ KHỚP hướng ô in
+    với hướng tranh — tránh nhồi tranh NGANG vào ô DỌC (bị bóp méo / "co lại")."""
+    if not image_path:
+        return None
+    w = h = 0.0
+    pdf_sib = os.path.splitext(image_path)[0] + '.pdf'
+    if os.path.exists(pdf_sib):
+        fitz = _import_fitz()
+        if fitz is not None:
+            try:
+                d = fitz.open(pdf_sib)
+                try:
+                    r = d.load_page(0).rect
+                    w, h = r.width, r.height
+                finally:
+                    d.close()
+            except Exception:
+                w = h = 0.0
+    if not (w and h) and os.path.exists(image_path):
+        try:
+            from PIL import Image
+            with Image.open(image_path) as im:
+                w, h = im.size
+        except Exception:
+            w = h = 0.0
+    if not (w and h):
+        return None
+    if w > h * 1.02:
+        return 'L'
+    if h > w * 1.02:
+        return 'P'
+    return None                                          # ~vuông -> không cần xoay
+
+
 def plan(items, width_cm=152.0, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0):
     """items: [{id, image_path, w_cm, h_cm, qty, label}]. Trả dict kế hoạch xếp.
 
@@ -455,18 +494,32 @@ def plan(items, width_cm=152.0, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0):
     if overlap_mm > 1e-9:
         allow_rotate = False
     rects = []
+    auto_rotated = []                                    # nhãn tranh được TỰ xoay (báo cho người dùng)
     for it in items:
-        dw = round(it['w_cm'] * MM_PER_CM)               # cỡ VẼ thật (có viền)
-        dh = round(it['h_cm'] * MM_PER_CM)
+        w_cm = float(it['w_cm'])
+        h_cm = float(it['h_cm'])
+        # TỰ KHỚP HƯỚNG: ô KHÔNG vuông mà lệch hướng so với tranh gốc -> xoay ô cho khớp
+        # tranh (vd tranh 100×50 NGANG nhưng người dùng chọn cỡ "50×100" dọc) -> lấp đầy,
+        # KHÔNG méo. CHỈ xoay khi sau xoay tranh VẪN vừa bề ngang khổ vải (không thì tự đẩy
+        # tranh vượt khổ -> packer bỏ rơi). Bỏ qua khi ô vuông / không đọc được hướng.
+        if abs(w_cm - h_cm) > 0.05:
+            orient = _source_orientation(it.get('image_path'))
+            box = 'L' if w_cm > h_cm else 'P'
+            if orient and orient != box and round(h_cm * MM_PER_CM) <= width_mm:
+                w_cm, h_cm = h_cm, w_cm
+                auto_rotated.append(str(it.get('label') or it.get('id') or '?'))
+        dw = round(w_cm * MM_PER_CM)                      # cỡ VẼ thật (có viền)
+        dh = round(h_cm * MM_PER_CM)
         pw = max(1, dw - overlap_mm)                     # cỡ CHIẾM CHỖ khi xếp
         ph = max(1, dh - overlap_mm)
         for k in range(max(1, int(it['qty']))):
             rects.append({'id': it['id'], 'image_path': it.get('image_path'),
                           'label': it.get('label', ''), 'w': pw, 'h': ph,
                           'dw': dw, 'dh': dh,
-                          'w_cm': it['w_cm'], 'h_cm': it['h_cm']})
+                          'w_cm': w_cm, 'h_cm': h_cm})
     pack_width = max(1, width_mm - overlap_mm)
     placements, _lf, _uf = _pack_best(rects, pack_width, gap_mm, allow_rotate)
+    dropped = max(0, len(rects) - len(placements))       # tranh KHÔNG xếp được (rộng hơn khổ vải)
     # Chiều dài & độ phủ tính theo cỡ VẼ thật (gồm phần chồng mí)
     length_mm = max((p['y'] + p.get('dh', p['h']) for p in placements), default=0)
     sheet_area = width_mm * length_mm if length_mm else 1
@@ -476,6 +529,7 @@ def plan(items, width_cm=152.0, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0):
         'width_mm': width_mm, 'length_mm': length_mm,
         'width_cm': width_cm, 'length_cm': length_mm / MM_PER_CM,
         'count': len(placements),
+        'dropped': dropped, 'auto_rotated': auto_rotated,
         'utilization': round(min(100.0, used_area / sheet_area * 100), 1) if sheet_area else 0.0,
         'overlap_cm': overlap_mm / MM_PER_CM,
         'meters': round(length_mm / 1000.0, 2),
@@ -831,6 +885,11 @@ def ghep_in(request):
             warnings.insert(0, '⚠ %d/%d ô KHÔNG có ảnh (ô đỏ trong PDF) — kiểm tra nguồn ảnh.' % (missing, planned['count']))
         if overlap_cm > 0:
             warnings.insert(0, '✓ Đã chồng mí %g cm (các tranh chia sẻ viền).' % overlap_cm)
+        if planned.get('auto_rotated'):
+            warnings.insert(0, '↻ Tự xoay cho khớp hướng file: ' + ', '.join(planned['auto_rotated'][:8]))
+        if planned.get('dropped'):
+            warnings.insert(0, '⛔ %d tranh RỘNG HƠN khổ vải %g cm nên BỊ BỎ khỏi tấm ghép — giảm cỡ hoặc tăng khổ vải!'
+                            % (planned['dropped'], round(width_cm, 1)))
         return JsonResponse({
             'ok': True, 'pdf': '/media/' + pdf_rel, 'preview': '/media/' + prev_rel,
             'count': planned['count'], 'embedded': embedded, 'meters': planned['meters'],
