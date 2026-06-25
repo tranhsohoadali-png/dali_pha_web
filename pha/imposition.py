@@ -11,6 +11,7 @@
 Mỗi tranh tự cắt rời theo viền nên không cần cắt kiểu guillotine -> xếp dày tối đa.
 """
 import os
+import itertools
 
 from django.contrib import messages
 from django.http import JsonResponse
@@ -444,6 +445,72 @@ def _pack_best(rects, width_mm, gap_mm=0, allow_rotate=False):
     return cands[0][2], cands[0][0], cands[0][1]
 
 
+def _pack_len(placements):
+    """Chiều dài tấm theo cỡ VẼ thật (dw/dh)."""
+    return max((p['y'] + p.get('dh', p['h']) for p in placements), default=0.0)
+
+
+def _fills_better_rotated(dw, dh, width_mm):
+    """True nếu đặt cạnh 'dh' nằm ngang lấp khổ vải tốt hơn cạnh 'dw'."""
+    import math
+    a = math.floor(width_mm / dw) * dw if dw <= width_mm else 0
+    b = math.floor(width_mm / dh) * dh if dh <= width_mm else 0
+    return b > a
+
+
+def _pack_best_oriented(rects, width_mm, gap_mm=0, allow_rotate=False, max_groups=6):
+    """XOAY-NHÓM + CHỌN NGẮN NHẤT. Tranh canvas cắt rời nên hướng trên cuộn KHÔNG ảnh hưởng
+    sản phẩm -> thử xoay 90° cho TỪNG NHÓM-CỠ rồi chọn layout xếp được NHIỀU tranh nhất &
+    NGẮN nhất. LUÔN gồm cách hiện tại (_pack_best) làm ứng viên nên KHÔNG BAO GIỜ tệ hơn hay
+    rơi tranh nhiều hơn. (Greedy packer tự nó không tìm ra thế xoay-cả-nhóm tối ưu này.)
+    Chỉ gọi khi KHÔNG chồng mí. Trả placements (đã gắn 'rot' để render xoay nội dung đúng)."""
+    # Ứng viên NỀN (an toàn tuyệt đối): giữ allow_rotate người dùng chọn
+    base_pl, _, _ = _pack_best(rects, width_mm, gap_mm, allow_rotate)
+    best_n, best_len, best_pl = len(base_pl), _pack_len(base_pl), base_pl
+
+    # Nhóm cỡ CHỮ NHẬT phân biệt (ô vuông không cần xoay)
+    keys = []
+    for r in rects:
+        k = (r['dw'], r['dh'])
+        if r['dw'] != r['dh'] and k not in keys:
+            keys.append(k)
+    if not keys:
+        return base_pl
+    if len(keys) <= max_groups:
+        combos = list(itertools.product([0, 1], repeat=len(keys)))
+    else:                              # quá nhiều nhóm -> chỉ thử "mỗi nhóm chọn hướng lấp khổ tốt nhất"
+        combos = [tuple(1 if _fills_better_rotated(k[0], k[1], width_mm) else 0 for k in keys)]
+
+    for bits in combos:
+        if not any(bits):
+            continue                   # toàn 0 = y hệt nền
+        rot_of = {keys[i]: bits[i] for i in range(len(keys))}
+        trans, ok = [], True
+        for r in rects:
+            rr = dict(r)
+            if rot_of.get((r['dw'], r['dh'])):
+                rr['w'], rr['h'] = r['h'], r['w']          # hoán footprint
+                rr['dw'], rr['dh'] = r['dh'], r['dw']      # hoán cỡ vẽ
+                rr['grot'] = 1 - r.get('grot', 0)          # đánh dấu render xoay 90°
+                if rr['w'] > width_mm + 0.5:               # xoay xong vượt khổ -> loại tổ hợp
+                    ok = False
+                    break
+            trans.append(rr)
+        if not ok:
+            continue
+        pl, _, _ = _pack_best(trans, width_mm, gap_mm, allow_rotate=False)
+        if not pl or not _valid_layout(pl, width_mm):
+            continue
+        n, L = len(pl), _pack_len(pl)
+        if (n, -L) > (best_n, -best_len):                  # NHIỀU tranh hơn, rồi NGẮN hơn
+            best_n, best_len, best_pl = n, L, pl
+
+    for p in best_pl:                  # gắn rotation render cho ô thuộc nhóm đã xoay
+        if p.get('grot'):
+            p['rot'] = 1 - (p.get('rot') or 0)
+    return best_pl
+
+
 def _source_orientation(image_path):
     """Hướng THẬT của tranh nguồn: 'L' = ngang (rộng>cao), 'P' = dọc, None = vuông/không rõ.
     Đọc kích thước từ bản .pdf gốc (nếu có) hoặc ảnh raster. Dùng để TỰ KHỚP hướng ô in
@@ -518,8 +585,12 @@ def plan(items, width_cm=152.0, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0):
                           'dw': dw, 'dh': dh,
                           'w_cm': w_cm, 'h_cm': h_cm})
     pack_width = max(1, width_mm - overlap_mm)
-    placements, _lf, _uf = _pack_best(rects, pack_width, gap_mm, allow_rotate)
+    if overlap_mm > 1e-9:                                 # chồng mí: giữ viền trùng khít -> KHÔNG xoay nhóm
+        placements, _lf, _uf = _pack_best(rects, pack_width, gap_mm, allow_rotate)
+    else:                                                # xoay-nhóm + chọn ngắn nhất (an toàn: gồm cả cách cũ)
+        placements = _pack_best_oriented(rects, pack_width, gap_mm, allow_rotate)
     dropped = max(0, len(rects) - len(placements))       # tranh KHÔNG xếp được (rộng hơn khổ vải)
+    group_rotated = sum(1 for p in placements if p.get('grot'))   # số ô được xoay để xếp khít hơn
     # Chiều dài & độ phủ tính theo cỡ VẼ thật (gồm phần chồng mí)
     length_mm = max((p['y'] + p.get('dh', p['h']) for p in placements), default=0)
     sheet_area = width_mm * length_mm if length_mm else 1
@@ -529,7 +600,7 @@ def plan(items, width_cm=152.0, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0):
         'width_mm': width_mm, 'length_mm': length_mm,
         'width_cm': width_cm, 'length_cm': length_mm / MM_PER_CM,
         'count': len(placements),
-        'dropped': dropped, 'auto_rotated': auto_rotated,
+        'dropped': dropped, 'auto_rotated': auto_rotated, 'group_rotated': group_rotated,
         'utilization': round(min(100.0, used_area / sheet_area * 100), 1) if sheet_area else 0.0,
         'overlap_cm': overlap_mm / MM_PER_CM,
         'meters': round(length_mm / 1000.0, 2),
@@ -885,6 +956,8 @@ def ghep_in(request):
             warnings.insert(0, '⚠ %d/%d ô KHÔNG có ảnh (ô đỏ trong PDF) — kiểm tra nguồn ảnh.' % (missing, planned['count']))
         if overlap_cm > 0:
             warnings.insert(0, '✓ Đã chồng mí %g cm (các tranh chia sẻ viền).' % overlap_cm)
+        if planned.get('group_rotated'):
+            warnings.insert(0, '↻ Đã xoay %d tranh để xếp KHÍT hơn (tiết kiệm vải).' % planned['group_rotated'])
         if planned.get('auto_rotated'):
             warnings.insert(0, '↻ Tự xoay cho khớp hướng file: ' + ', '.join(planned['auto_rotated'][:8]))
         if planned.get('dropped'):
