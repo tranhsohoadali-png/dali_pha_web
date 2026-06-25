@@ -112,6 +112,9 @@
           {% endfor %}
         </div>
         <div id="fileNone" class="text-secondary small py-3" style="display:none"><i class="bi bi-search"></i> Không tìm thấy file khớp.</div>
+        <div class="text-center mt-2" id="a3ToggleBox" style="display:none">
+          <button type="button" id="a3Toggle" class="btn btn-sm btn-outline-secondary"></button>
+        </div>
       </form>
       {% endif %}
     </div>
@@ -143,21 +146,32 @@
   var qtyApply=document.getElementById('qtyApply');
   if(qtyApply) qtyApply.addEventListener('click', function(){ var v=document.getElementById('qtyAll').value||1; visibleCards().forEach(function(c){ var i=c.querySelector('.qtyinp'); if(i) i.value=v; }); });
 
-  // ---- Tìm file trong kho (lọc tức thì, không tải lại) ----
+  // ---- Kho file: mặc định hiện 1 HÀNG (mới nhất); tìm kiếm lọc toàn bộ; "Xem tất cả" ----
+  var A3_LIMIT=5, a3ShowAll=false;
   var fileSearch=document.getElementById('fileSearch');
   function filterFiles(){
     var q=(fileSearch.value||'').trim().toLowerCase();
-    var cards=document.querySelectorAll('.fcard'), shown=0;
+    var cards=document.querySelectorAll('.fcard'), shown=0, idx=0;
     cards.forEach(function(c){
-      var ok=!q || (c.dataset.name||'').toLowerCase().indexOf(q)>=0;
-      c.style.display=ok?'':'none'; if(ok) shown++;
+      var ok;
+      if(q){ ok=(c.dataset.name||'').toLowerCase().indexOf(q)>=0; }   // tìm: lọc toàn bộ
+      else { ok = a3ShowAll || idx < A3_LIMIT; }                      // không tìm: 1 hàng (5 mới nhất)
+      c.style.display=ok?'':'none'; if(ok) shown++; idx++;
     });
     var none=document.getElementById('fileNone');
     if(none) none.style.display=(q && shown===0 && cards.length)?'':'none';
+    var box=document.getElementById('a3ToggleBox'), btn=document.getElementById('a3Toggle');
+    if(box){
+      if(!q && cards.length>A3_LIMIT){ box.style.display=''; btn.textContent = a3ShowAll ? 'Thu gọn (1 hàng)' : ('Xem tất cả ('+cards.length+' file)'); }
+      else { box.style.display='none'; }
+    }
   }
   if(fileSearch){
     fileSearch.addEventListener('input', filterFiles);
-    document.getElementById('fileSearchClear').addEventListener('click', function(){ fileSearch.value=''; filterFiles(); fileSearch.focus(); });
+    document.getElementById('fileSearchClear').addEventListener('click', function(){ fileSearch.value=''; a3ShowAll=false; filterFiles(); fileSearch.focus(); });
+    var a3Toggle=document.getElementById('a3Toggle');
+    if(a3Toggle) a3Toggle.addEventListener('click', function(){ a3ShowAll=!a3ShowAll; filterFiles(); });
+    filterFiles();
   }
 
   // ---- Xoá file ----
