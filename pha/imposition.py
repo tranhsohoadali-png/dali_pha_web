@@ -512,7 +512,9 @@ def render_pdf(planned, out_path, title=''):
                 src = src_cache.get(pdf_sib)
                 if src is None:
                     src = fitz.open(pdf_sib); src_cache[pdf_sib] = src
-                page.show_pdf_page(rect, src, 0, rotate=rot)
+                # keep_proportion=False -> KÉO GIÃN lấp đầy ô (giống render_preview), tránh
+                # letterbox/lệch khi tỉ lệ trang PDF nguồn ≠ ô (preview & file phải GIỐNG nhau).
+                page.show_pdf_page(rect, src, 0, rotate=rot, keep_proportion=False)
                 ok = True; embedded += 1
             except Exception:
                 ok = False
