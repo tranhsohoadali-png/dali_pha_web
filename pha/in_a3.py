@@ -59,8 +59,13 @@ def _list_files():
 
 @staff_required
 def in_a3(request):
-    """Trang IN A3: kho file đã tải + đặt số lượng + nút tạo PDF in."""
-    return render(request, 'in_a3.html', {'files': _list_files()})
+    """Trang IN A3: kho file đã tải + đặt số lượng + nút tạo PDF in.
+
+    ?sel=tên1,tên2 (sau khi tải lên) -> CHỈ tick sẵn file vừa thêm; không có -> không tick
+    gì (tránh mỗi lần thêm file lại 'chọn tất cả', phải bỏ tick thủ công rất mất thời gian)."""
+    sel = request.GET.get('sel', '')
+    sel_names = set(s for s in sel.split(',') if s)
+    return render(request, 'in_a3.html', {'files': _list_files(), 'sel_names': sel_names})
 
 
 @staff_required
@@ -68,7 +73,7 @@ def in_a3_upload(request):
     """Tải 1 hoặc nhiều file lên kho IN A3."""
     if request.method != 'POST':
         return HttpResponseNotFound('POST only')
-    saved = 0
+    saved_names = []
     for f in request.FILES.getlist('files'):
         ext = (os.path.splitext(f.name or '')[1] or '').lower()
         if ext not in _ALLOWED:
@@ -85,9 +90,13 @@ def in_a3_upload(request):
                 os.remove(tp)
         except OSError:
             pass
-        saved += 1
+        saved_names.append(fn)
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return JsonResponse({'ok': True, 'saved': saved})
+        return JsonResponse({'ok': True, 'saved': len(saved_names), 'names': saved_names})
+    # Tick sẵn ĐÚNG file vừa tải (không chọn cả kho) -> bấm in được ngay
+    if saved_names:
+        from urllib.parse import urlencode
+        return redirect('/in-a3?' + urlencode({'sel': ','.join(saved_names)}))
     return redirect('/in-a3')
 
 

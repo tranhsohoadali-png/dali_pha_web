@@ -71,7 +71,7 @@
           <input type="text" id="fileSearch" class="form-control" placeholder="Tìm tên file…" autocomplete="off">
           <button type="button" id="fileSearchClear" class="btn btn-outline-secondary" title="Xoá tìm"><i class="bi bi-x-lg"></i></button>
         </div>
-        <div class="form-check m-0"><input class="form-check-input" type="checkbox" id="selAll" checked><label class="form-check-label small" for="selAll">Chọn tất cả</label></div>
+        <div class="form-check m-0"><input class="form-check-input" type="checkbox" id="selAll"><label class="form-check-label small" for="selAll">Chọn tất cả</label></div>
         <div class="input-group input-group-sm" style="width:170px">
           <span class="input-group-text">SL tất cả</span>
           <input type="number" id="qtyAll" class="form-control" value="1" min="1" max="500">
@@ -92,8 +92,8 @@
         </div>
         <div class="fgrid">
           {% for f in files %}
-          <div class="fcard sel" data-name="{{ f.name }}">
-            <input class="form-check-input selchk filechk" type="checkbox" name="names" value="{{ f.name }}" checked title="Chọn để in">
+          <div class="fcard{% if f.name in sel_names %} sel{% endif %}" data-name="{{ f.name }}">
+            <input class="form-check-input selchk filechk" type="checkbox" name="names" value="{{ f.name }}"{% if f.name in sel_names %} checked{% endif %} title="Chọn để in">
             <button type="button" class="btn btn-sm btn-danger py-0 px-1 fdel" data-name="{{ f.name }}" title="Xoá file"><i class="bi bi-x-lg"></i></button>
             <div class="fthumb">
               {% if f.is_pdf %}
@@ -141,8 +141,10 @@
   function refreshSel(){ document.querySelectorAll('.fcard').forEach(function(c){ var ch=c.querySelector('.filechk'); c.classList.toggle('sel', ch.checked); }); }
   var selAll=document.getElementById('selAll');
   function visibleCards(){ return Array.prototype.filter.call(document.querySelectorAll('.fcard'), function(c){ return c.style.display!=='none'; }); }
+  // "Chọn tất cả" phản ánh ĐÚNG trạng thái: chỉ tick khi MỌI file đang hiện đều được chọn
+  function syncSelAll(){ if(!selAll) return; var vis=visibleCards(); var n=vis.filter(function(c){ var ch=c.querySelector('.filechk'); return ch&&ch.checked; }).length; selAll.checked=(vis.length>0 && n===vis.length); }
   if(selAll) selAll.addEventListener('change', function(){ visibleCards().forEach(function(c){ var ch=c.querySelector('.filechk'); if(ch) ch.checked=selAll.checked; }); refreshSel(); });
-  document.addEventListener('change', function(e){ if(e.target.classList.contains('filechk')) refreshSel(); });
+  document.addEventListener('change', function(e){ if(e.target.classList.contains('filechk')){ refreshSel(); syncSelAll(); } });
   var qtyApply=document.getElementById('qtyApply');
   if(qtyApply) qtyApply.addEventListener('click', function(){ var v=document.getElementById('qtyAll').value||1; visibleCards().forEach(function(c){ var i=c.querySelector('.qtyinp'); if(i) i.value=v; }); });
 
@@ -165,6 +167,7 @@
       if(!q && cards.length>A3_LIMIT){ box.style.display=''; btn.textContent = a3ShowAll ? 'Thu gọn (1 hàng)' : ('Xem tất cả ('+cards.length+' file)'); }
       else { box.style.display='none'; }
     }
+    syncSelAll();            // hiển thị file đổi -> cập nhật "Chọn tất cả" cho khớp
   }
   if(fileSearch){
     fileSearch.addEventListener('input', filterFiles);
