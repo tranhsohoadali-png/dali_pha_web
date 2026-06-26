@@ -28,6 +28,7 @@ WEB_BASE = "https://mau.tranhdali.vn"          # dia chi web Ghep in
 RIP_KEY = ""                                    # de TRONG o day — dat khoa trong tools/dali_agent_config.json (khong commit)
 HOTFOLDER = r"C:\Program Files (x86)\SAi\FlexiPRINT 19 RIPControl Edition\Jobs and Settings\Jobs\RIPControl\PRINTTYPE-SC"
 OUTPUT_DIR = r""                                # (tuy chon) thu muc Flexi xuat .prt -> de bao 'RIP xong'. Trong = bo qua.
+DESKTOP_OUT = r""                                # (tuy chon) chep BAN SAO file ghep ra cho de lay. Trong = <Desktop>\GHEP IN DALI
 DROP_DIR = r"C:\DALI_DROP"
 DOWNLOADS = os.path.join(os.path.expanduser("~"), "Downloads")
 WATCH = [(DOWNLOADS, "ghep_*.pdf"), (DROP_DIR, "*.pdf")]
@@ -43,6 +44,7 @@ try:
     RIP_KEY = _cfg.get("RIP_KEY") or RIP_KEY
     WEB_BASE = _cfg.get("WEB_BASE") or WEB_BASE
     OUTPUT_DIR = _cfg.get("OUTPUT_DIR") or OUTPUT_DIR
+    DESKTOP_OUT = _cfg.get("DESKTOP_OUT") or DESKTOP_OUT
     if _cfg.get("HOTFOLDER"):
         HOTFOLDER = _cfg["HOTFOLDER"]
 except Exception:
@@ -109,6 +111,38 @@ def _unique_dest(folder, name):
     return os.path.join(folder, "%s_%d%s" % (base, i, ext))
 
 
+def _desktop_dir():
+    """Desktop THẬT (kể cả khi chuyển sang OneDrive) qua registry; fallback ~/Desktop."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders") as k:
+            v = os.path.expandvars(winreg.QueryValueEx(k, "Desktop")[0])
+            if os.path.isdir(v):
+                return v
+    except Exception:
+        pass
+    return os.path.join(os.path.expanduser("~"), "Desktop")
+
+
+def _out_dir():
+    """Thư mục chép BẢN SAO file ghép (mặc định <Desktop>\\GHEP IN DALI)."""
+    return DESKTOP_OUT if DESKTOP_OUT else os.path.join(_desktop_dir(), "GHEP IN DALI")
+
+
+def _copy_to_desktop(src):
+    """Chép 1 bản file ghép ra thư mục Desktop cho dễ lấy. Trả tên file (hoặc None nếu lỗi)."""
+    try:
+        outd = _out_dir()
+        os.makedirs(outd, exist_ok=True)
+        dst = _unique_dest(outd, os.path.basename(src))
+        shutil.copy2(src, dst)
+        return os.path.basename(dst)
+    except Exception as e:
+        log("Khong chep ra Desktop duoc (%s): %s" % (os.path.basename(src), e))
+        return None
+
+
 # ---------------- HTTP (web hang doi) ----------------
 def _http_json(url, timeout=15):
     req = urllib.request.Request(url, headers={"User-Agent": "DALI-Agent"})
@@ -167,6 +201,9 @@ def poll_web(job_seen):
             dst = _unique_dest(HOTFOLDER, name)
             _http_download(url, dst)
             log("Web job #%s -> Flexi: %s" % (jid, os.path.basename(dst)))
+            cp = _copy_to_desktop(dst)
+            if cp:
+                log("  -> ban sao Desktop: %s" % cp)
             _report(jid, "sent", "Da day vao hot folder Flexi")
             _SENT_AWAIT.append((jid, os.path.basename(dst)))
         except Exception as e:
@@ -223,6 +260,9 @@ def process_folders(watch, hotfolder, file_seen, stable_wait=1.0):
             file_seen.add(key)
             pushed.append(os.path.basename(dst))
             log("Tha vao Flexi (thu muc): %s" % os.path.basename(dst))
+            cp = _copy_to_desktop(p)
+            if cp:
+                log("  -> ban sao Desktop: %s" % cp)
         except Exception as e:
             log("Loi copy %s: %s" % (p, e))
     return pushed
@@ -230,6 +270,10 @@ def process_folders(watch, hotfolder, file_seen, stable_wait=1.0):
 
 def main():
     os.makedirs(DROP_DIR, exist_ok=True)
+    try:
+        os.makedirs(_out_dir(), exist_ok=True)
+    except Exception:
+        pass
     if not os.path.isdir(HOTFOLDER):
         log("CANH BAO: khong thay hot folder Flexi: %s" % HOTFOLDER)
     file_seen, job_seen = _load_state()
@@ -243,6 +287,7 @@ def main():
     log("  Hang doi web: %s" % (WEB_BASE if RIP_KEY else "(chua dat RIP_KEY -> bo qua)"))
     log("  Theo doi: %s" % ", ".join(f for f, _ in WATCH))
     log("  Hot folder Flexi: %s" % HOTFOLDER)
+    log("  Ban sao file ghep ra: %s" % _out_dir())
     prt_seen = set()
     while True:
         try:
