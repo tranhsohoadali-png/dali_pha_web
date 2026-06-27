@@ -49,23 +49,37 @@ def _rebuild():
         _HEX_TO_DALI.setdefault(item["hex"].lower(), item["dali"])
 
 
-def reload_reference():
-    """Đọc lại bảng màu từ đĩa và dựng lại bộ nhớ. CHỊU LỖI: nếu file hỏng (ký tự điều
-    khiển lạ...) thì thử đọc nới lỏng (strict=False); vẫn không được thì để RỖNG và ghi log
-    -> KHÔNG bao giờ làm sập module/trang (trước đây JSON hỏng làm cả /dali-colors 500)."""
-    global _REFERENCE
-    path = _data_path()
+def _read_colors(path):
+    """Đọc 1 file JSON bảng màu, CHỊU LỖI (thử strict=False nếu có ký tự điều khiển lạ).
+    Trả list màu; None nếu file không có / không đọc được."""
+    if not path or not os.path.exists(path):
+        return None
     try:
         with open(path, "r", encoding="utf-8") as f:
-            _REFERENCE = json.load(f)
+            return json.load(f)
     except (OSError, ValueError) as e:
         try:
             with open(path, "r", encoding="utf-8") as f:
-                _REFERENCE = json.loads(f.read(), strict=False)   # bỏ qua ký tự điều khiển
-            print("dali_match: dali_reference đọc nới lỏng do lỗi: %s" % e)
+                data = json.loads(f.read(), strict=False)         # bỏ qua ký tự điều khiển
+            print("dali_match: %s đọc nới lỏng do lỗi: %s" % (os.path.basename(path), e))
+            return data
         except Exception as e2:
-            print("dali_match: KHÔNG đọc được %s (%s) -> tạm để 0 màu" % (path, e2))
-            _REFERENCE = []
+            print("dali_match: KHÔNG đọc được %s (%s)" % (os.path.basename(path), e2))
+            return None
+
+
+def reload_reference():
+    """Đọc lại bảng màu, dựng lại bộ nhớ. ƯU TIÊN runtime (màu thêm/sửa trên server); NHƯNG
+    nếu runtime RỖNG / HỎNG / không có thì TỰ QUAY VỀ seed dali_reference.json (4468 màu)
+    -> file runtime rỗng KHÔNG còn che mất seed (sửa lỗi 'mất hết màu'). KHÔNG bao giờ sập trang
+    (trước đây JSON hỏng làm cả /dali-colors 500)."""
+    global _REFERENCE
+    data = _read_colors(_RUN_PATH)              # runtime trước
+    if not data:                               # rỗng / hỏng / không có -> lùi về seed
+        if data is not None:
+            print("dali_match: runtime rỗng/hỏng -> dùng seed dali_reference.json (4468 màu)")
+        data = _read_colors(_REF_PATH) or []
+    _REFERENCE = data if isinstance(data, list) else []
     _rebuild()
     return len(_REFERENCE)
 
