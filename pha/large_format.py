@@ -23,6 +23,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from pha.color_index_lib import (
     get_number_size, MIN_TEXT_SIZE, MEAN_TEXT_SIZE, PADDING_CIRCLE,
+    _snap_to_design_palette,
 )
 from pha import dali_match
 from pha.views import staff_required, _img_executor, _prune_image_results
@@ -47,6 +48,63 @@ def _build_palette(img_rgb, n):
     _, _, cen_lab = cv2.kmeans(lab, n, None, crit, 3, cv2.KMEANS_PP_CENTERS)
     cen_lab = np.clip(cen_lab, 0, 255).astype(np.uint8).reshape(-1, 1, 3)
     return cv2.cvtColor(cen_lab, cv2.COLOR_LAB2RGB).reshape(-1, 3)
+
+
+def _looks_flat(img_rgb, thr=0.30):
+    """Nhận diện ảnh ĐÃ THIẾT KẾ PHẲNG (xuất từ Illustrator: vùng màu ĐẶC, biên cứng) vs
+    ảnh CHỤP/AI (gradient/nhiễu). Bản phẳng có tỉ lệ pixel TRÙNG hàng xóm rất cao; ảnh
+    chụp gần như 0. Thu nhỏ NEAREST để GIỮ biên cứng khi đo (INTER_AREA sẽ làm nhoè)."""
+    h, w = img_rgb.shape[:2]
+    sc = 1000.0 / max(h, w) if max(h, w) > 1000 else 1.0
+    s = (cv2.resize(img_rgb, (max(1, int(w * sc)), max(1, int(h * sc))),
+                    interpolation=cv2.INTER_NEAREST) if sc < 1.0 else img_rgb)
+    eq_r = (s[:, 1:] == s[:, :-1]).all(2).mean() if s.shape[1] > 1 else 0.0
+    eq_d = (s[1:, :] == s[:-1, :]).all(2).mean() if s.shape[0] > 1 else 0.0
+    return (0.5 * float(eq_r) + 0.5 * float(eq_d)) >= thr
+
+
+def _cap_design_palette(colors, counts, cap):
+    """Hạ số màu THIẾT KẾ về 'cap' bằng GỘP cặp màu GẦN GIỐNG nhau nhất (LAB), luôn GIỮ
+    màu DIỆN TÍCH lớn hơn (màu THẬT trong file, KHÔNG tạo màu trung bình mới). Khoảng cách
+    cặp TĨNH (giữ màu thật nên không đổi) -> chỉ cần argmin trên ma trận con còn sống."""
+    colors = colors.astype(np.uint8)
+    if len(colors) <= cap:
+        return colors
+    lab = cv2.cvtColor(colors.reshape(-1, 1, 3), cv2.COLOR_RGB2LAB).reshape(-1, 3).astype(np.float32)
+    M = len(colors)
+    D = ((lab[:, None, :] - lab[None, :, :]) ** 2).sum(2)
+    np.fill_diagonal(D, 1e18)
+    alive = np.ones(M, bool)
+    cnt = counts.astype(np.float64).copy()
+    n_alive = M
+    while n_alive > cap:
+        idx = np.where(alive)[0]
+        sub = D[np.ix_(idx, idx)]
+        a, b = np.unravel_index(int(sub.argmin()), sub.shape)
+        i, j = int(idx[a]), int(idx[b])
+        drop = j if cnt[i] >= cnt[j] else i
+        keep = i if drop == j else j
+        cnt[keep] += cnt[drop]
+        alive[drop] = False
+        n_alive -= 1
+    return colors[alive]
+
+
+def _flat_palette(img_rgb, cap):
+    """Bảng màu cho ảnh PHẲNG: lấy ĐÚNG màu thiết kế (snap khử răng cưa về màu ≥0.03%,
+    KHÔNG k-means/KHÔNG drop màu lớn) rồi CHẶN TRẦN 'cap' bằng gộp màu gần giống. Lấy màu
+    trên bản thu nhỏ NEAREST (giữ y màu thật) -> nhẹ RAM. Trả centers RGB uint8 (k,3)."""
+    h, w = img_rgb.shape[:2]
+    sc = 2000.0 / max(h, w) if max(h, w) > 2000 else 1.0
+    small = (cv2.resize(img_rgb, (max(1, int(w * sc)), max(1, int(h * sc))),
+                        interpolation=cv2.INTER_NEAREST) if sc < 1.0 else img_rgb)
+    snapped = _snap_to_design_palette(small)
+    colors, counts = np.unique(snapped.reshape(-1, 3), axis=0, return_counts=True)
+    MAXM = 800                                     # an toàn: quá nhiều màu thì giữ 800 lớn nhất
+    if len(colors) > MAXM:
+        order = counts.argsort()[::-1][:MAXM]
+        colors, counts = colors[order], counts[order]
+    return _cap_design_palette(colors, counts, int(max(2, cap)))
 
 
 def _to_labels(img_rgb, centers):
@@ -281,6 +339,9 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
         except Exception as e:
             raise ValueError('Không đọc được ảnh nguồn: ' + str(e)[:120])
     H0, W0 = img.shape[:2]
+    # Nhận diện PHẲNG trên ảnh GỐC (biên CỨNG) TRƯỚC khi resize (INTER_AREA làm nhoè biên
+    # -> sai tỉ lệ pixel trùng). _looks_flat tự thu nhỏ NEAREST nên rẻ kể cả ảnh 308Mpx.
+    flat_mode = _looks_flat(img)
     long_px = _target_long_px(long_cm, dpi)
     sc = long_px / float(max(H0, W0))
     tW, tH = max(1, int(W0 * sc)), max(1, int(H0 * sc))
@@ -298,18 +359,27 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     px_per_mm = max(H, W) / (float(long_cm) * 10.0)
     min_h = max(2.0, float(min_num_mm) * px_per_mm)
     mean_h, max_h = min_h * 2.2, min_h * 4.0
-    centers = _build_palette(img, num_colors)
-    n_base = len(centers)
-    # BOOST MẶT: dò mặt -> palette PHỤ riêng cho vùng mặt (skin/mắt/tóc) -> mặt đánh số
-    # CHI TIẾT (60 màu toàn ảnh không cấp màu cho mặt nhỏ -> mặt bị phẳng). Vùng mặt được
-    # map lại theo CẢ palette (giàu màu da) -> hiện mắt/mũi/miệng thành ô có số.
-    face_boxes = _detect_face_boxes(img) if boost_faces else []
-    if face_boxes:
-        fpx = np.concatenate([img[y:y + h, x:x + w].reshape(-1, 3)
-                              for (x, y, w, h) in face_boxes], axis=0)
-        fcen = _kmeans_rgb(fpx, face_extra)
-        if len(fcen):
-            centers = np.concatenate([centers, fcen], axis=0)
+    # TỰ NHẬN DIỆN bản phẳng (Illustrator...) vs ảnh chụp/AI:
+    #  - PHẲNG -> GIỮ NGUYÊN bảng màu thiết kế (bỏ k-means/"tự lọc màu"), chỉ chặn trần số
+    #    màu bằng gộp màu gần giống; KHÔNG boost mặt (giữ đúng màu file, không thêm màu lạ).
+    #  - ẢNH CHỤP/AI -> k-means + boost mặt như cũ.
+    if flat_mode:
+        centers = _flat_palette(img, num_colors)
+        n_base = len(centers)
+        face_boxes = []
+    else:
+        centers = _build_palette(img, num_colors)
+        n_base = len(centers)
+        # BOOST MẶT: dò mặt -> palette PHỤ riêng cho vùng mặt (skin/mắt/tóc) -> mặt đánh số
+        # CHI TIẾT (màu nền không cấp màu cho mặt nhỏ -> mặt bị phẳng). Vùng mặt map lại
+        # theo CẢ palette (giàu màu da) -> hiện mắt/mũi/miệng thành ô có số.
+        face_boxes = _detect_face_boxes(img) if boost_faces else []
+        if face_boxes:
+            fpx = np.concatenate([img[y:y + h, x:x + w].reshape(-1, 3)
+                                  for (x, y, w, h) in face_boxes], axis=0)
+            fcen = _kmeans_rgb(fpx, face_extra)
+            if len(fcen):
+                centers = np.concatenate([centers, fcen], axis=0)
     n = len(centers)
     lbl = _to_labels(img, centers[:n_base])            # cả ảnh -> 60 màu nền
     for (x, y, w, h) in face_boxes:                    # vùng mặt -> map lại theo CẢ palette
@@ -351,7 +421,7 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     collapse_pct = round(float(_h.max()) / float(lbl.size), 2)
     return {'px': f'{W}x{H}', 'mau_dung': len(used), 'o_co_so': placed,
             'so_nho_nhat_mm': round(min_h / px_per_mm, 2), 'n_faces': len(face_boxes),
-            'collapse_pct': collapse_pct,
+            'collapse_pct': collapse_pct, 'flat': bool(flat_mode),
             'giay': round(time.time() - t0, 1), 'num_path': num_path, 'legend': legend,
             'preview': f'{name}_preview.png'}
 

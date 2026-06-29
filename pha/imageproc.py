@@ -161,13 +161,15 @@ def _process_large_into(obj, name, long_cm, color_limit):
         p = dict(obj.params or {})
         p.update({'large': True, 'px': st['px'], 'mau_dung': st['mau_dung'],
                   'o_co_so': st['o_co_so'], 'giay': st['giay'],
-                  'collapse_pct': st.get('collapse_pct', 0)})
+                  'collapse_pct': st.get('collapse_pct', 0),
+                  'flat_keep_colors': bool(st.get('flat'))})
         obj.params = p
         obj.status = ImageResult.STATUS_DONE
         # CẢNH BÁO: 1 màu chiếm >60% = ô bị gộp sụp (khổ quá nhỏ cho số màu này). Vẫn DONE
-        # (có kết quả) nhưng báo để user tăng khổ / giảm màu.
+        # (có kết quả) nhưng báo để user tăng khổ / giảm màu. BỎ QUA với bản PHẲNG: nền đặc
+        # lớn là CHỦ Ý thiết kế (giữ nguyên màu), không phải khổ nhỏ -> không cảnh báo nhầm.
         cp = st.get('collapse_pct', 0)
-        if cp and cp > 0.6:
+        if cp and cp > 0.6 and not st.get('flat'):
             obj.error_message = (f'⚠️ Khổ {long_cm or 200}cm QUÁ NHỎ cho {color_limit or 60} '
                                  f'màu — {int(cp * 100)}% ô bị gộp phẳng. Hãy tăng khổ (vd '
                                  f'120×200) hoặc giảm số màu.')
