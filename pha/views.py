@@ -2919,15 +2919,16 @@ def xu_ly_anh(request):
         _ps = _gp(preset_key)
         detail = bool(_ps.get('detail'))
         face_priority = bool(_ps.get('face_priority'))
+        large = bool(_ps.get('large'))                 # TRANH KHỔ TO SIÊU CHI TIẾT
         rec = ImageResult.objects.create(
             name=name, status=ImageResult.STATUS_PROCESSING, user=request.user.username,
             params={'enhance': enhance, 'color_limit': color_limit, 'min_area': min_area,
                     'smooth': smooth, 'style_category': style_category or '',
                     'preset': preset_key, 'print_size': size_str, 'ai_level': ai_level,
-                    'detail': detail, 'face_priority': face_priority})
+                    'detail': detail, 'face_priority': face_priority, 'large': large})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
                              color_limit, min_area, smooth, ai_prompt, use_refs,
-                             print_long_cm, detail, face_priority)
+                             print_long_cm, detail, face_priority, large)
         _prune_image_results()                 # giữ 10 kết quả gần nhất (bộ nhớ tạm)
         ctx = build_ctx()
         ctx['file_url'] = '/media/' + name

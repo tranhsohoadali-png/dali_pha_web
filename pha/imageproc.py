@@ -12,6 +12,11 @@ import numpy as np
 from PIL import Image
 from django.conf import settings
 
+# Ảnh KHỔ LỚN (nguồn nét cao) có thể RẤT lớn (vài trăm triệu pixel) -> Pillow mặc định
+# chặn (DecompressionBomb). Đây là công cụ NỘI BỘ (nhân viên tin cậy) nên bỏ giới hạn để
+# mở được ảnh khổng lồ; nhánh khổ lớn còn dùng cv2 (không qua giới hạn này).
+Image.MAX_IMAGE_PIXELS = None
+
 from pha.color_index_lib import index_color, get_draw_result
 from pha.dali_match import nearest_dali
 from pha.models import ImageResult
@@ -136,9 +141,37 @@ def _boost_lip_color(path):
         pass
 
 
+def _process_large_into(obj, name, long_cm, color_limit):
+    """Nhánh TRANH KHỔ TO SIÊU CHI TIẾT: dùng engine large_format (xử lý độ phân giải
+    cao trên BẢN ĐỒ NHÃN -> nhẹ RAM, không seam; ảnh khổng lồ dùng cv2, không PIL bomb)
+    -> ghi name_output/design/colors vào record cho trang poll như luồng thường."""
+    try:
+        from pha.large_format import process_large
+        out_dir = os.path.join(settings.MEDIA_ROOT, 'large')
+        base = os.path.splitext(name)[0]
+        st = process_large(os.path.join(settings.MEDIA_ROOT, name), out_dir,
+                           long_cm=(long_cm or 200), dpi=150,
+                           num_colors=(color_limit or 60), min_num_mm=3.0, name=base)
+        obj.name_output = f'large/{base}_so.png'
+        obj.design_name = f'large/{base}_thietke.png'
+        obj.colors = [[x['no'], (x.get('hex') or '').upper(), x.get('dali', ''), 0]
+                      for x in st.get('legend', [])]
+        p = dict(obj.params or {})
+        p.update({'large': True, 'px': st['px'], 'mau_dung': st['mau_dung'],
+                  'o_co_so': st['o_co_so'], 'giay': st['giay']})
+        obj.params = p
+        obj.status = ImageResult.STATUS_DONE
+        obj.error_message = ''
+        obj.save()
+    except Exception as e:                              # noqa: BLE001
+        obj.status = ImageResult.STATUS_ERROR
+        obj.error_message = 'Khổ lớn lỗi: ' + str(e)[:200]
+        obj.save()
+
+
 def process_image(rec_id, name, enhance=False, style_category=None, color_limit=0,
                   min_area=0, smooth=0, ai_prompt=None, use_refs=False, print_long_cm=0,
-                  detail=False, face_priority=False):
+                  detail=False, face_priority=False, large=False):
     """Chạy nền: (tùy chọn) tăng cường ảnh bằng AI, rồi xử lý + cập nhật ImageResult.
 
     enhance=True: gọi Google AI làm sạch/nâng cấp ảnh khách trước khi đánh số.
@@ -152,6 +185,9 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
     Khâu đánh số + khớp mã DALI luôn chạy như cũ trên ảnh (đã hoặc chưa tăng cường).
     """
     obj = ImageResult.objects.get(id=rec_id)
+    if large:                                          # TRANH KHỔ TO SIÊU CHI TIẾT
+        _process_large_into(obj, name, print_long_cm, color_limit)
+        return
     warn = ''
     zoom_path = None                  # bản crop tạm (xoá ở finally để không rác đĩa)
     try:
