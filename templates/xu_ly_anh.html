@@ -65,6 +65,17 @@
                     <option value="3">Mạnh (ảnh màu nước/ảnh chụp)</option>
                   </select>
                 </div>
+                <div class="col-12">
+                  <label class="form-label small mb-1">Khổ in (cm) <span class="text-secondary fw-normal">— tranh khổ TO phải chọn LỚN (vd 120×200), KHÔNG để 40×50</span></label>
+                  <select name="print_size" class="form-select form-select-sm">
+                    <option value="40x50" selected>40x50</option>
+                    <option value="30x40">30x40</option><option value="50x70">50x70</option><option value="60x80">60x80</option>
+                    <optgroup label="Khổ LỚN (cho preset Tranh khổ TO)">
+                    <option value="80x120">80x120</option><option value="100x150">100x150</option><option value="100x200">100x200</option>
+                    <option value="120x200">120x200 (1.2×2m)</option><option value="120x240">120x240</option><option value="150x200">150x200</option><option value="150x300">150x300</option>
+                    </optgroup>
+                  </select>
+                </div>
               </div>
               <div class="form-text">Số màu = giới hạn số ô tô · Bỏ mảng nhỏ = xoá đốm li ti (vd 30–150) · Đơn giản hoá = gộp vùng cho ảnh mượt/màu nước đỡ chi chít.</div>
             </div>
@@ -199,6 +210,8 @@
     var cl=document.querySelector('[name="color_limit"]'); if(cl) cl.value=p.color_limit||'';
     var ma=document.querySelector('[name="min_area"]'); if(ma) ma.value=p.min_area||'';
     var sm=document.querySelector('[name="smooth"]'); if(sm) sm.value=String(p.smooth||0);
+    var ps=document.querySelector('[name="print_size"]');
+    if(ps && (k==='kholon'||p.large)) ps.value='120x200';
     document.getElementById('presetBase').value=p.base||k;
     var en=document.getElementById('enhance');
     if(en){ en.checked=!!p.enhance; var sw=document.getElementById('styleWrap'); if(sw) sw.classList.toggle('d-none',!en.checked); }
