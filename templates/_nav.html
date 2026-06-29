@@ -39,6 +39,9 @@
         <li class="nav-item">
           <a class="nav-link{% if '/in-a3' in request.path %} active fw-semibold{% endif %}" href="/in-a3"><i class="bi bi-printer"></i> In A3</a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link{% if '/kho-lon' in request.path %} active fw-semibold{% endif %}" href="/kho-lon"><i class="bi bi-aspect-ratio"></i> Khổ lớn</a>
+        </li>
         {# Năng suất đã chuyển sang phần mềm kế toán (ketoan.tranhdali.vn) — ẩn khỏi nav, trang /nang-suat vẫn truy cập được #}
         <li class="nav-item">
           <a class="nav-link{% if '/loi-nhuan' in request.path %} active fw-semibold{% endif %}" href="/loi-nhuan"><i class="bi bi-graph-up-arrow"></i> Lợi nhuận</a>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Khổ lớn — tranh tô số siêu chi tiết</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+  <style>
+    body{font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;}
+    [data-bs-theme=light] body.bg-body-tertiary{background-color:#f4f6f6!important;}
+    .page-head h1{font-size:1.35rem;font-weight:800;letter-spacing:-.01em;margin-bottom:.1rem;}
+    .page-head .sub{color:var(--bs-secondary-color);font-size:.875rem;}
+    .page-head .bi{color:#198754;}
+    .card{border-radius:16px;box-shadow:0 2px 12px rgba(25,135,84,.07);overflow:hidden;}
+    [data-bs-theme=light] .card{border:1px solid #e9ecef;}
+    .card-header{font-weight:700;padding:.85rem 1.1rem;}
+    [data-bs-theme=light] .card-header{background:#fff;border-bottom:1px solid #f0f2f1;}
+    .drop{border:2px dashed #adb5bd;border-radius:14px;padding:1.4rem;text-align:center;cursor:pointer;transition:.15s;}
+    .drop:hover,.drop.drag{border-color:#198754;background:rgba(25,135,84,.05);}
+    #preview{max-width:100%;border:1px solid #e3e6e8;border-radius:10px;background:#fff;}
+    .legrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.4rem;}
+    .legitem{display:flex;align-items:center;gap:.4rem;font-size:.78rem;border:1px solid #eee;border-radius:8px;padding:.25rem .4rem;}
+    .legsw{width:20px;height:20px;border-radius:5px;border:1px solid #00000022;flex:0 0 auto;}
+  </style>
+</head>
+<body class="bg-body-tertiary">
+{% include '_nav.html' %}
+
+<div class="container-fluid py-3 px-3 px-md-4" style="max-width:1100px">
+  <div class="page-head mb-3">
+    <h1><i class="bi bi-aspect-ratio"></i> Khổ lớn — tranh tô số siêu chi tiết</h1>
+    <div class="sub">Tải ảnh NÉT CAO + chọn khổ &amp; số màu → tạo bản đồ số khổ lớn (vd 1×2m, 60 màu). Xử lý chạy nền ~vài phút.</div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-5">
+      <div class="card">
+        <div class="card-header"><i class="bi bi-cloud-arrow-up text-success"></i> Ảnh nguồn &amp; thông số</div>
+        <div class="card-body">
+          <label class="drop d-block mb-3" for="img">
+            <i class="bi bi-image fs-3 text-success"></i>
+            <div class="fw-semibold mt-1" id="dropLbl">Kéo–thả hoặc bấm chọn ảnh NÉT CAO</div>
+            <div class="text-secondary small">Ảnh càng nét, càng nhiều chi tiết. PNG/JPG.</div>
+            <input type="file" id="img" accept="image/*" class="d-none">
+          </label>
+          <div class="row g-2">
+            <div class="col-6"><label class="form-label small mb-1">Khổ rộng (cm)</label><input type="number" id="w_cm" class="form-control" value="100" min="5" max="600"></div>
+            <div class="col-6"><label class="form-label small mb-1">Khổ cao (cm)</label><input type="number" id="h_cm" class="form-control" value="200" min="5" max="600"></div>
+            <div class="col-6"><label class="form-label small mb-1">Số màu</label><input type="number" id="num_colors" class="form-control" value="60" min="2" max="120"></div>
+            <div class="col-6"><label class="form-label small mb-1">DPI (nét)</label>
+              <select id="dpi" class="form-select"><option value="100">100 (nhẹ)</option><option value="120">120</option><option value="150" selected>150 (nét tối đa)</option></select></div>
+            <div class="col-12"><label class="form-label small mb-1">Số nhỏ nhất (mm) — số to/dễ tô hơn nếu tăng</label><input type="number" id="min_mm" class="form-control" value="3" min="1" max="20" step="0.5"></div>
+          </div>
+          <button id="goBtn" class="btn btn-success w-100 mt-3" disabled><i class="bi bi-magic"></i> Tạo bản đồ số khổ lớn</button>
+          <div id="msg" class="small text-secondary mt-2"></div>
+        </div>
+      </div>
+      {% if recent %}
+      <div class="card mt-3">
+        <div class="card-header"><i class="bi bi-clock-history text-success"></i> Gần đây</div>
+        <div class="card-body py-2">
+          {% for r in recent %}<div class="d-flex justify-content-between align-items-center py-1 small border-bottom"><span class="text-truncate" style="max-width:60%">{{ r.name }}</span><span class="text-secondary">{{ r.px }} · {{ r.mau }} màu <a href="{{ r.so }}" target="_blank" class="ms-2"><i class="bi bi-download"></i></a></span></div>{% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="col-lg-7">
+      <div class="card">
+        <div class="card-header"><i class="bi bi-card-image text-success"></i> Kết quả</div>
+        <div class="card-body">
+          <div id="idle" class="text-secondary text-center py-5">Chưa có. Tải ảnh + bấm tạo ở bên trái.</div>
+          <div id="proc" class="text-center py-5" style="display:none">
+            <div class="spinner-border text-success" role="status"></div>
+            <div class="mt-3 fw-semibold">Đang xử lý khổ lớn… (vài phút)</div>
+            <div class="small text-secondary" id="procSub">Đang tạo bản đồ số độ phân giải cao.</div>
+          </div>
+          <div id="result" style="display:none">
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              <a id="dlSo" class="btn btn-sm btn-success" target="_blank"><i class="bi bi-download"></i> Tải bản đồ SỐ (đầy đủ)</a>
+              <a id="dlTk" class="btn btn-sm btn-outline-secondary" target="_blank"><i class="bi bi-download"></i> Tải bản THIẾT KẾ</a>
+            </div>
+            <div id="stats" class="small text-secondary mb-2"></div>
+            <img id="preview" alt="xem trước bản đồ số">
+            <div class="fw-semibold mt-3 mb-1">Bảng màu (<span id="legN">0</span>)</div>
+            <div class="legrid" id="legend"></div>
+          </div>
+          <div id="errBox" class="alert alert-danger" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function csrf(){var m=document.querySelector('input[name=csrfmiddlewaretoken]');return m?m.value:'';}
+  var img=document.getElementById('img'), drop=document.querySelector('.drop'), goBtn=document.getElementById('goBtn');
+  img.addEventListener('change', function(){ document.getElementById('dropLbl').textContent = img.files.length? ('Đã chọn: '+img.files[0].name) : 'Kéo–thả hoặc bấm chọn ảnh NÉT CAO'; goBtn.disabled=!img.files.length; });
+  ['dragenter','dragover'].forEach(function(e){ drop.addEventListener(e,function(ev){ev.preventDefault();drop.classList.add('drag');}); });
+  ['dragleave','drop'].forEach(function(e){ drop.addEventListener(e,function(ev){ev.preventDefault();drop.classList.remove('drag');}); });
+  drop.addEventListener('drop', function(ev){ if(ev.dataTransfer&&ev.dataTransfer.files.length){ img.files=ev.dataTransfer.files; img.dispatchEvent(new Event('change')); } });
+
+  function show(id){ ['idle','proc','result','errBox'].forEach(function(x){ document.getElementById(x).style.display = x===id?'':'none'; }); }
+  var pollT=null;
+  goBtn.addEventListener('click', function(){
+    if(!img.files.length) return;
+    var fd=new FormData();
+    fd.append('image', img.files[0]);
+    ['w_cm','h_cm','num_colors','dpi','min_mm'].forEach(function(k){ fd.append(k, document.getElementById(k).value); });
+    goBtn.disabled=true; show('proc');
+    fetch('/kho-lon/upload',{method:'POST',body:fd,headers:{'X-CSRFToken':csrf()}}).then(function(r){return r.json();}).then(function(res){
+      goBtn.disabled=false;
+      if(!res.ok){ document.getElementById('errBox').textContent=res.msg||'Lỗi'; show('errBox'); return; }
+      poll(res.id);
+    }).catch(function(){ goBtn.disabled=false; document.getElementById('errBox').textContent='Lỗi kết nối'; show('errBox'); });
+  });
+  function poll(id){
+    clearInterval(pollT);
+    pollT=setInterval(function(){
+      fetch('/kho-lon/status?id='+id).then(function(r){return r.json();}).then(function(res){
+        if(res.status==='processing') return;
+        clearInterval(pollT);
+        if(res.status==='error'){ document.getElementById('errBox').textContent=res.msg||'Xử lý lỗi'; show('errBox'); return; }
+        document.getElementById('dlSo').href=res.so_url;
+        document.getElementById('dlTk').href=res.thietke_url;
+        document.getElementById('preview').src=res.preview_url+'?t='+Date.now();
+        var s=res.stats||{};
+        document.getElementById('stats').textContent='Khổ '+(s.long_cm||'')+'cm · '+(s.dpi||'')+'DPI · '+(s.px||'')+'px · '+(s.mau||'')+' màu · '+(s.o||'')+' ô · '+(s.giay||'')+'s';
+        var L=res.legend||[]; document.getElementById('legN').textContent=L.length;
+        document.getElementById('legend').innerHTML=L.map(function(x){ return '<div class="legitem"><span class="legsw" style="background:#'+x.hex+'"></span><b>'+x.no+'</b>&nbsp;'+(x.dali||'')+'</div>'; }).join('');
+        show('result');
+      }).catch(function(){});
+    }, 3000);
+  }
+</script>
+<form class="d-none">{% csrf_token %}</form>
+</body>
+</html>

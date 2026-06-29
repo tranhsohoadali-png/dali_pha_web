@@ -12,6 +12,7 @@ from pha import extra_views
 from pha import ai_levels
 from pha import imposition
 from pha import in_a3 as in_a3_views
+from pha import large_format
 from pha import rip_views
 
 urlpatterns = [
@@ -90,6 +91,10 @@ urlpatterns = [
     path('in-a3/xoa', in_a3_views.in_a3_xoa, name='in_a3_xoa'),
     path('in-a3/thumb', in_a3_views.in_a3_thumb, name='in_a3_thumb'),
     path('in-a3/pdf', in_a3_views.in_a3_pdf, name='in_a3_pdf'),
+    # Khổ lớn: tranh tô số siêu chi tiết khổ lớn (1×2m, 60 màu) — chạy nền
+    path('kho-lon', large_format.kho_lon, name='kho_lon'),
+    path('kho-lon/upload', large_format.kho_lon_upload, name='kho_lon_upload'),
+    path('kho-lon/status', large_format.kho_lon_status, name='kho_lon_status'),
     # Hàng đợi RIP (web <-> DALI Print Agent <-> Flexi)
     path('api/rip-queue', rip_views.rip_queue, name='rip_queue'),
     path('api/rip-status', rip_views.rip_status, name='rip_status'),

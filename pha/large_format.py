@@ -10,16 +10,25 @@ MM @ khổ thật) -> xuất: bản đồ số (PNG), thiết kế (PNG), bảng
 import json
 import os
 import time
+import uuid
+from datetime import datetime
 
 import cv2
 import numpy as np
+from django.conf import settings
+from django.core.files.storage import FileSystemStorage
+from django.http import JsonResponse
+from django.shortcuts import render
+from django.views.decorators.csrf import csrf_exempt
 
 from pha.color_index_lib import (
     get_number_size, MIN_TEXT_SIZE, MEAN_TEXT_SIZE, PADDING_CIRCLE,
 )
 from pha import dali_match
+from pha.views import staff_required, _img_executor, _prune_image_results
 
 _FONT = cv2.FONT_HERSHEY_SIMPLEX
+_LARGE_DIR = 'large'
 
 
 def _target_long_px(long_cm, dpi):
@@ -191,6 +200,12 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     placed = _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h)
     num_path = os.path.join(out_dir, f'{name}_so.png')
     cv2.imwrite(num_path, canvas)
+    # bản XEM TRƯỚC nhỏ (file số đầy đủ rất nặng -> không hiện trực tiếp trên web)
+    pmax = 1400.0
+    psc = pmax / max(W, H) if max(W, H) > pmax else 1.0
+    cv2.imwrite(os.path.join(out_dir, f'{name}_preview.png'),
+                cv2.resize(canvas, (max(1, int(W * psc)), max(1, int(H * psc))),
+                           interpolation=cv2.INTER_AREA))
     design = centers[lbl]
     cv2.imwrite(os.path.join(out_dir, f'{name}_thietke.png'),
                 cv2.cvtColor(design, cv2.COLOR_RGB2BGR))
@@ -203,4 +218,103 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
         json.dump(legend, f, ensure_ascii=False)
     return {'px': f'{W}x{H}', 'mau_dung': len(used), 'o_co_so': placed,
             'so_nho_nhat_mm': round(min_h / px_per_mm, 2),
-            'giay': round(time.time() - t0, 1), 'num_path': num_path}
+            'giay': round(time.time() - t0, 1), 'num_path': num_path, 'legend': legend,
+            'preview': f'{name}_preview.png'}
+
+
+# ===================== WEB: ô upload "Khổ lớn" (mau.tranhdali.vn) =====================
+def process_large_job(rec_id, src_name, long_cm, dpi, num_colors, min_mm):
+    """Chạy NỀN: tạo tranh tô số khổ lớn -> cập nhật ImageResult để trang poll."""
+    from pha.models import ImageResult
+    obj = ImageResult.objects.get(id=rec_id)
+    try:
+        src = os.path.join(settings.MEDIA_ROOT, src_name)
+        out_dir = os.path.join(settings.MEDIA_ROOT, _LARGE_DIR)
+        base = os.path.splitext(os.path.basename(src_name))[0]
+        st = process_large(src, out_dir, long_cm=long_cm, dpi=dpi,
+                           num_colors=num_colors, min_num_mm=min_mm, name=base)
+        obj.name_output = f'{_LARGE_DIR}/{base}_so.png'
+        obj.design_name = f'{_LARGE_DIR}/{base}_thietke.png'
+        p = dict(obj.params or {})
+        p.update({'large': True, 'long_cm': long_cm, 'dpi': dpi, 'num_colors': num_colors,
+                  'min_mm': min_mm, 'px': st['px'], 'mau_dung': st['mau_dung'],
+                  'o_co_so': st['o_co_so'], 'giay': st['giay'], 'legend': st['legend'],
+                  'preview': f'{_LARGE_DIR}/{base}_preview.png'})
+        obj.params = p
+        obj.status = ImageResult.STATUS_DONE
+        obj.error_message = ''
+        obj.save()
+    except Exception as e:                              # noqa: BLE001
+        obj.status = ImageResult.STATUS_ERROR
+        obj.error_message = str(e)[:300]
+        obj.save()
+
+
+@staff_required
+def kho_lon(request):
+    """Trang KHỔ LỚN: upload ảnh nét cao + khổ/DPI -> tranh tô số siêu chi tiết."""
+    from pha.models import ImageResult
+    recent = [{'id': r.id, 'name': r.name, 'so': '/media/' + (r.name_output or ''),
+               'px': (r.params or {}).get('px', ''), 'mau': (r.params or {}).get('mau_dung', '')}
+              for r in ImageResult.objects.filter(status=ImageResult.STATUS_DONE)
+              .order_by('-created_time')[:60] if (r.params or {}).get('large')][:8]
+    return render(request, 'kho_lon.html', {'recent': recent})
+
+
+@csrf_exempt
+@staff_required
+def kho_lon_upload(request):
+    """Nhận ảnh nét cao + thông số -> tạo job NỀN. Trả {ok, id} để trang poll."""
+    if request.method != 'POST' or not request.FILES.get('image'):
+        return JsonResponse({'ok': False, 'msg': 'Thiếu ảnh.'})
+
+    def _i(k, d, lo, hi):
+        try:
+            return max(lo, min(hi, int(float(request.POST.get(k) or d))))
+        except (ValueError, TypeError):
+            return d
+    w_cm, h_cm = _i('w_cm', 100, 5, 600), _i('h_cm', 200, 5, 600)
+    long_cm = max(w_cm, h_cm)
+    dpi = _i('dpi', 150, 50, 220)
+    num_colors = _i('num_colors', 60, 2, 120)
+    try:
+        min_mm = max(1.0, min(20.0, float(request.POST.get('min_mm') or 3)))
+    except (ValueError, TypeError):
+        min_mm = 3.0
+    upload = request.FILES['image']
+    fss = FileSystemStorage()
+    name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_{uuid.uuid4().hex[:8]}_{upload.name}'
+    name = fss.save(name, upload)                       # tên THẬT (chống lẫn ảnh)
+    from pha.models import ImageResult
+    rec = ImageResult.objects.create(
+        name=name, status=ImageResult.STATUS_PROCESSING,
+        user=getattr(request.user, 'username', ''),
+        params={'large': True, 'long_cm': long_cm, 'dpi': dpi,
+                'num_colors': num_colors, 'min_mm': min_mm})
+    _img_executor.submit(process_large_job, rec.id, name, long_cm, dpi, num_colors, min_mm)
+    _prune_image_results()
+    return JsonResponse({'ok': True, 'id': rec.id})
+
+
+@csrf_exempt
+@staff_required
+def kho_lon_status(request):
+    """Tra trạng thái job khổ lớn theo id."""
+    from pha.models import ImageResult
+    try:
+        rec = ImageResult.objects.get(id=int(request.GET.get('id', 0)))
+    except (ImageResult.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({'ok': False, 'status': 'error', 'msg': 'Không tìm thấy job.'})
+    if rec.status == ImageResult.STATUS_PROCESSING:
+        return JsonResponse({'ok': True, 'status': 'processing'})
+    if rec.status == ImageResult.STATUS_ERROR:
+        return JsonResponse({'ok': True, 'status': 'error', 'msg': rec.error_message or 'Lỗi.'})
+    p = rec.params or {}
+    return JsonResponse({'ok': True, 'status': 'done',
+                         'so_url': '/media/' + (rec.name_output or ''),
+                         'thietke_url': '/media/' + (rec.design_name or ''),
+                         'preview_url': '/media/' + p.get('preview', ''),
+                         'legend': p.get('legend', []),
+                         'stats': {'px': p.get('px'), 'mau': p.get('mau_dung'),
+                                   'o': p.get('o_co_so'), 'giay': p.get('giay'),
+                                   'long_cm': p.get('long_cm'), 'dpi': p.get('dpi')}})
