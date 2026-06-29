@@ -275,12 +275,15 @@ def _puttext_thin_gray(canvas, number, org, scale, frac=0.8, ss=5):
 
 
 def _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h,
-                   face_boxes=None, face_min_h=None, floor_h=None, thin=True):
+                   face_boxes=None, face_min_h=None, floor_h=None, thin=True, out_scale=1.0):
     """Đánh số 'numbers[ci]' vào tâm sâu nhất (polylabel ~ distanceTransform) mỗi ô.
     Số to dần tới ~mean_h (vừa ô); SÀN = floor_h (số nhỏ nhất còn đặt được, ~2.5mm) để
     CỨU ô nhỏ đã được _merge_labels GIỮ (mắt/điểm nhấn) -> đánh số được cả chi tiết nhỏ.
+    out_scale>1: TÍNH vị trí/cỡ số trên 'lbl' (work-res, nhẹ) nhưng VẼ lên canvas TO HƠN
+    out_scale lần -> nét biên 1px thành MẢNH hơn (theo mm) mà không chạy lại bước nặng.
     Vẽ nét MẢNH (thin) cho số nhỏ sắc, không vỡ. Trả số ô đã đánh."""
     placed = 0
+    os_ = float(out_scale)
     fl = float(MIN_TEXT_SIZE) if floor_h is None else max(float(MIN_TEXT_SIZE), float(floor_h))
     for ci in range(n):
         num = numbers[ci]
@@ -304,31 +307,39 @@ def _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h,
             if ts is None:
                 continue
             org = (ctr[0] - ts[0] // 2, ctr[1] + ts[1] // 2)
+            dscale = scale
+            if os_ != 1.0:                               # vẽ lên canvas to hơn -> nét mảnh hơn
+                org = (int(round(org[0] * os_)), int(round(org[1] * os_)))
+                dscale = scale * os_
             if thin:
-                _puttext_thin_gray(canvas, num, org, scale)
+                _puttext_thin_gray(canvas, num, org, dscale)
             else:
-                cv2.putText(canvas, num, org, _FONT, scale, 0, th, cv2.LINE_AA)
+                cv2.putText(canvas, num, org, _FONT, dscale, 0, th, cv2.LINE_AA)
             placed += 1
     return placed
 
 
 def _face_detail_sheet(canvas, lbl, numbers, n, face_boxes, mean_h, max_h, floor_h,
-                       max_insets=4, target_w=1500):
+                       max_insets=4, target_w=1500, mark_scale=1.0):
     """ZOOM-INSET: với mỗi vùng MẶT (tối đa max_insets), (1) đánh dấu KHUNG + CHỮ CÁI lên
     bản số chính 'canvas' (tại chỗ); (2) trích nhãn vùng đó, PHÓNG TO (NEAREST) -> vẽ nét +
     đánh số đầy đủ trong ô riêng. Trả 1 ẢNH 'bản chi tiết mặt' (ghép dọc các ô phóng to) để
     lưu file riêng -> KHÔNG đổi kích thước _so/_thietke (giữ canh lề/đăng ký in). Số trong
-    inset DÙNG CHUNG numbers[] với bản chính nên khớp tuyệt đối. None nếu không có mặt."""
+    inset DÙNG CHUNG numbers[] với bản chính nên khớp tuyệt đối. None nếu không có mặt.
+    mark_scale: canvas có thể to hơn lbl (xuất nét mảnh) -> toạ độ KHUNG/CHỮ ×mark_scale,
+    còn crop nhãn vẫn theo lbl (work-res)."""
     if not face_boxes:
         return None
     H, W = canvas.shape[:2]
     boxes = sorted(face_boxes, key=lambda b: b[2] * b[3], reverse=True)[:max_insets]
     letters = 'ABCDEFGH'
     lw = max(2, W // 1500)
+    ms = float(mark_scale)
     panels = []
     for i, (x, y, w, h) in enumerate(boxes):
-        cv2.rectangle(canvas, (x, y), (x + w, y + h), 0, lw)
-        cv2.putText(canvas, letters[i], (x + 4, y + max(24, h // 8)), _FONT,
+        mx, my, mw, mh = int(x * ms), int(y * ms), int(w * ms), int(h * ms)
+        cv2.rectangle(canvas, (mx, my), (mx + mw, my + mh), 0, lw)
+        cv2.putText(canvas, letters[i], (mx + 4, my + max(24, mh // 8)), _FONT,
                     max(1.2, W / 1300.0), 0, lw + 1, cv2.LINE_AA)
         zf = max(1.0, target_w / float(max(1, w)))
         cw, ch = int(w * zf), int(h * zf)
@@ -427,7 +438,7 @@ def _nearest_idx(sub_rgb, centers):
 
 def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
                   min_num_mm=3.0, name='kholon', boost_faces=True, face_extra=20,
-                  max_work_mpx=45.0, keep_floor_mm=2.5):
+                  max_work_mpx=45.0, keep_floor_mm=2.5, line_render_scale=1.0):
     """Tạo tranh tô số KHỔ LỚN từ ảnh nét cao. Lưu bản đồ số + thiết kế + bảng màu vào
     out_dir; trả dict thống kê. Số tối thiểu theo MM @ khổ thật (long_cm)."""
     os.makedirs(out_dir, exist_ok=True)
@@ -511,17 +522,29 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     numbers = ['' for _ in range(n)]
     for i, ci in enumerate(used):
         numbers[ci] = str(i + 1)
-    canvas = np.full((H, W), 255, np.uint8)
-    _draw_outlines(lbl, canvas)
+    # NÉT MẢNH theo khổ to: xuất bản SỐ ở độ phân giải cao hơn (line_render_scale) -> nét
+    # biên 1px thành mảnh hơn (theo mm). Vị trí số tính ở work-res (nhẹ), chỉ VẼ ở canvas to.
+    LS = max(1.0, float(line_render_scale))
+    if LS > 1.01:
+        Hs, Ws = int(round(H * LS)), int(round(W * LS))
+        lbl_hi = cv2.resize(lbl, (Ws, Hs), interpolation=cv2.INTER_NEAREST)
+        canvas = np.full((Hs, Ws), 255, np.uint8)
+        _draw_outlines(lbl_hi, canvas)
+        del lbl_hi
+    else:
+        canvas = np.full((H, W), 255, np.uint8)
+        _draw_outlines(lbl, canvas)
     placed = _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h,
-                            face_boxes=face_boxes, face_min_h=face_min_h, floor_h=floor_h)
+                            face_boxes=face_boxes, face_min_h=face_min_h, floor_h=floor_h,
+                            out_scale=LS)
     # ZOOM-INSET: CHỈ cho CHÂN DUNG THẬT (1-4 mặt LỚN, mỗi mặt >=1.5% diện tích). Tranh
     # CẢNH nhiều người tí hon -> YuNet bắt nhầm vào lá -> bỏ qua (không vẽ khung A/B/C/D
     # làm rối bản số, không xuất file thừa). Đánh dấu + xuất bản chi tiết mặt khi đáng.
     detail_name = ''
     big_faces = [b for b in face_boxes if b[2] * b[3] >= 0.015 * H * W]
     if big_faces and len(big_faces) <= 4:
-        sheet = _face_detail_sheet(canvas, lbl, numbers, n, big_faces, mean_h, max_h, floor_h)
+        sheet = _face_detail_sheet(canvas, lbl, numbers, n, big_faces, mean_h, max_h, floor_h,
+                                   mark_scale=LS)
         if sheet is not None:
             detail_name = f'{name}_mat.png'
             cv2.imwrite(os.path.join(out_dir, detail_name), sheet)
