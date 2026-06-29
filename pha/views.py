@@ -318,7 +318,7 @@ def api_xu_ly_anh(request):
     enhance = (request.POST.get('enhance', '1') in ('1', 'on', 'true'))
     preset_key = (request.POST.get('preset') or 'anime').strip()
     try:
-        color_limit = max(0, min(int(request.POST.get('color_limit') or 0), 60))
+        color_limit = max(0, min(int(request.POST.get('color_limit') or 0), 250))
     except ValueError:
         color_limit = 0
     size_str = (request.POST.get('print_size') or '40x50').strip()
@@ -2837,7 +2837,7 @@ def anh_preset(request):
                 return 0
         d[name] = {
             'label': name + ' (của tôi)', 'desc': 'Preset tự lưu',
-            'color_limit': _i('color_limit', 0, 60), 'min_area': _i('min_area', 0, 100000),
+            'color_limit': _i('color_limit', 0, 250), 'min_area': _i('min_area', 0, 100000),
             'smooth': _i('smooth', 0, 3),
             'enhance': request.POST.get('enhance') in ('1', 'on', 'true'),
             'base': (request.POST.get('base') or 'photo').strip(),
@@ -2881,7 +2881,7 @@ def xu_ly_anh(request):
             color_limit = int(request.POST.get('color_limit') or 0)
         except ValueError:
             color_limit = 0
-        color_limit = max(0, min(color_limit, 60))  # 0 = không giới hạn
+        color_limit = max(0, min(color_limit, 250))  # 0 = không giới hạn (trần 250 = LIMIT_NUM_COLOR)
         try:
             min_area = int(request.POST.get('min_area') or 0)
         except ValueError:
