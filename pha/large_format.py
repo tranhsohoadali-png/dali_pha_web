@@ -335,8 +335,13 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
                        'dali': dali_match.nearest_dali((r, g, b))})
     with open(os.path.join(out_dir, f'{name}_bangmau.json'), 'w', encoding='utf-8') as f:
         json.dump(legend, f, ensure_ascii=False)
+    # % pixel của màu LỚN NHẤT: cao (>~0.6) = ô bị GỘP sụp về nền (khổ quá nhỏ cho số màu
+    # này -> số to không nhét nổi ô nhỏ) -> cảnh báo để tăng khổ / giảm màu.
+    _h = np.bincount(lbl.reshape(-1))
+    collapse_pct = round(float(_h.max()) / float(lbl.size), 2)
     return {'px': f'{W}x{H}', 'mau_dung': len(used), 'o_co_so': placed,
             'so_nho_nhat_mm': round(min_h / px_per_mm, 2), 'n_faces': len(face_boxes),
+            'collapse_pct': collapse_pct,
             'giay': round(time.time() - t0, 1), 'num_path': num_path, 'legend': legend,
             'preview': f'{name}_preview.png'}
 

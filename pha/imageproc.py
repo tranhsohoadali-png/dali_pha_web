@@ -158,10 +158,19 @@ def _process_large_into(obj, name, long_cm, color_limit):
                       for x in st.get('legend', [])]
         p = dict(obj.params or {})
         p.update({'large': True, 'px': st['px'], 'mau_dung': st['mau_dung'],
-                  'o_co_so': st['o_co_so'], 'giay': st['giay']})
+                  'o_co_so': st['o_co_so'], 'giay': st['giay'],
+                  'collapse_pct': st.get('collapse_pct', 0)})
         obj.params = p
         obj.status = ImageResult.STATUS_DONE
-        obj.error_message = ''
+        # CẢNH BÁO: 1 màu chiếm >60% = ô bị gộp sụp (khổ quá nhỏ cho số màu này). Vẫn DONE
+        # (có kết quả) nhưng báo để user tăng khổ / giảm màu.
+        cp = st.get('collapse_pct', 0)
+        if cp and cp > 0.6:
+            obj.error_message = (f'⚠️ Khổ {long_cm or 200}cm QUÁ NHỎ cho {color_limit or 60} '
+                                 f'màu — {int(cp * 100)}% ô bị gộp phẳng. Hãy tăng khổ (vd '
+                                 f'120×200) hoặc giảm số màu.')
+        else:
+            obj.error_message = ''
         obj.save()
     except Exception as e:                              # noqa: BLE001
         obj.status = ImageResult.STATUS_ERROR
