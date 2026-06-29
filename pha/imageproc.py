@@ -151,9 +151,11 @@ def _process_large_into(obj, name, long_cm, color_limit):
         base = os.path.splitext(name)[0]
         # dpi 120 (đủ nét cho in khổ lớn) + trần điểm ảnh làm việc trong process_large
         # -> nhẹ RAM + xong dưới ngưỡng poll, KHÔNG giảm số ô (ô đếm theo mm @ khổ thật).
+        # num_colors mặc định 99 (khổ to nhiều cảnh — palette rarity giữ vật thể); face boost
+        # cộng thêm ~20 -> tổng ~max 120 hũ. min_num_mm=5 + số theo MM @ khổ thật.
         st = process_large(os.path.join(settings.MEDIA_ROOT, name), out_dir,
                            long_cm=(long_cm or 200), dpi=120,
-                           num_colors=(color_limit or 60), min_num_mm=3.0, name=base)
+                           num_colors=(color_limit or 99), min_num_mm=5.0, name=base)
         obj.name_output = f'large/{base}_so.png'
         obj.design_name = f'large/{base}_thietke.png'
         obj.colors = [[x['no'], (x.get('hex') or '').upper(), x.get('dali', ''), 0]
@@ -162,17 +164,22 @@ def _process_large_into(obj, name, long_cm, color_limit):
         p.update({'large': True, 'px': st['px'], 'mau_dung': st['mau_dung'],
                   'o_co_so': st['o_co_so'], 'giay': st['giay'],
                   'collapse_pct': st.get('collapse_pct', 0),
-                  'flat_keep_colors': bool(st.get('flat'))})
+                  'flat_keep_colors': bool(st.get('flat')),
+                  'detail_sheet': (f'large/{st["detail_sheet"]}' if st.get('detail_sheet') else '')})
         obj.params = p
         obj.status = ImageResult.STATUS_DONE
         # CẢNH BÁO: 1 màu chiếm >60% = ô bị gộp sụp (khổ quá nhỏ cho số màu này). Vẫn DONE
         # (có kết quả) nhưng báo để user tăng khổ / giảm màu. BỎ QUA với bản PHẲNG: nền đặc
         # lớn là CHỦ Ý thiết kế (giữ nguyên màu), không phải khổ nhỏ -> không cảnh báo nhầm.
         cp = st.get('collapse_pct', 0)
+        ocs = int(st.get('o_co_so', 0) or 0)
         if cp and cp > 0.6 and not st.get('flat'):
-            obj.error_message = (f'⚠️ Khổ {long_cm or 200}cm QUÁ NHỎ cho {color_limit or 60} '
+            obj.error_message = (f'⚠️ Khổ {long_cm or 200}cm QUÁ NHỎ cho {color_limit or 99} '
                                  f'màu — {int(cp * 100)}% ô bị gộp phẳng. Hãy tăng khổ (vd '
                                  f'120×200) hoặc giảm số màu.')
+        elif ocs > 8000:
+            obj.error_message = (f'ℹ️ Tranh rất chi tiết: {ocs} ô phải tô — tô tay sẽ LÂU. '
+                                 f'Muốn nhanh hơn: giảm số màu hoặc tăng khổ.')
         else:
             obj.error_message = ''
         obj.save()

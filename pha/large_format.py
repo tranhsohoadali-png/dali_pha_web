@@ -23,8 +23,13 @@ from django.views.decorators.csrf import csrf_exempt
 
 from pha.color_index_lib import (
     get_number_size, MIN_TEXT_SIZE, MEAN_TEXT_SIZE, PADDING_CIRCLE,
-    _snap_to_design_palette,
+    _snap_to_design_palette, _quantize_rarity,
 )
+
+# SỐ tính theo MM @ KHỔ THẬT (không nhân min_h) -> ở 1.2×2m số KHÔNG phình to (lỗi cũ:
+# max_h=min_h×4 ~ 20mm). lib get_number_size tự co số theo ô nên đây là TRẦN TRÊN.
+MEAN_NUM_MM = 7.0          # cỡ số chuẩn (đa số ô)
+MAX_NUM_MM = 10.0          # số to nhất (ô nền lớn) — hết số 2cm
 from pha import dali_match
 from pha.views import staff_required, _img_executor, _prune_image_results
 
@@ -50,17 +55,35 @@ def _build_palette(img_rgb, n):
     return cv2.cvtColor(cen_lab, cv2.COLOR_LAB2RGB).reshape(-1, 3)
 
 
-def _looks_flat(img_rgb, thr=0.30):
-    """Nhận diện ảnh ĐÃ THIẾT KẾ PHẲNG (xuất từ Illustrator: vùng màu ĐẶC, biên cứng) vs
-    ảnh CHỤP/AI (gradient/nhiễu). Bản phẳng có tỉ lệ pixel TRÙNG hàng xóm rất cao; ảnh
-    chụp gần như 0. Thu nhỏ NEAREST để GIỮ biên cứng khi đo (INTER_AREA sẽ làm nhoè)."""
+def _rarity_palette(img_rgb, n):
+    """Bảng màu k-means CÓ TRỌNG SỐ ĐỘ HIẾM (_quantize_rarity) -> GIỮ vật thể nhỏ/hiếm
+    (người ở xa, điểm nhấn) bằng cách cấp CỤM MÀU RIÊNG cho tông hiếm; k-means trơn
+    (_build_palette) bỏ đói tông hiếm -> mất vật thể NGAY từ palette. Lấy palette trên
+    bản THU NHỎ ~2400px (đủ giữ tông hiếm, nhẹ RAM) -> trả centers RGB uint8 (k,3)."""
     h, w = img_rgb.shape[:2]
-    sc = 1000.0 / max(h, w) if max(h, w) > 1000 else 1.0
+    sc = 2400.0 / max(h, w) if max(h, w) > 2400 else 1.0
+    small = (cv2.resize(img_rgb, (max(1, int(w * sc)), max(1, int(h * sc))),
+                        interpolation=cv2.INTER_AREA) if sc < 1.0 else img_rgb)
+    q = _quantize_rarity(small, int(max(2, n)))          # ảnh đã lượng tử (giữ tông hiếm)
+    return np.unique(q.reshape(-1, 3), axis=0).astype(np.uint8)
+
+
+def _looks_flat(img_rgb, cover=0.85, topk=64):
+    """Nhận diện ảnh ĐÃ THIẾT KẾ PHẲNG (Illustrator: ÍT màu, mỗi màu phủ MẢNG lớn) vs ảnh
+    CHỤP/AI (hàng nghìn màu trải mỏng). Đo bằng ĐỘ PHỦ của 'topk' màu phổ biến nhất: bản
+    phẳng -> vài chục màu phủ ~hết; painterly -> top màu chỉ phủ phần nhỏ.
+    (Bỏ metric "pixel trùng hàng xóm" cũ: gradient mượt 8-bit có dải bằng nhau -> dương
+    tính giả khi NEAREST hạ ảnh nét cao.) Thu nhỏ NEAREST giữ ĐÚNG màu thật (không nhoè)."""
+    h, w = img_rgb.shape[:2]
+    sc = 1500.0 / max(h, w) if max(h, w) > 1500 else 1.0
     s = (cv2.resize(img_rgb, (max(1, int(w * sc)), max(1, int(h * sc))),
                     interpolation=cv2.INTER_NEAREST) if sc < 1.0 else img_rgb)
-    eq_r = (s[:, 1:] == s[:, :-1]).all(2).mean() if s.shape[1] > 1 else 0.0
-    eq_d = (s[1:, :] == s[:-1, :]).all(2).mean() if s.shape[0] > 1 else 0.0
-    return (0.5 * float(eq_r) + 0.5 * float(eq_d)) >= thr
+    flat = s.reshape(-1, 3)
+    colors, counts = np.unique(flat, axis=0, return_counts=True)
+    if len(colors) <= topk:
+        return True                                      # rất ít màu -> chắc chắn phẳng
+    top = int(np.sort(counts)[::-1][:topk].sum())
+    return (top / float(flat.shape[0])) >= cover
 
 
 def _cap_design_palette(colors, counts, cap):
@@ -146,17 +169,24 @@ def _in_boxes(cx, cy, boxes):
     return False
 
 
-def _merge_labels(lbl, n, min_h, max_pass=4, face_boxes=None, face_min_h=None):
-    """GỘP ô quá nhỏ (không nhét nổi nhãn rộng nhất cao min_h) vào hàng xóm LỚN NHẤT;
-    GIỮ lỗ kín (counter/lỗ chữ) tới r_floor. Sửa lbl TẠI CHỖ. (Port từ color_index_lib
-    _merge_unnumberable nhưng chạy trên NHÃN -> nhẹ RAM.)
-    face_boxes/face_min_h: vùng MẶT gộp NHẸ hơn (ngưỡng theo face_min_h < min_h) -> giữ
-    chi tiết mắt/mũi/miệng."""
+def _merge_labels(lbl, n, min_h, max_pass=4, face_boxes=None, face_min_h=None,
+                  centers=None, flat=False, keep_delta_e=14.0, pad=1.08, floor_h=None):
+    """GỘP ô quá nhỏ. KHÁC bản cũ ở 2 điểm để GIỮ CHI TIẾT:
+    (1) Gộp vào hàng xóm GIỐNG MÀU NHẤT (LAB) thay vì DIỆN TÍCH lớn nhất -> ô bị nuốt ít
+        lệch màu (trước gộp vào nền -> mắt/điểm nhấn bị nhuộm mất).
+    (2) GIỮ ô (tới sàn floor_h = số nhỏ nhất còn đặt được) khi đáng giữ: bản PHẲNG (mọi vùng
+        là chủ ý) / trong VÙNG MẶT / TƯƠNG PHẢN CAO với hàng xóm (ΔE>keep_delta_e: mắt, đốm
+        sáng). Ô < sàn (vô-tô-được) vẫn gộp. Vẫn GIỮ lỗ kín counter. Sửa lbl TẠI CHỖ."""
     worst = '9' * max(1, len(str(int(max(2, n)))))
-    r_need = _r_for(worst, float(min_h)) * 1.15
-    r_need_face = (_r_for(worst, float(face_min_h)) * 1.15) if face_min_h else r_need
-    r_floor = _r_for(worst, float(MIN_TEXT_SIZE))
+    fl = float(MIN_TEXT_SIZE) if floor_h is None else max(float(MIN_TEXT_SIZE), float(floor_h))
+    r_need = _r_for(worst, float(min_h)) * pad
+    r_need_face = (_r_for(worst, float(face_min_h)) * pad) if face_min_h else r_need
+    r_floor = _r_for(worst, fl)
     boxes = face_boxes or []
+    clab = None
+    if centers is not None and len(centers) >= n:
+        clab = cv2.cvtColor(np.asarray(centers[:n], np.uint8).reshape(-1, 1, 3),
+                            cv2.COLOR_RGB2LAB).reshape(-1, 3).astype(np.float32)
     H, W = lbl.shape
     k3 = np.ones((3, 3), np.uint8)
     for _ in range(max_pass):
@@ -170,8 +200,8 @@ def _merge_labels(lbl, n, min_h, max_pass=4, face_boxes=None, face_min_h=None):
             for k in range(1, nc):
                 x, y = int(stats[k, cv2.CC_STAT_LEFT]), int(stats[k, cv2.CC_STAT_TOP])
                 w, h = int(stats[k, cv2.CC_STAT_WIDTH]), int(stats[k, cv2.CC_STAT_HEIGHT])
-                rn = (r_need_face if (boxes and _in_boxes(x + w // 2, y + h // 2, boxes))
-                      else r_need)
+                in_face = bool(boxes and _in_boxes(x + w // 2, y + h // 2, boxes))
+                rn = r_need_face if in_face else r_need
                 sub = (comp[y:y + h, x:x + w] == k).astype(np.uint8)
                 subp = cv2.copyMakeBorder(sub, 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
                 rad = float(cv2.distanceTransform(subp, cv2.DIST_L2, 3).max())
@@ -185,10 +215,18 @@ def _merge_labels(lbl, n, min_h, max_pass=4, face_boxes=None, face_min_h=None):
                 nb = nb[nb != ci]
                 if nb.size == 0:
                     continue
-                if np.unique(nb).size == 1 and rad >= r_floor:
-                    continue                              # lỗ kín (counter) -> GIỮ
                 unb = np.unique(nb)
-                nbc = int(unb[int(np.argmax(area_all[unb]))])   # gộp vào màu hàng xóm LỚN NHẤT
+                if unb.size == 1 and rad >= r_floor:
+                    continue                              # lỗ kín (counter) -> GIỮ
+                # hàng xóm GIỐNG MÀU NHẤT (LAB) -> ít lệch màu; fallback: diện tích lớn nhất
+                if clab is not None:
+                    dd = ((clab[unb] - clab[ci]) ** 2).sum(1)
+                    j = int(dd.argmin()); nbc = int(unb[j]); de = float(dd[j]) ** 0.5
+                else:
+                    nbc = int(unb[int(np.argmax(area_all[unb]))]); de = None
+                # GIỮ ô (còn đủ chỗ số nhỏ nhất) nếu là chi tiết đáng giữ
+                if rad >= r_floor and (flat or in_face or (de is not None and de > keep_delta_e)):
+                    continue
                 yy, xx = np.where(sub2)
                 lbl[y0 + yy, x0 + xx] = nbc
                 changed = True
@@ -205,13 +243,45 @@ def _draw_outlines(lbl, canvas):
     canvas[d] = 0
 
 
+def _puttext_thin_gray(canvas, number, org, scale, frac=0.8, ss=5):
+    """Vẽ SỐ ĐEN (0) nét mảnh dưới-1px lên canvas GRAYSCALE nền trắng (255). cv2.putText chỉ
+    nhận nét nguyên >=1; ở số nhỏ nét 1px còn quá dày -> render PHÓNG TO ss lần nét round(ss·frac)
+    rồi thu INTER_AREA = nét xám AA dưới-1px, blend về ĐEN. Bản 1-kênh của _puttext_thin (bản
+    gốc 3-kênh). frac>=1 -> putText thường (nhanh)."""
+    if frac >= 0.999:
+        cv2.putText(canvas, number, org, _FONT, scale, 0, 1, cv2.LINE_AA)
+        return
+    (gw, gh), base = cv2.getTextSize(number, _FONT, scale, 1)
+    if gw <= 0 or gh <= 0:
+        cv2.putText(canvas, number, org, _FONT, scale, 0, 1, cv2.LINE_AA)
+        return
+    th = max(1, int(round(ss * frac)))
+    pad = ss
+    cw, chh = gw * ss + 2 * pad, (gh + base) * ss + 2 * pad
+    buf = np.zeros((chh, cw), np.uint8)
+    cv2.putText(buf, number, (pad, gh * ss + pad), _FONT, scale * ss, 255, th, cv2.LINE_AA)
+    small = cv2.resize(buf, (cw // ss, chh // ss), interpolation=cv2.INTER_AREA)
+    sh, sw = small.shape
+    H, W = canvas.shape[:2]
+    x0, y0 = int(org[0]) - pad // ss, int(org[1]) - (gh + pad // ss)
+    xa0, ya0 = max(0, x0), max(0, y0)
+    xa1, ya1 = min(W, x0 + sw), min(H, y0 + sh)
+    if xa1 <= xa0 or ya1 <= ya0:
+        return
+    a = small[ya0 - y0:ya1 - y0, xa0 - x0:xa1 - x0].astype(np.float32) / 255.0
+    reg = canvas[ya0:ya1, xa0:xa1].astype(np.float32)
+    reg = reg * (1.0 - a)                                # ink ĐEN=0 -> chỉ cần nhân (1-alpha)
+    canvas[ya0:ya1, xa0:xa1] = np.clip(reg, 0, 255).astype(np.uint8)
+
+
 def _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h,
-                   face_boxes=None, face_min_h=None):
+                   face_boxes=None, face_min_h=None, floor_h=None, thin=True):
     """Đánh số 'numbers[ci]' vào tâm sâu nhất (polylabel ~ distanceTransform) mỗi ô.
-    Số tối thiểu cao min_h px (đã quy từ mm); vùng MẶT dùng face_min_h (nhỏ hơn) để
-    số mịn chui vừa ô nhỏ -> mặt có số chi tiết. Trả số ô đã đánh."""
+    Số to dần tới ~mean_h (vừa ô); SÀN = floor_h (số nhỏ nhất còn đặt được, ~2.5mm) để
+    CỨU ô nhỏ đã được _merge_labels GIỮ (mắt/điểm nhấn) -> đánh số được cả chi tiết nhỏ.
+    Vẽ nét MẢNH (thin) cho số nhỏ sắc, không vỡ. Trả số ô đã đánh."""
     placed = 0
-    boxes = face_boxes or []
+    fl = float(MIN_TEXT_SIZE) if floor_h is None else max(float(MIN_TEXT_SIZE), float(floor_h))
     for ci in range(n):
         num = numbers[ci]
         if not num:
@@ -225,20 +295,58 @@ def _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h,
                 continue
             x, y = int(stats[k, cv2.CC_STAT_LEFT]), int(stats[k, cv2.CC_STAT_TOP])
             w, h = int(stats[k, cv2.CC_STAT_WIDTH]), int(stats[k, cv2.CC_STAT_HEIGHT])
-            mn = (face_min_h if (boxes and face_min_h and _in_boxes(x + w // 2, y + h // 2, boxes))
-                  else min_h)
             subp = cv2.copyMakeBorder((comp[y:y + h, x:x + w] == k).astype(np.uint8),
                                       1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
             dt = cv2.distanceTransform(subp, cv2.DIST_L2, 3)
             ly, lx = np.unravel_index(int(dt.argmax()), dt.shape)
             ctr = (x + int(lx) - 1, y + int(ly) - 1)
-            ts, scale, th = get_number_size(num, float(dt[ly, lx]) * 2, mn, mean_h, max_h)
+            ts, scale, th = get_number_size(num, float(dt[ly, lx]) * 2, fl, mean_h, max_h)
             if ts is None:
                 continue
             org = (ctr[0] - ts[0] // 2, ctr[1] + ts[1] // 2)
-            cv2.putText(canvas, num, org, _FONT, scale, 0, th, cv2.LINE_AA)
+            if thin:
+                _puttext_thin_gray(canvas, num, org, scale)
+            else:
+                cv2.putText(canvas, num, org, _FONT, scale, 0, th, cv2.LINE_AA)
             placed += 1
     return placed
+
+
+def _face_detail_sheet(canvas, lbl, numbers, n, face_boxes, mean_h, max_h, floor_h,
+                       max_insets=4, target_w=1500):
+    """ZOOM-INSET: với mỗi vùng MẶT (tối đa max_insets), (1) đánh dấu KHUNG + CHỮ CÁI lên
+    bản số chính 'canvas' (tại chỗ); (2) trích nhãn vùng đó, PHÓNG TO (NEAREST) -> vẽ nét +
+    đánh số đầy đủ trong ô riêng. Trả 1 ẢNH 'bản chi tiết mặt' (ghép dọc các ô phóng to) để
+    lưu file riêng -> KHÔNG đổi kích thước _so/_thietke (giữ canh lề/đăng ký in). Số trong
+    inset DÙNG CHUNG numbers[] với bản chính nên khớp tuyệt đối. None nếu không có mặt."""
+    if not face_boxes:
+        return None
+    H, W = canvas.shape[:2]
+    boxes = sorted(face_boxes, key=lambda b: b[2] * b[3], reverse=True)[:max_insets]
+    letters = 'ABCDEFGH'
+    lw = max(2, W // 1500)
+    panels = []
+    for i, (x, y, w, h) in enumerate(boxes):
+        cv2.rectangle(canvas, (x, y), (x + w, y + h), 0, lw)
+        cv2.putText(canvas, letters[i], (x + 4, y + max(24, h // 8)), _FONT,
+                    max(1.2, W / 1300.0), 0, lw + 1, cv2.LINE_AA)
+        zf = max(1.0, target_w / float(max(1, w)))
+        cw, ch = int(w * zf), int(h * zf)
+        crop = cv2.resize(lbl[y:y + h, x:x + w], (cw, ch), interpolation=cv2.INTER_NEAREST)
+        sub = np.full((ch, cw), 255, np.uint8)
+        _draw_outlines(crop, sub)
+        _place_numbers(crop, n, numbers, sub, mean_h, mean_h, max_h, floor_h=floor_h)
+        title = np.full((68, cw), 255, np.uint8)
+        cv2.putText(title, 'Vung ' + letters[i], (10, 50), _FONT, 1.6, 0, 3, cv2.LINE_AA)
+        panels.append(np.vstack([title, sub]))
+    maxw = max(p.shape[1] for p in panels)
+    rows = []
+    for p in panels:
+        if p.shape[1] < maxw:
+            p = cv2.copyMakeBorder(p, 0, 0, 0, maxw - p.shape[1], cv2.BORDER_CONSTANT, value=255)
+        rows.append(p)
+        rows.append(np.full((30, maxw), 255, np.uint8))
+    return np.vstack(rows) if rows else None
 
 
 def _kmeans_rgb(pixels_rgb, k):
@@ -318,7 +426,7 @@ def _nearest_idx(sub_rgb, centers):
 
 
 def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
-                  min_num_mm=3.0, name='kholon', boost_faces=True, face_extra=28,
+                  min_num_mm=3.0, name='kholon', boost_faces=True, face_extra=20,
                   max_work_mpx=45.0):
     """Tạo tranh tô số KHỔ LỚN từ ảnh nét cao. Lưu bản đồ số + thiết kế + bảng màu vào
     out_dir; trả dict thống kê. Số tối thiểu theo MM @ khổ thật (long_cm)."""
@@ -357,8 +465,11 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     img = cv2.resize(img, (tW, tH), interpolation=interp)
     H, W = img.shape[:2]
     px_per_mm = max(H, W) / (float(long_cm) * 10.0)
+    # SỐ theo MM @ KHỔ THẬT: min/chuẩn/to-nhất là HẰNG mm (KHÔNG nhân min_h) -> ở 1.2×2m
+    # số không phình (lỗi cũ max_h=min_h×4 ~20mm). get_number_size tự co số theo ô.
     min_h = max(2.0, float(min_num_mm) * px_per_mm)
-    mean_h, max_h = min_h * 2.2, min_h * 4.0
+    mean_h = max(min_h, MEAN_NUM_MM * px_per_mm)
+    max_h = max(mean_h, MAX_NUM_MM * px_per_mm)
     # TỰ NHẬN DIỆN bản phẳng (Illustrator...) vs ảnh chụp/AI:
     #  - PHẲNG -> GIỮ NGUYÊN bảng màu thiết kế (bỏ k-means/"tự lọc màu"), chỉ chặn trần số
     #    màu bằng gộp màu gần giống; KHÔNG boost mặt (giữ đúng màu file, không thêm màu lạ).
@@ -368,7 +479,7 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
         n_base = len(centers)
         face_boxes = []
     else:
-        centers = _build_palette(img, num_colors)
+        centers = _rarity_palette(img, num_colors)     # GIỮ vật thể hiếm (R1) thay k-means trơn
         n_base = len(centers)
         # BOOST MẶT: dò mặt -> palette PHỤ riêng cho vùng mặt (skin/mắt/tóc) -> mặt đánh số
         # CHI TIẾT (màu nền không cấp màu cho mặt nhỏ -> mặt bị phẳng). Vùng mặt map lại
@@ -385,9 +496,14 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     for (x, y, w, h) in face_boxes:                    # vùng mặt -> map lại theo CẢ palette
         lbl[y:y + h, x:x + w] = _nearest_idx(img[y:y + h, x:x + w], centers)
     del img
-    # mặt nhỏ hơn nền: gộp NHẸ hơn ở vùng mặt -> giữ chi tiết mắt/mũi/miệng.
-    face_min_h = max(float(MIN_TEXT_SIZE), min_h * 0.5)
-    _merge_labels(lbl, n, min_h, face_boxes=face_boxes, face_min_h=face_min_h)
+    # mặt: ngưỡng gộp NHẸ hơn (face_min_h ~0.75×) -> giữ chi tiết mắt/mũi/miệng.
+    face_min_h = max(float(MIN_TEXT_SIZE), min_h * 0.75)
+    # SÀN số ~2.5mm @ khổ thật: số nhỏ nhất còn ĐẶT được -> cứu ô nhỏ "đáng giữ" (mắt/điểm
+    # nhấn). Dùng CHUNG cho _merge_labels (giữ tới sàn) lẫn _place_numbers (đặt số tới sàn)
+    # -> không tạo ô-giữ-mà-vô-số. bản phẳng giữ mọi vùng numberable.
+    floor_h = max(float(MIN_TEXT_SIZE), 2.5 * px_per_mm)
+    _merge_labels(lbl, n, min_h, face_boxes=face_boxes, face_min_h=face_min_h,
+                  centers=centers, flat=flat_mode, floor_h=floor_h)
     # đánh số LIÊN TỤC 1..K theo các màu CÒN dùng (sau gộp) -> bảng gọn, không nhảy số
     used = list(int(c) for c in np.unique(lbl))
     numbers = ['' for _ in range(n)]
@@ -396,7 +512,15 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     canvas = np.full((H, W), 255, np.uint8)
     _draw_outlines(lbl, canvas)
     placed = _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h,
-                            face_boxes=face_boxes, face_min_h=face_min_h)
+                            face_boxes=face_boxes, face_min_h=face_min_h, floor_h=floor_h)
+    # ZOOM-INSET: đánh dấu KHUNG+CHỮ vùng mặt lên bản số + xuất BẢN CHI TIẾT MẶT riêng
+    # (phóng to + đánh số đầy đủ). KHÔNG đổi kích thước _so/_thietke -> giữ canh lề in.
+    detail_name = ''
+    if face_boxes:
+        sheet = _face_detail_sheet(canvas, lbl, numbers, n, face_boxes, mean_h, max_h, floor_h)
+        if sheet is not None:
+            detail_name = f'{name}_mat.png'
+            cv2.imwrite(os.path.join(out_dir, detail_name), sheet)
     num_path = os.path.join(out_dir, f'{name}_so.png')
     cv2.imwrite(num_path, canvas)
     # bản XEM TRƯỚC nhỏ (file số đầy đủ rất nặng -> không hiện trực tiếp trên web)
@@ -423,7 +547,7 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
             'so_nho_nhat_mm': round(min_h / px_per_mm, 2), 'n_faces': len(face_boxes),
             'collapse_pct': collapse_pct, 'flat': bool(flat_mode),
             'giay': round(time.time() - t0, 1), 'num_path': num_path, 'legend': legend,
-            'preview': f'{name}_preview.png'}
+            'preview': f'{name}_preview.png', 'detail_sheet': detail_name}
 
 
 # ===================== WEB: ô upload "Khổ lớn" (mau.tranhdali.vn) =====================

@@ -174,11 +174,12 @@ PRESETS = {
         'prompt': _PROMPT_DESIGN,
     },
     'kholon': {
-        'label': 'Tranh khổ TO siêu chi tiết (60 màu)',
-        'desc': 'Cho tranh KHỔ LỚN (vd 1×2m): tải ảnh NÉT CAO + chọn Khổ (cm) lớn -> '
-                'đánh số độ phân giải cao, siêu chi tiết, đủ 60 màu. Xử lý chạy nền '
-                '~vài phút (ảnh càng nét càng nhiều chi tiết). Số tối thiểu ~3mm.',
-        'color_limit': 60, 'smooth': 0, 'min_area': 0, 'enhance': False,
+        'label': 'Tranh khổ TO siêu chi tiết (99 màu)',
+        'desc': 'Cho tranh KHỔ LỚN (vd 1.2×2m): tải ảnh NÉT CAO + chọn Khổ (cm) lớn -> '
+                'đánh số theo TỈ LỆ THẬT (số/nét tính bằng mm @ khổ to), GIỮ vật thể/bối '
+                'cảnh (palette rarity), ~99 màu (+boost mặt). Có bản chi tiết mặt phóng to. '
+                'Xử lý chạy nền ~vài phút. Số tối thiểu ~5mm.',
+        'color_limit': 99, 'smooth': 0, 'min_area': 0, 'enhance': False,
         'use_refs': False, 'face_priority': False, 'detail': True, 'large': True,
         'prompt': _PROMPT_DESIGN,
     },
