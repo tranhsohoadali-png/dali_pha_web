@@ -151,11 +151,12 @@ def _process_large_into(obj, name, long_cm, color_limit):
         base = os.path.splitext(name)[0]
         # dpi 120 (đủ nét cho in khổ lớn) + trần điểm ảnh làm việc trong process_large
         # -> nhẹ RAM + xong dưới ngưỡng poll, KHÔNG giảm số ô (ô đếm theo mm @ khổ thật).
-        # num_colors mặc định 99 (khổ to nhiều cảnh — palette rarity giữ vật thể); face boost
-        # cộng thêm ~20 -> tổng ~max 120 hũ. min_num_mm=5 + số theo MM @ khổ thật.
+        # CHI TIẾT TỐI ĐA cho khổ to: 60Mpx (biên mịn hơn), sàn giữ-ô 2mm (giữ ô nhỏ hơn),
+        # số nhỏ nhất 4mm, 120 màu nền (+boost mặt ~20). Nặng RAM/lâu hơn -> đo VPS.
         st = process_large(os.path.join(settings.MEDIA_ROOT, name), out_dir,
                            long_cm=(long_cm or 200), dpi=120,
-                           num_colors=(color_limit or 99), min_num_mm=5.0, name=base)
+                           num_colors=(color_limit or 120), min_num_mm=4.0, name=base,
+                           max_work_mpx=60.0, keep_floor_mm=2.0)
         obj.name_output = f'large/{base}_so.png'
         obj.design_name = f'large/{base}_thietke.png'
         obj.colors = [[x['no'], (x.get('hex') or '').upper(), x.get('dali', ''), 0]
@@ -174,7 +175,7 @@ def _process_large_into(obj, name, long_cm, color_limit):
         cp = st.get('collapse_pct', 0)
         ocs = int(st.get('o_co_so', 0) or 0)
         if cp and cp > 0.6 and not st.get('flat'):
-            obj.error_message = (f'⚠️ Khổ {long_cm or 200}cm QUÁ NHỎ cho {color_limit or 99} '
+            obj.error_message = (f'⚠️ Khổ {long_cm or 200}cm QUÁ NHỎ cho {color_limit or 120} '
                                  f'màu — {int(cp * 100)}% ô bị gộp phẳng. Hãy tăng khổ (vd '
                                  f'120×200) hoặc giảm số màu.')
         elif ocs > 8000:

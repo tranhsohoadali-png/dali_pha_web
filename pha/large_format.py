@@ -427,7 +427,7 @@ def _nearest_idx(sub_rgb, centers):
 
 def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
                   min_num_mm=3.0, name='kholon', boost_faces=True, face_extra=20,
-                  max_work_mpx=45.0):
+                  max_work_mpx=45.0, keep_floor_mm=2.5):
     """Tạo tranh tô số KHỔ LỚN từ ảnh nét cao. Lưu bản đồ số + thiết kế + bảng màu vào
     out_dir; trả dict thống kê. Số tối thiểu theo MM @ khổ thật (long_cm)."""
     os.makedirs(out_dir, exist_ok=True)
@@ -501,7 +501,7 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     # SÀN số ~2.5mm @ khổ thật: số nhỏ nhất còn ĐẶT được -> cứu ô nhỏ "đáng giữ" (mắt/điểm
     # nhấn). Dùng CHUNG cho _merge_labels (giữ tới sàn) lẫn _place_numbers (đặt số tới sàn)
     # -> không tạo ô-giữ-mà-vô-số. bản phẳng giữ mọi vùng numberable.
-    floor_h = max(float(MIN_TEXT_SIZE), 2.5 * px_per_mm)
+    floor_h = max(float(MIN_TEXT_SIZE), float(keep_floor_mm) * px_per_mm)
     _merge_labels(lbl, n, min_h, face_boxes=face_boxes, face_min_h=face_min_h,
                   centers=centers, flat=flat_mode, floor_h=floor_h)
     # đánh số LIÊN TỤC 1..K theo các màu CÒN dùng (sau gộp) -> bảng gọn, không nhảy số
@@ -513,11 +513,13 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     _draw_outlines(lbl, canvas)
     placed = _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h,
                             face_boxes=face_boxes, face_min_h=face_min_h, floor_h=floor_h)
-    # ZOOM-INSET: đánh dấu KHUNG+CHỮ vùng mặt lên bản số + xuất BẢN CHI TIẾT MẶT riêng
-    # (phóng to + đánh số đầy đủ). KHÔNG đổi kích thước _so/_thietke -> giữ canh lề in.
+    # ZOOM-INSET: CHỈ cho CHÂN DUNG THẬT (1-4 mặt LỚN, mỗi mặt >=1.5% diện tích). Tranh
+    # CẢNH nhiều người tí hon -> YuNet bắt nhầm vào lá -> bỏ qua (không vẽ khung A/B/C/D
+    # làm rối bản số, không xuất file thừa). Đánh dấu + xuất bản chi tiết mặt khi đáng.
     detail_name = ''
-    if face_boxes:
-        sheet = _face_detail_sheet(canvas, lbl, numbers, n, face_boxes, mean_h, max_h, floor_h)
+    big_faces = [b for b in face_boxes if b[2] * b[3] >= 0.015 * H * W]
+    if big_faces and len(big_faces) <= 4:
+        sheet = _face_detail_sheet(canvas, lbl, numbers, n, big_faces, mean_h, max_h, floor_h)
         if sheet is not None:
             detail_name = f'{name}_mat.png'
             cv2.imwrite(os.path.join(out_dir, detail_name), sheet)
