@@ -479,12 +479,14 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
         n_base = len(centers)
         face_boxes = []
     else:
-        centers = _rarity_palette(img, num_colors)     # GIỮ vật thể hiếm (R1) thay k-means trơn
-        n_base = len(centers)
-        # BOOST MẶT: dò mặt -> palette PHỤ riêng cho vùng mặt (skin/mắt/tóc) -> mặt đánh số
-        # CHI TIẾT (màu nền không cấp màu cho mặt nhỏ -> mặt bị phẳng). Vùng mặt map lại
-        # theo CẢ palette (giàu màu da) -> hiện mắt/mũi/miệng thành ô có số.
+        # num_colors = TỔNG số hũ sơn MUỐN có. Nếu boost mặt -> DÀNH face_extra slot cho mặt,
+        # phần nền = num_colors - face_extra -> tổng ~ num_colors (không vượt "120 màu").
         face_boxes = _detect_face_boxes(img) if boost_faces else []
+        reserve = face_extra if face_boxes else 0
+        base_k = max(2, int(num_colors) - reserve)
+        centers = _rarity_palette(img, base_k)         # GIỮ vật thể hiếm (R1) thay k-means trơn
+        n_base = len(centers)
+        # BOOST MẶT: palette PHỤ vùng mặt (skin/mắt/tóc) ghép vào -> mặt giàu màu, đánh số chi tiết.
         if face_boxes:
             fpx = np.concatenate([img[y:y + h, x:x + w].reshape(-1, 3)
                                   for (x, y, w, h) in face_boxes], axis=0)
