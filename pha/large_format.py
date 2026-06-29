@@ -567,7 +567,8 @@ def process_large_job(rec_id, src_name, long_cm, dpi, num_colors, min_mm):
         p.update({'large': True, 'long_cm': long_cm, 'dpi': dpi, 'num_colors': num_colors,
                   'min_mm': min_mm, 'px': st['px'], 'mau_dung': st['mau_dung'],
                   'o_co_so': st['o_co_so'], 'giay': st['giay'], 'legend': st['legend'],
-                  'preview': f'{_LARGE_DIR}/{base}_preview.png'})
+                  'preview': f'{_LARGE_DIR}/{base}_preview.png',
+                  'detail_sheet': (f'{_LARGE_DIR}/{st["detail_sheet"]}' if st.get('detail_sheet') else '')})
         obj.params = p
         obj.status = ImageResult.STATUS_DONE
         obj.error_message = ''
@@ -604,11 +605,11 @@ def kho_lon_upload(request):
     w_cm, h_cm = _i('w_cm', 100, 5, 600), _i('h_cm', 200, 5, 600)
     long_cm = max(w_cm, h_cm)
     dpi = _i('dpi', 150, 50, 220)
-    num_colors = _i('num_colors', 60, 2, 120)
-    try:
-        min_mm = max(1.0, min(20.0, float(request.POST.get('min_mm') or 3)))
+    num_colors = _i('num_colors', 99, 2, 250)
+    try:                                                  # SÀN 4mm: số nhỏ hơn in vải nhòe
+        min_mm = max(4.0, min(20.0, float(request.POST.get('min_mm') or 5)))
     except (ValueError, TypeError):
-        min_mm = 3.0
+        min_mm = 5.0
     upload = request.FILES['image']
     fss = FileSystemStorage()
     name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_{uuid.uuid4().hex[:8]}_{upload.name}'

@@ -154,6 +154,7 @@
                 <select id="orient" class="form-select form-select-sm"><option value="auto">Tự động</option><option value="portrait">Dọc</option><option value="landscape">Ngang</option></select></div>
             </div>
             <button id="btnPrint" class="btn btn-success btn-sm mt-3" hidden><i class="bi bi-download"></i> Tải bản in + A3</button>
+            <a id="btnMat" class="btn btn-outline-success btn-sm mt-3 ms-1" hidden download target="_blank" title="Bản phóng to các vùng mặt (in kèm bản số để thợ đọc số ô nhỏ ở mặt)"><i class="bi bi-person-bounding-box"></i> Tải bản chi tiết mặt</a>
             <button id="btnLearn" class="btn btn-outline-primary btn-sm mt-3 ms-1" hidden title="Lưu ca này (ảnh gốc + thông số + thiết kế) vào kho học để hệ thống học dần"><i class="bi bi-mortarboard"></i> Lưu vào kho học</button>
             <a href="/kho-hoc" class="btn btn-link btn-sm mt-3" title="Xem kho học">Kho học »</a>
           </div>
@@ -354,6 +355,9 @@
       pi.innerHTML=t; pi.classList.remove('d-none');
       if(res.warn){ var e=document.getElementById('err'); e.className='alert alert-warning'; e.textContent='⚠️ '+res.warn; }
       ['btnPrint','dXlsx','dLegend','dCsv','btnLearn'].forEach(id=>document.getElementById(id).hidden=false);
+      // Tranh khổ TO có mặt -> nút tải BẢN CHI TIẾT MẶT (phóng to vùng mặt + số to đọc rõ)
+      var mat=document.getElementById('btnMat');
+      if(p.detail_sheet){ mat.href='/media/'+p.detail_sheet; mat.hidden=false; } else { mat.hidden=true; }
       var bl=document.getElementById('btnLearn'); bl.disabled=false; bl.classList.add('btn-outline-primary'); bl.classList.remove('btn-primary'); bl.innerHTML='<i class="bi bi-mortarboard"></i> Lưu vào kho học';
       showPalette(res.colors||[]); if(onDone)onDone();
     }).fail(function(){ spin(false); document.getElementById('err').textContent='Không kết nối được máy chủ.'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); });
