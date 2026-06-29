@@ -149,8 +149,10 @@ def _process_large_into(obj, name, long_cm, color_limit):
         from pha.large_format import process_large
         out_dir = os.path.join(settings.MEDIA_ROOT, 'large')
         base = os.path.splitext(name)[0]
+        # dpi 120 (đủ nét cho in khổ lớn) + trần điểm ảnh làm việc trong process_large
+        # -> nhẹ RAM + xong dưới ngưỡng poll, KHÔNG giảm số ô (ô đếm theo mm @ khổ thật).
         st = process_large(os.path.join(settings.MEDIA_ROOT, name), out_dir,
-                           long_cm=(long_cm or 200), dpi=150,
+                           long_cm=(long_cm or 200), dpi=120,
                            num_colors=(color_limit or 60), min_num_mm=3.0, name=base)
         obj.name_output = f'large/{base}_so.png'
         obj.design_name = f'large/{base}_thietke.png'

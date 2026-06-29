@@ -260,7 +260,8 @@ def _nearest_idx(sub_rgb, centers):
 
 
 def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
-                  min_num_mm=3.0, name='kholon', boost_faces=True, face_extra=28):
+                  min_num_mm=3.0, name='kholon', boost_faces=True, face_extra=28,
+                  max_work_mpx=45.0):
     """Tạo tranh tô số KHỔ LỚN từ ảnh nét cao. Lưu bản đồ số + thiết kế + bảng màu vào
     out_dir; trả dict thống kê. Số tối thiểu theo MM @ khổ thật (long_cm)."""
     os.makedirs(out_dir, exist_ok=True)
@@ -282,8 +283,17 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     H0, W0 = img.shape[:2]
     long_px = _target_long_px(long_cm, dpi)
     sc = long_px / float(max(H0, W0))
-    interp = cv2.INTER_AREA if sc < 1 else cv2.INTER_LANCZOS4
-    img = cv2.resize(img, (max(1, int(W0 * sc)), max(1, int(H0 * sc))), interpolation=interp)
+    tW, tH = max(1, int(W0 * sc)), max(1, int(H0 * sc))
+    # CHẶN TRẦN số điểm ảnh LÀM VIỆC -> vừa RAM (VPS 8GB) + xử lý XONG DƯỚI ngưỡng poll.
+    # Ô tô đếm theo MM @ khổ THẬT (min_h = min_num_mm * px_per_mm) nên hạ độ phân giải
+    # KHÔNG giảm số ô đánh số -> chỉ bớt độ nét raster (vẫn thừa cho in khổ lớn). Trước đây
+    # dpi=150 @ 200cm -> ~84Mpx + 120 màu -> >5 phút -> frontend bỏ poll = "không ra kết quả".
+    cap = float(max_work_mpx) * 1e6
+    if tW * tH > cap:
+        s2 = (cap / (tW * tH)) ** 0.5
+        tW, tH = max(1, int(tW * s2)), max(1, int(tH * s2))
+    interp = cv2.INTER_AREA if (tW < W0) else cv2.INTER_LANCZOS4
+    img = cv2.resize(img, (tW, tH), interpolation=interp)
     H, W = img.shape[:2]
     px_per_mm = max(H, W) / (float(long_cm) * 10.0)
     min_h = max(2.0, float(min_num_mm) * px_per_mm)

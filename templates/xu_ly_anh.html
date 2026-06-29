@@ -359,9 +359,17 @@
     }).fail(function(){ spin(false); document.getElementById('err').textContent='Không kết nối được máy chủ.'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); });
   }
 
-  // tự poll sau khi upload
+  // tự poll sau khi upload. Cửa sổ chờ 16 phút (> mốc "kẹt" 15' phía server) -> luôn
+  // hiện ĐƯỢC kết quả HOẶC báo lỗi, không còn "im lặng" giữa chừng. Tranh KHỔ TO siêu
+  // chi tiết (120 màu) có thể mất vài phút -> nhắc người dùng đừng tưởng treo.
   var fu=decodeURIComponent("{{ file_url|default:'' }}");
-  if(fu){ var waited=0,poll=setInterval(function(){ getResult(fu,function(){clearInterval(poll)},function(){ waited+=2000; if(waited>300000){clearInterval(poll);spin(false);} }); },2000); }
+  if(fu){ var waited=0,poll=setInterval(function(){ getResult(fu,function(){clearInterval(poll)},function(){
+      waited+=2000;
+      if(waited===60000){ var s=document.getElementById('spin'); if(s){ var t=s.childNodes[s.childNodes.length-1]; if(t) t.textContent=' Đang xử lý… (tranh khổ lớn có thể mất vài phút)'; } }
+      if(waited>960000){clearInterval(poll);spin(false);
+        var e=document.getElementById('err'); e.className='alert alert-warning';
+        e.textContent='Quá lâu chưa xong — có thể server đang nặng. Hãy tải lại trang sau ít phút để xem kết quả (ảnh vẫn được xử lý nền), hoặc giảm Số màu / Khổ.';
+      } }); },2000); }
 
   function dl(u){ var a=document.createElement('a'); a.href=u; a.click(); }
   // Gom mã DALI đang hiển thị (kể cả mã vừa sửa tay) -> gửi kèm để file tải về dùng mã đó.
