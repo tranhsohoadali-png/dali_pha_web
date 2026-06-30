@@ -320,7 +320,7 @@ def _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h,
 
 
 def _face_detail_sheet(canvas, lbl, numbers, n, face_boxes, mean_h, max_h, floor_h,
-                       max_insets=4, target_w=1500, mark_scale=1.0):
+                       max_insets=6, target_w=1500, mark_scale=1.0):
     """ZOOM-INSET: với mỗi vùng MẶT (tối đa max_insets), (1) đánh dấu KHUNG + CHỮ CÁI lên
     bản số chính 'canvas' (tại chỗ); (2) trích nhãn vùng đó, PHÓNG TO (NEAREST) -> vẽ nét +
     đánh số đầy đủ trong ô riêng. Trả 1 ẢNH 'bản chi tiết mặt' (ghép dọc các ô phóng to) để
@@ -378,47 +378,33 @@ def _kmeans_rgb(pixels_rgb, k):
     return cv2.cvtColor(cen, cv2.COLOR_LAB2RGB).reshape(-1, 3)
 
 
-def _detect_face_boxes(img_rgb, expand=1.7, grid=(4, 3), conf=0.5):
-    """Dò KHUÔN MẶT (YuNet) theo Ô LƯỚI grid (gx×gy): mỗi ô tìm riêng (YuNet cap 4 mặt/
-    lần + mặt to hơn so với ô -> bắt được NHIỀU mặt trong tranh nhiều cảnh). Gộp trùng.
-    Trả list (x,y,w,h) full-res, NỚI rộng quanh mặt (tóc/cằm/cổ)."""
+def _detect_face_boxes(img_rgb, expand=1.7, conf=0.85, det_long=1600, with_lms=False):
+    """Dò KHUÔN MẶT (YuNet) MỘT LẦN trên bản THU NHỎ (long_side<=det_long) -> NHANH + KHÔNG
+    upscale FALSE-POSITIVE (lưới-tile cũ phóng hoa sen mờ thành "mặt"). LỌC score>=conf (mặt
+    THẬT YuNet >=0.9; FP <=0.8). _yunet_faces tự thu nhỏ nội bộ + trả box/lms về toạ độ ảnh
+    vào. Trả list (x,y,w,h) full-res NỚI rộng (tóc/cằm/cổ); with_lms -> list (box, lms)."""
     try:
         from pha.face_features import _yunet_faces
     except Exception:
         return []
     H, W = img_rgb.shape[:2]
-    gx, gy = grid
-    raw = []
-    for j in range(gy):
-        for i in range(gx):
-            x0, x1 = int(W * i / gx), int(W * (i + 1) / gx)
-            y0, y1 = int(H * j / gy), int(H * (j + 1) / gy)
-            tile = img_rgb[y0:y1, x0:x1]
-            try:
-                faces = _yunet_faces(tile, conf=conf, long_side=1200)
-            except Exception:
-                faces = []
-            for f in faces:
-                x, y, w, h = f['box']
-                cx, cy = x0 + x + w / 2.0, y0 + y + h / 2.0
-                bw, bh = w * expand, h * expand
-                bx0, by0 = max(0, int(cx - bw / 2)), max(0, int(cy - bh / 2))
-                bx1, by1 = min(W, int(cx + bw / 2)), min(H, int(cy + bh / 2))
-                if bx1 > bx0 and by1 > by0:
-                    raw.append([bx0, by0, bx1, by1])
-    # gộp box TRÙNG (giao nhau nhiều) -> giữ box bao
-    boxes = []
-    for b in sorted(raw, key=lambda r: -(r[2] - r[0]) * (r[3] - r[1])):
-        keep = True
-        for (kx0, ky0, kw, kh) in boxes:
-            ix = max(0, min(b[2], kx0 + kw) - max(b[0], kx0))
-            iy = max(0, min(b[3], ky0 + kh) - max(b[1], ky0))
-            if ix * iy > 0.45 * (b[2] - b[0]) * (b[3] - b[1]):
-                keep = False
-                break
-        if keep:
-            boxes.append((b[0], b[1], b[2] - b[0], b[3] - b[1]))
-    return boxes
+    try:
+        faces = _yunet_faces(img_rgb, conf=conf, long_side=det_long)
+    except Exception:
+        return []
+    out = []
+    for f in faces:
+        if float(f.get('score', 0.0)) < conf:
+            continue
+        x, y, w, h = f['box']
+        cx, cy = x + w / 2.0, y + h / 2.0
+        bw, bh = w * expand, h * expand
+        bx0, by0 = max(0, int(cx - bw / 2)), max(0, int(cy - bh / 2))
+        bx1, by1 = min(W, int(cx + bw / 2)), min(H, int(cy + bh / 2))
+        if bx1 > bx0 and by1 > by0:
+            box = (bx0, by0, bx1 - bx0, by1 - by0)
+            out.append((box, f.get('lms')) if with_lms else box)
+    return out
 
 
 def _nearest_idx(sub_rgb, centers):
@@ -537,13 +523,13 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     placed = _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h,
                             face_boxes=face_boxes, face_min_h=face_min_h, floor_h=floor_h,
                             out_scale=LS)
-    # ZOOM-INSET: CHỈ cho CHÂN DUNG THẬT (1-4 mặt LỚN, mỗi mặt >=1.5% diện tích). Tranh
-    # CẢNH nhiều người tí hon -> YuNet bắt nhầm vào lá -> bỏ qua (không vẽ khung A/B/C/D
-    # làm rối bản số, không xuất file thừa). Đánh dấu + xuất bản chi tiết mặt khi đáng.
+    # ZOOM-INSET: dò mặt nay LỌC score>=0.85 (sạch false-positive) nên LUÔN xuất bản chi tiết
+    # cho 1..6 mặt (mặt montage NHỎ ~0.8% diện tích MỚI cần inset nhất). Lấy top-6 theo diện
+    # tích, phóng to + đánh số đầy đủ + đánh dấu khung A..F trên bản số.
     detail_name = ''
-    big_faces = [b for b in face_boxes if b[2] * b[3] >= 0.015 * H * W]
-    if big_faces and len(big_faces) <= 4:
-        sheet = _face_detail_sheet(canvas, lbl, numbers, n, big_faces, mean_h, max_h, floor_h,
+    if face_boxes:
+        cand = sorted(face_boxes, key=lambda b: b[2] * b[3], reverse=True)[:6]
+        sheet = _face_detail_sheet(canvas, lbl, numbers, n, cand, mean_h, max_h, floor_h,
                                    mark_scale=LS)
         if sheet is not None:
             detail_name = f'{name}_mat.png'
