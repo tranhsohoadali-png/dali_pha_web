@@ -190,7 +190,7 @@ def _feature_protect_mask(H, W, face_data):
 
 def _merge_labels(lbl, n, min_h, max_pass=4, face_boxes=None, face_min_h=None,
                   centers=None, flat=False, keep_delta_e=14.0, pad=1.08, floor_h=None,
-                  protect_mask=None):
+                  protect_mask=None, protect_min_area=0.0):
     """GỘP ô quá nhỏ. KHÁC bản cũ ở 2 điểm để GIỮ CHI TIẾT:
     (1) Gộp vào hàng xóm GIỐNG MÀU NHẤT (LAB) thay vì DIỆN TÍCH lớn nhất -> ô bị nuốt ít
         lệch màu (trước gộp vào nền -> mắt/điểm nhấn bị nhuộm mất).
@@ -220,10 +220,13 @@ def _merge_labels(lbl, n, min_h, max_pass=4, face_boxes=None, face_min_h=None,
             for k in range(1, nc):
                 x, y = int(stats[k, cv2.CC_STAT_LEFT]), int(stats[k, cv2.CC_STAT_TOP])
                 w, h = int(stats[k, cv2.CC_STAT_WIDTH]), int(stats[k, cv2.CC_STAT_HEIGHT])
+                area = int(stats[k, cv2.CC_STAT_AREA])
                 in_face = bool(boxes and _in_boxes(x + w // 2, y + h // 2, boxes))
-                if protect_mask is not None and \
+                # B3: GIỮ ô NGŨ QUAN (mắt/mũi/miệng) — NHƯNG chỉ ô ĐỦ TO (>=protect_min_area
+                # ~1.3mm²); ô NOISE 1-3px trong vòng landmark vẫn cho gộp -> mặt SẠCH, hết dăm.
+                if protect_mask is not None and area >= protect_min_area and \
                         protect_mask[min(y + h // 2, H - 1), min(x + w // 2, W - 1)]:
-                    continue                              # B3: ô NGŨ QUAN (mắt/mũi/miệng) -> GIỮ nét
+                    continue
                 rn = r_need_face if in_face else r_need
                 sub = (comp[y:y + h, x:x + w] == k).astype(np.uint8)
                 subp = cv2.copyMakeBorder(sub, 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
@@ -247,8 +250,10 @@ def _merge_labels(lbl, n, min_h, max_pass=4, face_boxes=None, face_min_h=None,
                     j = int(dd.argmin()); nbc = int(unb[j]); de = float(dd[j]) ** 0.5
                 else:
                     nbc = int(unb[int(np.argmax(area_all[unb]))]); de = None
-                # GIỮ ô (còn đủ chỗ số nhỏ nhất) nếu là chi tiết đáng giữ
-                if rad >= r_floor and (flat or in_face or (de is not None and de > keep_delta_e)):
+                # GIỮ ô (còn đủ chỗ số nhỏ nhất) nếu là chi tiết đáng giữ. Trong VÙNG MẶT chỉ
+                # giữ ô ĐỦ TO (>=protect_min_area) -> bớt dăm li ti ở mặt; nền giữ theo ΔE như cũ.
+                if rad >= r_floor and (flat or (in_face and area >= protect_min_area)
+                                       or (de is not None and de > keep_delta_e)):
                     continue
                 yy, xx = np.where(sub2)
                 lbl[y0 + yy, x0 + xx] = nbc
@@ -557,10 +562,13 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     # nhấn). Dùng CHUNG cho _merge_labels (giữ tới sàn) lẫn _place_numbers (đặt số tới sàn)
     # -> không tạo ô-giữ-mà-vô-số. bản phẳng giữ mọi vùng numberable.
     floor_h = max(float(MIN_TEXT_SIZE), float(keep_floor_mm) * px_per_mm)
-    # B3: CẤM gộp ô trong NGŨ QUAN (mắt/mũi/miệng) theo landmark -> mắt/môi giữ nét, mặt SẮC.
+    # B3: GIỮ ô NGŨ QUAN (mắt/mũi/miệng) theo landmark -> mặt SẮC; nhưng chỉ ô ĐỦ TO
+    # (>= ~1.3mm²) -> diệt DĂM noise 1-3px ở mặt (đo: 1657 ô <9px bị protect_mask giữ oan).
     protect_mask = _feature_protect_mask(H, W, face_data)
+    protect_min_area = max(9.0, 1.3 * px_per_mm * px_per_mm)   # ~1.3mm² @ khổ thật
     _merge_labels(lbl, n, min_h, face_boxes=face_boxes, face_min_h=face_min_h,
-                  centers=centers, flat=flat_mode, floor_h=floor_h, protect_mask=protect_mask)
+                  centers=centers, flat=flat_mode, floor_h=floor_h, protect_mask=protect_mask,
+                  protect_min_area=protect_min_area)
     # đánh số LIÊN TỤC 1..K theo các màu CÒN dùng (sau gộp) -> bảng gọn, không nhảy số
     used = list(int(c) for c in np.unique(lbl))
     numbers = ['' for _ in range(n)]
