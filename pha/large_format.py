@@ -23,13 +23,15 @@ from django.views.decorators.csrf import csrf_exempt
 
 from pha.color_index_lib import (
     get_number_size, MIN_TEXT_SIZE, MEAN_TEXT_SIZE, PADDING_CIRCLE,
-    _snap_to_design_palette, _quantize_rarity,
+    _snap_to_design_palette, _quantize_rarity, _chaikin,
 )
 
 # SỐ tính theo MM @ KHỔ THẬT (không nhân min_h) -> ở 1.2×2m số KHÔNG phình to (lỗi cũ:
 # max_h=min_h×4 ~ 20mm). lib get_number_size tự co số theo ô nên đây là TRẦN TRÊN.
-MEAN_NUM_MM = 7.0          # cỡ số chuẩn (đa số ô)
-MAX_NUM_MM = 10.0          # số to nhất (ô nền lớn) — hết số 2cm
+# Cỡ vừa như bản Illustration TK325 (~3.4-4mm) -> số nhỏ gọn, đỡ choán ô.
+MEAN_NUM_MM = 5.0          # cỡ số chuẩn (đa số ô)
+MAX_NUM_MM = 7.0           # số to nhất (ô nền lớn)
+SMOOTH_CONTOUR_CAP = 25000  # > số này -> vẽ biên thô (an toàn thời gian); ô thường ~6-9k
 from pha import dali_match
 from pha.views import staff_required, _img_executor, _prune_image_results
 
@@ -257,11 +259,38 @@ def _merge_labels(lbl, n, min_h, max_pass=4, face_boxes=None, face_min_h=None,
 
 
 def _draw_outlines(lbl, canvas):
-    """Tô đen (nét) nơi NHÃN ĐỔI (biên giữa các ô) lên canvas grayscale (đã trắng)."""
+    """Tô đen (nét) nơi NHÃN ĐỔI (biên giữa các ô) lên canvas grayscale (đã trắng).
+    THÔ: biên = bậc thang pixel (răng cưa). Dùng làm FALLBACK khi quá nhiều contour."""
     d = np.zeros(lbl.shape, bool)
     d[1:, :] |= lbl[1:, :] != lbl[:-1, :]
     d[:, 1:] |= lbl[:, 1:] != lbl[:, :-1]
     canvas[d] = 0
+
+
+def _draw_smooth_outlines_hi(lbl, canvas, out_scale=1.0, eps=0.8, iters=2,
+                             cap=SMOOTH_CONTOUR_CAP):
+    """Vẽ biên MƯỢT vector-like (như Illustration TK325): per-màu findContours trên 'lbl'
+    (work-res) -> approxPolyDP(eps) bỏ điểm thừa -> _chaikin(iters) bo góc -> NHÂN toạ độ
+    điểm × out_scale -> polylines KÍN (LINE_AA) lên 'canvas' (hi-res). De-stair vì scale-up
+    ĐIỂM contour (KHÔNG NEAREST pixel) -> đường cong mềm. RETR_CCOMP giữ LỖ KÍN (số 0/6/8).
+    Trả False nếu tổng contour > cap (caller dùng _draw_outlines thô cho an toàn thời gian)."""
+    Hh, Ww = lbl.shape[:2]
+    allc = []
+    for ci in (int(c) for c in np.unique(lbl)):
+        mask = (lbl == ci).astype(np.uint8)
+        cnts, _ = cv2.findContours(mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+        allc.extend(cnts)
+        if len(allc) > cap:
+            return False
+    wh = (Ww, Hh)
+    for c in allc:
+        if len(c) < 6:
+            p = c.reshape(-1, 2).astype(np.float32) * out_scale
+        else:
+            cc = cv2.approxPolyDP(c, eps, True)
+            p = np.asarray(_chaikin(cc.reshape(-1, 2), iters, wh=wh), np.float32) * out_scale
+        cv2.polylines(canvas, [np.round(p).astype(np.int32)], True, 0, 1, cv2.LINE_AA)
+    return True
 
 
 def _puttext_thin_gray(canvas, number, org, scale, frac=0.8, ss=5):
@@ -364,9 +393,11 @@ def _face_detail_sheet(canvas, lbl, numbers, n, face_boxes, mean_h, max_h, floor
                     max(1.2, W / 1300.0), 0, lw + 1, cv2.LINE_AA)
         zf = max(1.0, target_w / float(max(1, w)))
         cw, ch = int(w * zf), int(h * zf)
-        crop = cv2.resize(lbl[y:y + h, x:x + w], (cw, ch), interpolation=cv2.INTER_NEAREST)
+        crop0 = lbl[y:y + h, x:x + w]                   # work-res (cho biên mượt scale ×zf)
+        crop = cv2.resize(crop0, (cw, ch), interpolation=cv2.INTER_NEAREST)  # cho đặt số
         sub = np.full((ch, cw), 255, np.uint8)
-        _draw_outlines(crop, sub)
+        if not _draw_smooth_outlines_hi(crop0, sub, out_scale=zf):
+            _draw_outlines(crop, sub)                   # fallback thô
         _place_numbers(crop, n, numbers, sub, mean_h, mean_h, max_h, floor_h=floor_h)
         title = np.full((68, cw), 255, np.uint8)
         cv2.putText(title, 'Vung ' + letters[i], (10, 50), _FONT, 1.6, 0, 3, cv2.LINE_AA)
@@ -536,15 +567,18 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     # NÉT MẢNH theo khổ to: xuất bản SỐ ở độ phân giải cao hơn (line_render_scale) -> nét
     # biên 1px thành mảnh hơn (theo mm). Vị trí số tính ở work-res (nhẹ), chỉ VẼ ở canvas to.
     LS = max(1.0, float(line_render_scale))
-    if LS > 1.01:
-        Hs, Ws = int(round(H * LS)), int(round(W * LS))
-        lbl_hi = cv2.resize(lbl, (Ws, Hs), interpolation=cv2.INTER_NEAREST)
-        canvas = np.full((Hs, Ws), 255, np.uint8)
-        _draw_outlines(lbl_hi, canvas)
-        del lbl_hi
-    else:
-        canvas = np.full((H, W), 255, np.uint8)
-        _draw_outlines(lbl, canvas)
+    Hs, Ws = (int(round(H * LS)), int(round(W * LS))) if LS > 1.01 else (H, W)
+    canvas = np.full((Hs, Ws), 255, np.uint8)
+    # BIÊN MƯỢT (vector-like như TK325): vẽ contour mượt scale-up; nếu quá nhiều contour ->
+    # fallback biên thô (NEAREST upscale) cho an toàn thời gian.
+    if not _draw_smooth_outlines_hi(lbl, canvas, out_scale=LS):
+        canvas[:] = 255
+        if LS > 1.01:
+            lbl_hi = cv2.resize(lbl, (Ws, Hs), interpolation=cv2.INTER_NEAREST)
+            _draw_outlines(lbl_hi, canvas)
+            del lbl_hi
+        else:
+            _draw_outlines(lbl, canvas)
     placed = _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h,
                             face_boxes=face_boxes, face_min_h=face_min_h, floor_h=floor_h,
                             out_scale=LS)
