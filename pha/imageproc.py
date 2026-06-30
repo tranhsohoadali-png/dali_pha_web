@@ -156,7 +156,7 @@ def _process_large_into(obj, name, long_cm, color_limit):
         st = process_large(os.path.join(settings.MEDIA_ROOT, name), out_dir,
                            long_cm=(long_cm or 200), dpi=120,
                            num_colors=(color_limit or 120), min_num_mm=3.0, name=base,
-                           max_work_mpx=60.0, keep_floor_mm=1.8, line_render_scale=1.45)
+                           max_work_mpx=60.0, keep_floor_mm=1.6, line_render_scale=1.45)
         obj.name_output = f'large/{base}_so.png'
         obj.design_name = f'large/{base}_thietke.png'
         obj.colors = [[x['no'], (x.get('hex') or '').upper(), x.get('dali', ''), 0]
