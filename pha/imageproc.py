@@ -151,12 +151,12 @@ def _process_large_into(obj, name, long_cm, color_limit):
         base = os.path.splitext(name)[0]
         # dpi 120 (đủ nét cho in khổ lớn) + trần điểm ảnh làm việc trong process_large
         # -> nhẹ RAM + xong dưới ngưỡng poll, KHÔNG giảm số ô (ô đếm theo mm @ khổ thật).
-        # CHI TIẾT TỐI ĐA cho khổ to: 60Mpx (biên mịn hơn), sàn giữ-ô 2mm (giữ ô nhỏ hơn),
-        # số nhỏ nhất 4mm, 120 màu nền (+boost mặt ~20). Nặng RAM/lâu hơn -> đo VPS.
+        # CHI TIẾT TỐI ĐA cho khổ to: 60Mpx (biên mịn hơn), 120 màu (+boost mặt ~20). sàn
+        # giữ-ô 1.28mm (in thử thật: ô nhỏ hơn 20% vẫn tô được). Nặng RAM/lâu hơn -> đo VPS.
         st = process_large(os.path.join(settings.MEDIA_ROOT, name), out_dir,
                            long_cm=(long_cm or 200), dpi=120,
                            num_colors=(color_limit or 120), min_num_mm=3.0, name=base,
-                           max_work_mpx=60.0, keep_floor_mm=1.6, line_render_scale=1.45)
+                           max_work_mpx=60.0, keep_floor_mm=1.28, line_render_scale=1.45)
         obj.name_output = f'large/{base}_so.png'
         obj.design_name = f'large/{base}_thietke.png'
         obj.colors = [[x['no'], (x.get('hex') or '').upper(), x.get('dali', ''), 0]
