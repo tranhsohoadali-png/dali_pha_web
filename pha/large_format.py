@@ -169,8 +169,26 @@ def _in_boxes(cx, cy, boxes):
     return False
 
 
+def _feature_protect_mask(H, W, face_data):
+    """Mask BẢO VỆ NGŨ QUAN (B3): vẽ vòng quanh 5 điểm mốc YuNet (2 mắt, mũi, 2 mép miệng)
+    của mỗi mặt -> ô rơi vào đây KHÔNG bị gộp (mắt/môi giữ nét, mặt sắc). Trả None nếu không
+    có landmark (không tốn RAM). 1 mask uint8 full-res ~ 1 byte/px (vài chục MB, vẽ vài vòng)."""
+    m = None
+    for box, lms in (face_data or []):
+        if lms is None:
+            continue
+        x, y, w, h = box
+        r = max(3, int(min(w, h) * 0.12))              # bán kính bảo vệ quanh mỗi điểm mốc
+        if m is None:
+            m = np.zeros((H, W), np.uint8)
+        for px, py in np.asarray(lms, np.float32).reshape(-1, 2):
+            cv2.circle(m, (int(px), int(py)), r, 1, -1)
+    return m
+
+
 def _merge_labels(lbl, n, min_h, max_pass=4, face_boxes=None, face_min_h=None,
-                  centers=None, flat=False, keep_delta_e=14.0, pad=1.08, floor_h=None):
+                  centers=None, flat=False, keep_delta_e=14.0, pad=1.08, floor_h=None,
+                  protect_mask=None):
     """GỘP ô quá nhỏ. KHÁC bản cũ ở 2 điểm để GIỮ CHI TIẾT:
     (1) Gộp vào hàng xóm GIỐNG MÀU NHẤT (LAB) thay vì DIỆN TÍCH lớn nhất -> ô bị nuốt ít
         lệch màu (trước gộp vào nền -> mắt/điểm nhấn bị nhuộm mất).
@@ -201,6 +219,9 @@ def _merge_labels(lbl, n, min_h, max_pass=4, face_boxes=None, face_min_h=None,
                 x, y = int(stats[k, cv2.CC_STAT_LEFT]), int(stats[k, cv2.CC_STAT_TOP])
                 w, h = int(stats[k, cv2.CC_STAT_WIDTH]), int(stats[k, cv2.CC_STAT_HEIGHT])
                 in_face = bool(boxes and _in_boxes(x + w // 2, y + h // 2, boxes))
+                if protect_mask is not None and \
+                        protect_mask[min(y + h // 2, H - 1), min(x + w // 2, W - 1)]:
+                    continue                              # B3: ô NGŨ QUAN (mắt/mũi/miệng) -> GIỮ nét
                 rn = r_need_face if in_face else r_need
                 sub = (comp[y:y + h, x:x + w] == k).astype(np.uint8)
                 subp = cv2.copyMakeBorder(sub, 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
@@ -471,6 +492,7 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     #  - PHẲNG -> GIỮ NGUYÊN bảng màu thiết kế (bỏ k-means/"tự lọc màu"), chỉ chặn trần số
     #    màu bằng gộp màu gần giống; KHÔNG boost mặt (giữ đúng màu file, không thêm màu lạ).
     #  - ẢNH CHỤP/AI -> k-means + boost mặt như cũ.
+    face_data = []                                     # (box, lms) cho B3 bảo vệ ngũ quan
     if flat_mode:
         centers = _flat_palette(img, num_colors)
         n_base = len(centers)
@@ -478,7 +500,8 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     else:
         # num_colors = TỔNG số hũ sơn MUỐN có. Nếu boost mặt -> DÀNH face_extra slot cho mặt,
         # phần nền = num_colors - face_extra -> tổng ~ num_colors (không vượt "120 màu").
-        face_boxes = _detect_face_boxes(img) if boost_faces else []
+        face_data = _detect_face_boxes(img, with_lms=True) if boost_faces else []
+        face_boxes = [b for (b, _l) in face_data]
         reserve = face_extra if face_boxes else 0
         base_k = max(2, int(num_colors) - reserve)
         centers = _rarity_palette(img, base_k)         # GIỮ vật thể hiếm (R1) thay k-means trơn
@@ -501,8 +524,10 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     # nhấn). Dùng CHUNG cho _merge_labels (giữ tới sàn) lẫn _place_numbers (đặt số tới sàn)
     # -> không tạo ô-giữ-mà-vô-số. bản phẳng giữ mọi vùng numberable.
     floor_h = max(float(MIN_TEXT_SIZE), float(keep_floor_mm) * px_per_mm)
+    # B3: CẤM gộp ô trong NGŨ QUAN (mắt/mũi/miệng) theo landmark -> mắt/môi giữ nét, mặt SẮC.
+    protect_mask = _feature_protect_mask(H, W, face_data)
     _merge_labels(lbl, n, min_h, face_boxes=face_boxes, face_min_h=face_min_h,
-                  centers=centers, flat=flat_mode, floor_h=floor_h)
+                  centers=centers, flat=flat_mode, floor_h=floor_h, protect_mask=protect_mask)
     # đánh số LIÊN TỤC 1..K theo các màu CÒN dùng (sau gộp) -> bảng gọn, không nhảy số
     used = list(int(c) for c in np.unique(lbl))
     numbers = ['' for _ in range(n)]
