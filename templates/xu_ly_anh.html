@@ -143,7 +143,7 @@
             <div class="col"><div class="small text-secondary mb-1">Ảnh gốc (đầu vào)</div><img id="imgOrigin" src="{{ file_url }}" class="result-img"></div>
             <div class="col" id="enhancedWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-stars text-warning"></i> Ảnh đã tăng cường (AI)</div><img id="imgEnhanced" src="#" class="result-img"></div>
             <div class="col" id="designWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-palette-fill text-success"></i> Ảnh thiết kế (bản màu) <span class="text-secondary">· sửa HEX bên phải để đổi màu</span></div><canvas id="imgDesign" class="result-img"></canvas></div>
-            <div class="col"><div class="small text-secondary mb-1">Bản đồ đánh số</div><img id="imgResult" src="#" class="result-img" hidden></div>
+            <div class="col"><div class="small text-secondary mb-1 d-flex justify-content-between"><span>Bản đồ đánh số</span><a id="btnZoom" href="#" class="text-success d-none" title="Phóng to 1:1 để kiểm tra số/biên trước khi in"><i class="bi bi-zoom-in"></i> Phóng to</a></div><img id="imgResult" src="#" class="result-img" hidden style="cursor:zoom-in"></div>
           </div>
           <div id="paramInfo" class="small text-secondary mb-3 d-none"></div>
           <div class="border-top pt-3">
@@ -188,6 +188,17 @@
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Trình XEM ZOOM bản số khổng lồ: kéo để di, lăn chuột phóng to, kiểm tra số/biên 1:1 -->
+<div id="zoomModal" class="d-none" style="position:fixed;inset:0;z-index:2000;background:rgba(20,20,20,.92);">
+  <div style="position:absolute;top:10px;left:14px;right:14px;display:flex;justify-content:space-between;align-items:center;color:#fff;z-index:2;">
+    <span class="small"><i class="bi bi-zoom-in"></i> Kéo để di chuyển · Lăn chuột để phóng to/thu nhỏ · phím <b>Esc</b> để đóng</span>
+    <span><button id="zoomReset" class="btn btn-sm btn-outline-light me-2">Vừa màn hình</button><button id="zoomClose" class="btn btn-sm btn-light">✕ Đóng</button></span>
+  </div>
+  <div id="zoomStage" style="position:absolute;inset:0;overflow:hidden;cursor:grab;">
+    <img id="zoomImg" src="#" style="position:absolute;left:0;top:0;transform-origin:0 0;user-select:none;-webkit-user-drag:none;max-width:none;">
   </div>
 </div>
 
@@ -353,6 +364,7 @@
       spin(false); document.getElementById('bigprog').classList.add('d-none');
       if(res.status==='error'){ document.getElementById('err').textContent=res.error||'Lỗi xử lý ảnh'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); return; }
       document.getElementById('imgResult').src=res.img_output; document.getElementById('imgResult').hidden=false;
+      document.getElementById('btnZoom').classList.remove('d-none');
       // Ảnh gốc luôn giữ; ảnh AI (nếu có) hiện ở ô riêng để đối chiếu.
       if(res.original) document.getElementById('imgOrigin').src=res.original;
       var ew=document.getElementById('enhancedWrap');
@@ -417,10 +429,37 @@
       [res.origin_result,res.file_paint,res.file_a3].forEach(dl);
     });
   };
-  ['imgResult','imgDesign','imgEnhanced','imgOrigin'].forEach(function(id){
+  ['imgDesign','imgEnhanced','imgOrigin'].forEach(function(id){
     var el=document.getElementById(id);
     if(el) el.onclick=function(){ if(this.src&&this.src!=='#')window.open(this.src); };
   });
+
+  // ====== TRÌNH XEM ZOOM bản số (kéo + lăn chuột) — kiểm tra số/biên 1:1 trước khi in ======
+  (function(){
+    var modal=document.getElementById('zoomModal'), stage=document.getElementById('zoomStage'),
+        zi=document.getElementById('zoomImg'), zt=0, zl=0, zs=1, drag=false, px=0, py=0;
+    function apply(){ zi.style.transform='translate('+zl+'px,'+zt+'px) scale('+zs+')'; }
+    function fit(){
+      var iw=zi.naturalWidth||1, ih=zi.naturalHeight||1, sw=stage.clientWidth, sh=stage.clientHeight;
+      zs=Math.min(sw/iw, sh/ih); zl=(sw-iw*zs)/2; zt=(sh-ih*zs)/2; apply();
+    }
+    function openZoom(src){ if(!src||src==='#')return; modal.classList.remove('d-none');
+      if(zi.src!==src){ zi.src=src; zi.onload=fit; } else fit(); }
+    function close(){ modal.classList.add('d-none'); }
+    document.getElementById('imgResult').onclick=function(){ openZoom(this.src); };
+    document.getElementById('btnZoom').onclick=function(e){ e.preventDefault(); openZoom(document.getElementById('imgResult').src); };
+    document.getElementById('zoomClose').onclick=close;
+    document.getElementById('zoomReset').onclick=fit;
+    document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&!modal.classList.contains('d-none'))close(); });
+    stage.addEventListener('wheel',function(e){ e.preventDefault();
+      var r=stage.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top,
+          f=e.deltaY<0?1.2:1/1.2, ns=Math.max(0.05,Math.min(40,zs*f));
+      zl=mx-(mx-zl)*(ns/zs); zt=my-(my-zt)*(ns/zs); zs=ns; apply();
+    },{passive:false});
+    stage.addEventListener('mousedown',function(e){ drag=true; px=e.clientX; py=e.clientY; stage.style.cursor='grabbing'; });
+    window.addEventListener('mousemove',function(e){ if(!drag)return; zl+=e.clientX-px; zt+=e.clientY-py; px=e.clientX; py=e.clientY; apply(); });
+    window.addEventListener('mouseup',function(){ drag=false; stage.style.cursor='grab'; });
+  })();
 
   // Chống bộ gõ tiếng Việt (X->ngã...) cho ô mã DALI
   function normCode(s){
