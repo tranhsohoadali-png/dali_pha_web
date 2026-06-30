@@ -131,6 +131,14 @@
         </div>
         <div class="card-body">
           <div id="err" class="alert alert-danger d-none"></div>
+          <div id="bigprog" class="mb-3 d-none">
+            <div class="d-flex justify-content-between small text-success mb-1">
+              <span><span class="spinner-border spinner-border-sm me-1"></span> Đang xử lý tranh khổ lớn…</span>
+              <span id="bigprogTxt"></span>
+            </div>
+            <div class="progress" style="height:8px"><div id="bigprogBar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width:0%"></div></div>
+            <div class="small text-secondary mt-1">Khổ lớn siêu chi tiết thường mất ~10–15 phút. Cứ để yên — kết quả sẽ tự hiện, không cần tải lại.</div>
+          </div>
           <div class="row g-2 mb-2">
             <div class="col"><div class="small text-secondary mb-1">Ảnh gốc (đầu vào)</div><img id="imgOrigin" src="{{ file_url }}" class="result-img"></div>
             <div class="col" id="enhancedWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-stars text-warning"></i> Ảnh đã tăng cường (AI)</div><img id="imgEnhanced" src="#" class="result-img"></div>
@@ -195,6 +203,17 @@
     var r=new FileReader(); r.onload=e=>{var p=document.getElementById('preview');p.src=e.target.result;p.hidden=false;}; r.readAsDataURL(f); }
 
   function spin(on){ var s=document.getElementById('spin'); s.classList.toggle('d-none',!on); s.classList.toggle('d-flex',on); }
+  // Thanh tiến độ tranh KHỔ LỚN (heartbeat backend gửi {pct,sec}). Không có progress (khổ
+  // thường/AI nhanh) -> ẩn thanh, chỉ dùng spinner như cũ.
+  function showBigProg(pg){
+    var box=document.getElementById('bigprog');
+    if(!pg){ box.classList.add('d-none'); return; }
+    box.classList.remove('d-none');
+    var pct=Math.max(2,Math.min(99,pg.pct||0)), sec=pg.sec||0;
+    document.getElementById('bigprogBar').style.width=pct+'%';
+    var mm=Math.floor(sec/60), ss=sec%60;
+    document.getElementById('bigprogTxt').textContent=pct+'% · '+mm+'p'+(ss<10?'0':'')+ss+'s';
+  }
 
   // ====== Preset theo loại tranh: đóng gói cấu hình + prompt + TỰ LƯU ======
   var PRESETS={{ presets_json|safe }}, DEFAULT_PRESET="{{ default_preset }}";
@@ -330,8 +349,8 @@
     if(!url.startsWith('/media/')&&!url.startsWith('data:')) document.getElementById('imgOrigin').src='/media/'+url;
     document.getElementById('err').className='alert alert-danger d-none'; spin(true);
     $.post('/anh-result',{file_url:url},function(res){
-      if(res.status==='processing'){ if(onWait)onWait(); return; }
-      spin(false);
+      if(res.status==='processing'){ showBigProg(res.progress); if(onWait)onWait(); return; }
+      spin(false); document.getElementById('bigprog').classList.add('d-none');
       if(res.status==='error'){ document.getElementById('err').textContent=res.error||'Lỗi xử lý ảnh'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); return; }
       document.getElementById('imgResult').src=res.img_output; document.getElementById('imgResult').hidden=false;
       // Ảnh gốc luôn giữ; ảnh AI (nếu có) hiện ở ô riêng để đối chiếu.
@@ -363,14 +382,13 @@
     }).fail(function(){ spin(false); document.getElementById('err').textContent='Không kết nối được máy chủ.'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); });
   }
 
-  // tự poll sau khi upload. Cửa sổ chờ 16 phút (> mốc "kẹt" 15' phía server) -> luôn
-  // hiện ĐƯỢC kết quả HOẶC báo lỗi, không còn "im lặng" giữa chừng. Tranh KHỔ TO siêu
-  // chi tiết (120 màu) có thể mất vài phút -> nhắc người dùng đừng tưởng treo.
+  // tự poll sau khi upload. Cửa sổ chờ 27 phút (> mốc "kẹt" 25' phía server) -> luôn hiện
+  // ĐƯỢC kết quả HOẶC báo lỗi. Tranh KHỔ TO siêu chi tiết có THANH TIẾN ĐỘ (heartbeat) nên
+  // không còn "im lặng".
   var fu=decodeURIComponent("{{ file_url|default:'' }}");
   if(fu){ var waited=0,poll=setInterval(function(){ getResult(fu,function(){clearInterval(poll)},function(){
       waited+=2000;
-      if(waited===60000){ var s=document.getElementById('spin'); if(s){ var t=s.childNodes[s.childNodes.length-1]; if(t) t.textContent=' Đang xử lý… (tranh khổ lớn có thể mất vài phút)'; } }
-      if(waited>960000){clearInterval(poll);spin(false);
+      if(waited>1620000){clearInterval(poll);spin(false);document.getElementById('bigprog').classList.add('d-none');
         var e=document.getElementById('err'); e.className='alert alert-warning';
         e.textContent='Quá lâu chưa xong — có thể server đang nặng. Hãy tải lại trang sau ít phút để xem kết quả (ảnh vẫn được xử lý nền), hoặc giảm Số màu / Khổ.';
       } }); },2000); }

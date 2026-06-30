@@ -3072,7 +3072,8 @@ def anh_result(request):
         return JsonResponse({'status': 'processing'})
     if res.status == ImageResult.STATUS_PROCESSING:
         if not mark_if_stuck(res):          # kẹt quá lâu -> rơi xuống nhánh lỗi
-            return JsonResponse({'status': 'processing'})
+            return JsonResponse({'status': 'processing',
+                                 'progress': (res.params or {}).get('progress')})
     if res.status == ImageResult.STATUS_ERROR:
         return JsonResponse({'status': 'error', 'error': res.error_message})
     return JsonResponse({'status': 'done', 'img_output': '/media/' + res.name_output,

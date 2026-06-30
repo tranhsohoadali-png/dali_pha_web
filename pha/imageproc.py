@@ -71,7 +71,7 @@ AI_BUDGET_S = 300
 # service restart giữa lúc chạy...) hoặc xếp hàng sau quá nhiều job -> coi như
 # hỏng. Khi poll thấy quá ngưỡng thì đánh dấu LỖI RÕ RÀNG để giao diện không chờ
 # trống vô hạn. (Nếu job thật ra vẫn chạy xong sau đó, kết quả sẽ tự đè lại.)
-STUCK_MINUTES = 15
+STUCK_MINUTES = 25            # khổ lớn VPS có thể 12-20'; có thanh tiến độ nên nới rộng
 
 
 def mark_if_stuck(obj):
@@ -145,6 +145,29 @@ def _process_large_into(obj, name, long_cm, color_limit):
     """Nhánh TRANH KHỔ TO SIÊU CHI TIẾT: dùng engine large_format (xử lý độ phân giải
     cao trên BẢN ĐỒ NHÃN -> nhẹ RAM, không seam; ảnh khổng lồ dùng cv2, không PIL bomb)
     -> ghi name_output/design/colors vào record cho trang poll như luồng thường."""
+    import threading
+    import time as _time
+    # HEARTBEAT: 1 luồng nền cập nhật %tiến độ + số GIÂY đã chạy vào record mỗi 3s trong lúc
+    # process_large chạy -> trang hiện THANH TIẾN ĐỘ chạy, KHÔNG còn "im lặng" (job khổ lớn
+    # 10-15'). % ước theo thời gian trôi / EST (~12'); chạm 96% thì giữ, vẫn hiện giây tăng.
+    _stop = threading.Event()
+    _t0 = _time.time()
+    _EST = 700.0
+
+    def _beat():
+        from pha.models import ImageResult as _IR
+        while not _stop.wait(3.0):
+            el = _time.time() - _t0
+            try:
+                rec = _IR.objects.get(id=obj.id)
+                pp = dict(rec.params or {})
+                pp['progress'] = {'pct': min(96, int(100 * el / _EST)), 'sec': int(el)}
+                _IR.objects.filter(id=obj.id).update(params=pp)
+            except Exception:
+                pass
+
+    hb = threading.Thread(target=_beat, daemon=True)
+    hb.start()
     try:
         from pha.large_format import process_large
         out_dir = os.path.join(settings.MEDIA_ROOT, 'large')
@@ -157,11 +180,15 @@ def _process_large_into(obj, name, long_cm, color_limit):
                            long_cm=(long_cm or 200), dpi=120,
                            num_colors=(color_limit or 120), min_num_mm=3.0, name=base,
                            max_work_mpx=60.0, keep_floor_mm=1.28, line_render_scale=1.45)
+        _stop.set()
+        hb.join(timeout=2)
+        obj.refresh_from_db(fields=['params'])           # lấy params mới nhất heartbeat ghi
         obj.name_output = f'large/{base}_so.png'
         obj.design_name = f'large/{base}_thietke.png'
         obj.colors = [[x['no'], (x.get('hex') or '').upper(), x.get('dali', ''), 0]
                       for x in st.get('legend', [])]
         p = dict(obj.params or {})
+        p.pop('progress', None)                          # job XONG -> bỏ tiến độ
         p.update({'large': True, 'px': st['px'], 'mau_dung': st['mau_dung'],
                   'o_co_so': st['o_co_so'], 'giay': st['giay'],
                   'collapse_pct': st.get('collapse_pct', 0),
@@ -185,6 +212,12 @@ def _process_large_into(obj, name, long_cm, color_limit):
             obj.error_message = ''
         obj.save()
     except Exception as e:                              # noqa: BLE001
+        _stop.set()                                     # dừng heartbeat khi lỗi
+        try:
+            obj.refresh_from_db(fields=['params'])
+            p = dict(obj.params or {}); p.pop('progress', None); obj.params = p
+        except Exception:
+            pass
         obj.status = ImageResult.STATUS_ERROR
         obj.error_message = 'Khổ lớn lỗi: ' + str(e)[:200]
         obj.save()
