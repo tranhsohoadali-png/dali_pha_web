@@ -389,14 +389,10 @@ def _face_detail_sheet(canvas, lbl, numbers, n, face_boxes, mean_h, max_h, floor
     H, W = canvas.shape[:2]
     boxes = sorted(face_boxes, key=lambda b: b[2] * b[3], reverse=True)[:max_insets]
     letters = 'ABCDEFGH'
-    lw = max(2, W // 1500)
-    ms = float(mark_scale)
     panels = []
+    # KHÔNG vẽ khung A/B/C/D lên BẢN SỐ CHÍNH nữa (giữ bản số sạch); chỉ xuất bản chi tiết
+    # mặt riêng (file _mat.png) làm tham chiếu. mark_scale giữ cho tương thích, không dùng.
     for i, (x, y, w, h) in enumerate(boxes):
-        mx, my, mw, mh = int(x * ms), int(y * ms), int(w * ms), int(h * ms)
-        cv2.rectangle(canvas, (mx, my), (mx + mw, my + mh), 0, lw)
-        cv2.putText(canvas, letters[i], (mx + 4, my + max(24, mh // 8)), _FONT,
-                    max(1.2, W / 1300.0), 0, lw + 1, cv2.LINE_AA)
         zf = max(1.0, target_w / float(max(1, w)))
         cw, ch = int(w * zf), int(h * zf)
         crop0 = lbl[y:y + h, x:x + w]                   # work-res (cho biên mượt scale ×zf)
