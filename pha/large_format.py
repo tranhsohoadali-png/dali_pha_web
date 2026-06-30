@@ -269,27 +269,33 @@ def _draw_outlines(lbl, canvas):
 
 def _draw_smooth_outlines_hi(lbl, canvas, out_scale=1.0, eps=0.8, iters=2,
                              cap=SMOOTH_CONTOUR_CAP):
-    """Vẽ biên MƯỢT vector-like (như Illustration TK325): per-màu findContours trên 'lbl'
-    (work-res) -> approxPolyDP(eps) bỏ điểm thừa -> _chaikin(iters) bo góc -> NHÂN toạ độ
-    điểm × out_scale -> polylines KÍN (LINE_AA) lên 'canvas' (hi-res). De-stair vì scale-up
-    ĐIỂM contour (KHÔNG NEAREST pixel) -> đường cong mềm. RETR_CCOMP giữ LỖ KÍN (số 0/6/8).
-    Trả False nếu tổng contour > cap (caller dùng _draw_outlines thô cho an toàn thời gian)."""
+    """Vẽ biên MƯỢT 1-NÉT (như Illustration TK325). Cách: DỰNG LẠI bản-đồ-nhãn MƯỢT ở cỡ
+    canvas rồi _draw_outlines (label-diff 1px) -> mỗi biên CHỈ 1 nét (KHÔNG double-line như
+    vẽ polyline per-màu — vẽ 2 lần cho 2 vùng kề). Bản-đồ-nhãn mượt: per-màu findContours
+    (RETR_EXTERNAL) -> approxPolyDP(eps) -> _chaikin(iters) -> NHÂN điểm × out_scale ->
+    fillPoly VÙNG TO trước, nhỏ ĐÈ sau (lỗ/counter = vùng trong đè lên -> giữ). De-stair vì
+    fillPoly ở hi-res từ điểm contour đã scale (không NEAREST pixel). Trả False nếu >cap."""
     Hh, Ww = lbl.shape[:2]
-    allc = []
+    Hs, Ws = canvas.shape[:2]
+    wh = (Ww, Hh)
+    items = []                                         # (area, ci, contour)
     for ci in (int(c) for c in np.unique(lbl)):
         mask = (lbl == ci).astype(np.uint8)
-        cnts, _ = cv2.findContours(mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
-        allc.extend(cnts)
-        if len(allc) > cap:
+        cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        for c in cnts:
+            items.append((float(cv2.contourArea(c)), ci, c))
+        if len(items) > cap:
             return False
-    wh = (Ww, Hh)
-    for c in allc:
+    items.sort(key=lambda t: -t[0])                    # VÙNG TO trước -> nhỏ đè lên sau
+    lblsm = np.zeros((Hs, Ws), np.uint16)              # nhãn = ci+1 (0 = nền chưa tô)
+    for _a, ci, c in items:
         if len(c) < 6:
-            p = c.reshape(-1, 2).astype(np.float32) * out_scale
+            pts = c.reshape(-1, 2).astype(np.float32) * out_scale
         else:
             cc = cv2.approxPolyDP(c, eps, True)
-            p = np.asarray(_chaikin(cc.reshape(-1, 2), iters, wh=wh), np.float32) * out_scale
-        cv2.polylines(canvas, [np.round(p).astype(np.int32)], True, 0, 1, cv2.LINE_AA)
+            pts = np.asarray(_chaikin(cc.reshape(-1, 2), iters, wh=wh), np.float32) * out_scale
+        cv2.fillPoly(lblsm, [np.round(pts).astype(np.int32).reshape(-1, 1, 2)], int(ci) + 1)
+    _draw_outlines(lblsm, canvas)                      # label-diff -> 1 NÉT mỗi biên
     return True
 
 
