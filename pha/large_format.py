@@ -197,11 +197,21 @@ def _merge_labels(lbl, n, min_h, max_pass=4, face_boxes=None, face_min_h=None,
     (2) GIỮ ô (tới sàn floor_h = số nhỏ nhất còn đặt được) khi đáng giữ: bản PHẲNG (mọi vùng
         là chủ ý) / trong VÙNG MẶT / TƯƠNG PHẢN CAO với hàng xóm (ΔE>keep_delta_e: mắt, đốm
         sáng). Ô < sàn (vô-tô-được) vẫn gộp. Vẫn GIỮ lỗ kín counter. Sửa lbl TẠI CHỖ."""
-    worst = '9' * max(1, len(str(int(max(2, n)))))
     fl = float(MIN_TEXT_SIZE) if floor_h is None else max(float(MIN_TEXT_SIZE), float(floor_h))
-    r_need = _r_for(worst, float(min_h)) * pad
-    r_need_face = (_r_for(worst, float(face_min_h)) * pad) if face_min_h else r_need
-    r_floor = _r_for(worst, fl)
+    # NGƯỠNG GỘP THEO SỐ-CHỮ-SỐ THỰC của từng màu (thay worst='999' cứng áp cho MỌI ô — ở 120
+    # màu khiến ô nhỏ bị gộp oan dù số thật chỉ 1-2 chữ). Tiền-gán digit theo thứ tự đánh số
+    # 1..K (np.unique tăng dần) TRƯỚC gộp; merge chỉ XÓA màu nên digit thật cuối <= pre_digits
+    # -> r_floor(pre) >= r_floor(final) -> ô GIỮ luôn nhét được số (KHÔNG tạo ô-giữ-mà-vô-số).
+    # Ô mang số ngắn cần ít chỗ hơn -> giữ được NHIỀU ô nhỏ hơn = nhiều mảng đánh số hơn.
+    used0 = [int(c) for c in np.unique(lbl)]
+    pre_digits = [1] * n
+    for _i, _ci in enumerate(used0):
+        pre_digits[_ci] = len(str(_i + 1))
+    maxd = max(1, len(str(int(max(2, n)))))
+    rneed_by_d = {d: _r_for('9' * d, float(min_h)) * pad for d in range(1, maxd + 1)}
+    rneedf_by_d = {d: (_r_for('9' * d, float(face_min_h)) * pad if face_min_h else rneed_by_d[d])
+                   for d in range(1, maxd + 1)}
+    rfloor_by_d = {d: _r_for('9' * d, fl) for d in range(1, maxd + 1)}
     boxes = face_boxes or []
     clab = None
     if centers is not None and len(centers) >= n:
@@ -216,21 +226,26 @@ def _merge_labels(lbl, n, min_h, max_pass=4, face_boxes=None, face_min_h=None,
             mask = (lbl == ci).astype(np.uint8)
             if not mask.any():
                 continue
+            # ngưỡng GỘP/GIỮ theo số-chữ-số THỰC của màu ci (thay worst='999' cứng)
+            _d = pre_digits[ci]
+            rn_body = rneed_by_d[_d]; rn_face_c = rneedf_by_d[_d]; r_floor = rfloor_by_d[_d]
             nc, comp, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
             for k in range(1, nc):
                 x, y = int(stats[k, cv2.CC_STAT_LEFT]), int(stats[k, cv2.CC_STAT_TOP])
                 w, h = int(stats[k, cv2.CC_STAT_WIDTH]), int(stats[k, cv2.CC_STAT_HEIGHT])
                 area = int(stats[k, cv2.CC_STAT_AREA])
                 in_face = bool(boxes and _in_boxes(x + w // 2, y + h // 2, boxes))
-                # B3: GIỮ ô NGŨ QUAN (mắt/mũi/miệng) — NHƯNG chỉ ô ĐỦ TO (>=protect_min_area
-                # ~1.3mm²); ô NOISE 1-3px trong vòng landmark vẫn cho gộp -> mặt SẠCH, hết dăm.
-                if protect_mask is not None and area >= protect_min_area and \
-                        protect_mask[min(y + h // 2, H - 1), min(x + w // 2, W - 1)]:
-                    continue
-                rn = r_need_face if in_face else r_need
+                # bán kính nội tiếp — TÍNH TRƯỚC cổng protect_mask để cổng đó cũng kiểm được rad.
                 sub = (comp[y:y + h, x:x + w] == k).astype(np.uint8)
                 subp = cv2.copyMakeBorder(sub, 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
                 rad = float(cv2.distanceTransform(subp, cv2.DIST_L2, 3).max())
+                # B3: GIỮ ô NGŨ QUAN (mắt/mũi/miệng) — chỉ ô ĐỦ TO (>=protect_min_area ~1.3mm²)
+                # VÀ đủ chỗ nhét số (rad>=r_floor). Ô ngũ-quan quá nhỏ (TRƯỚC bị giữ mà TRỐNG
+                # SỐ) nay rơi xuống dưới -> gộp vào màu da/mắt gần nhất -> HẾT ô-giữ-mà-vô-số ở mặt.
+                if protect_mask is not None and area >= protect_min_area and \
+                        protect_mask[min(y + h // 2, H - 1), min(x + w // 2, W - 1)] and rad >= r_floor:
+                    continue
+                rn = rn_face_c if in_face else rn_body
                 if rad >= rn:
                     continue
                 x0, y0 = max(x - 1, 0), max(y - 1, 0)
