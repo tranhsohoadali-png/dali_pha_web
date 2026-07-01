@@ -300,6 +300,22 @@ def _draw_smooth_outlines_hi(lbl, canvas, out_scale=1.0, eps=0.8, iters=2,
             cc = cv2.approxPolyDP(c, eps, True)
             pts = np.asarray(_chaikin(cc.reshape(-1, 2), iters, wh=wh), np.float32) * out_scale
         cv2.fillPoly(lblsm, [np.round(pts).astype(np.int32).reshape(-1, 1, 2)], int(ci) + 1)
+    # LẤP DẢI HỞ (FIX 2-vạch-biên + khe-không-số): làm mượt per-màu khiến hai đa giác của
+    # BIÊN CHUNG (vùng A & vùng B kề nhau) lệch nhau ~1-3px -> để hở dải pixel nhãn 0 (nền
+    # chưa tô) kẹp giữa. _draw_outlines (label-diff) khi đó thấy ĐỔI NHÃN ở CẢ HAI mép dải
+    # (A->0 và 0->B) -> vẽ 2 NÉT đen, dải 0 ở giữa thành KHE TRẮNG = ô-ma KHÔNG được đánh số
+    # (vì số đặt trên 'lbl' gốc, không có dải này). Khắc phục: LAN nhãn lân cận vào mọi pixel
+    # 0 còn sót để bản-nhãn-mượt PHỦ KÍN -> mỗi biên chung chỉ còn 1 lần đổi nhãn = 1 NÉT, hết
+    # khe trắng, hết ô-ma. (Bất biến BẮT BUỘC khi vẽ nét tô-số: bản nhãn phải phủ kín 100%.)
+    if (lblsm == 0).any():
+        _k3 = np.ones((3, 3), np.uint8)
+        for _ in range(32):                            # khe ~1-3px -> hội tụ sau ~2-4 vòng
+            zero = (lblsm == 0)
+            if not zero.any():
+                break
+            grown = cv2.dilate(lblsm, _k3)
+            lblsm[zero] = grown[zero]
+            del grown
     _draw_outlines(lblsm, canvas)                      # label-diff -> 1 NÉT mỗi biên
     return True
 
