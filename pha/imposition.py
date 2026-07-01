@@ -547,13 +547,18 @@ def _source_orientation(image_path):
     return None                                          # ~vuông -> không cần xoay
 
 
-def plan(items, width_cm=152.0, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0):
+def plan(items, width_cm=152.0, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0, tidy_wh=None, tidy_cols=4):
     """items: [{id, image_path, w_cm, h_cm, qty, label}]. Trả dict kế hoạch xếp.
 
     overlap_cm > 0: CHỒNG MÍ — các tranh đè viền lên nhau `overlap_cm` để chia sẻ viền
     (tiết kiệm vải). Cách làm: xếp theo "diện tích chiếm chỗ" nhỏ hơn (cỡ thật − chồng mí)
     nên các ô không đè footprint (layout vẫn hợp lệ), nhưng VẼ ở cỡ thật → ảnh đè nhau
     đúng phần viền. Khi chồng mí thì khe hở bị bỏ qua và không xoay (giữ viền trùng khít).
+
+    tidy_wh=(w_cm,h_cm): XẾP GỌN Ô NHỎ (DỄ CẮT) — gom MỌI ô đúng cỡ đó thành 1 KHỐI lưới
+    `tidy_cols` cột, coi khối như 1 hình chữ nhật cho packer (mã khác tự nằm CẠNH/DƯỚI khối)
+    rồi bung ra khi vẽ. Đánh đổi ít vải lấy đường cắt THẲNG cho thợ (vd 20×20 → ô 28×28,
+    khối 4 cột). KHÔNG áp dụng khi chồng mí.
     """
     width_mm = round(width_cm * MM_PER_CM)
     overlap_mm = max(0.0, overlap_cm * MM_PER_CM)        # giữ độ chính xác dưới mm (vd 0.13cm = 1.3mm)
@@ -585,11 +590,37 @@ def plan(items, width_cm=152.0, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0):
                           'dw': dw, 'dh': dh,
                           'w_cm': w_cm, 'h_cm': h_cm})
     pack_width = max(1, width_mm - overlap_mm)
-    if overlap_mm > 1e-9:                                 # chồng mí: giữ viền trùng khít -> KHÔNG xoay nhóm
+    total_rects = len(rects)
+    # XẾP GỌN Ô NHỎ: tách các ô đúng cỡ tidy_wh -> gộp thành 1 KHỐI lưới tidy_cols cột (1 rect)
+    tidy = None
+    if tidy_wh and not (overlap_mm > 1e-9):
+        import math
+        tw, th = round(tidy_wh[0] * MM_PER_CM), round(tidy_wh[1] * MM_PER_CM)
+        blk = [r for r in rects if round(r['dw']) == tw and round(r['dh']) == th]
+        oth = [r for r in rects if not (round(r['dw']) == tw and round(r['dh']) == th)]
+        cols = max(1, min(int(tidy_cols), len(blk)))
+        if len(blk) >= 2 and cols * tw <= pack_width:    # đủ ô + khối vừa khổ
+            rows = int(math.ceil(len(blk) / float(cols)))
+            tidy = {'rects': blk, 'cols': cols, 'tw': tw, 'th': th}
+            rects = oth + [{'id': '__BLOCK__', 'image_path': None, 'label': '', '_block': True,
+                            'w': cols * tw, 'h': rows * th, 'dw': cols * tw, 'dh': rows * th}]
+    if tidy:                                             # có khối gọn -> xếp KHÔNG xoay (giữ khối nguyên) rồi BUNG ra
+        placements, _lf, _uf = _pack_best(rects, pack_width, gap_mm, False)
+        exp = []
+        for p in placements:
+            if p.get('_block'):
+                for i, br in enumerate(tidy['rects']):
+                    r, c = divmod(i, tidy['cols'])
+                    exp.append({**br, 'x': p['x'] + c * tidy['tw'], 'y': p['y'] + r * tidy['th'],
+                                'w': br['w'], 'h': br['h'], 'dw': tidy['tw'], 'dh': tidy['th'], 'rot': 0})
+            else:
+                exp.append(p)
+        placements = exp
+    elif overlap_mm > 1e-9:                              # chồng mí: giữ viền trùng khít -> KHÔNG xoay nhóm
         placements, _lf, _uf = _pack_best(rects, pack_width, gap_mm, allow_rotate)
     else:                                                # xoay-nhóm + chọn ngắn nhất (an toàn: gồm cả cách cũ)
         placements = _pack_best_oriented(rects, pack_width, gap_mm, allow_rotate)
-    dropped = max(0, len(rects) - len(placements))       # tranh KHÔNG xếp được (rộng hơn khổ vải)
+    dropped = max(0, total_rects - len(placements))      # tranh KHÔNG xếp được (rộng hơn khổ vải)
     group_rotated = sum(1 for p in placements if p.get('grot'))   # số ô được xoay để xếp khít hơn
     # Chiều dài & độ phủ tính theo cỡ VẼ thật (gồm phần chồng mí)
     length_mm = max((p['y'] + p.get('dh', p['h']) for p in placements), default=0)
@@ -871,6 +902,9 @@ def ghep_in(request):
         overlap_cm = max(0.0, _f(request.POST.get('overlap_cm'), 0.0))
         rotate = request.POST.get('rotate') == '1'
         target_dpi = int(_f(request.POST.get('dpi'), 150))
+        # Xếp gọn 20×20 (ô 28×28) thành khối lưới N cột cho DỄ CẮT (đánh đổi ít vải)
+        tidy20 = request.POST.get('tidy20') == '1'
+        tidy_cols = max(1, min(20, int(_f(request.POST.get('tidy_cols'), 4))))
 
         outdir = os.path.join(settings.MEDIA_ROOT, 'ghep')
         os.makedirs(outdir, exist_ok=True)
@@ -941,7 +975,8 @@ def ghep_in(request):
 
         if overlap_cm >= 4:
             warnings.insert(0, 'Chồng mí %g cm khá lớn — có thể đè lên phần TRANH (viền thường chỉ ~4cm).' % overlap_cm)
-        planned = plan(items, width_cm=width_cm, gap_cm=gap_cm, allow_rotate=rotate, overlap_cm=overlap_cm)
+        planned = plan(items, width_cm=width_cm, gap_cm=gap_cm, allow_rotate=rotate, overlap_cm=overlap_cm,
+                       tidy_wh=(28, 28) if tidy20 else None, tidy_cols=tidy_cols)
         pdf_rel = 'ghep/ghep_%s.pdf' % stamp
         prev_rel = 'ghep/ghep_%s.png' % stamp
         try:
