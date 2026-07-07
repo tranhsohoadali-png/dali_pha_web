@@ -1687,6 +1687,19 @@ def draw_result(edge_img, dpi, width, height, img_name: str = None, debug=False)
         cv2.putText(image_paint, img_name, (start_name_pos_w, start_name_pos_h), NAME_FONT, NAME_SCALE, EDGE_COLOR,
                     NAME_THICKNESS)
 
+        # draw NGÀY IN (ngày tạo bản in) — góc TRÊN-PHẢI, cùng hàng với mã ở góc trên-trái
+        try:
+            from django.utils import timezone
+            _date_str = timezone.localtime().strftime('%d/%m/%Y')
+        except Exception:
+            import datetime as _dt
+            _date_str = _dt.datetime.now().strftime('%d/%m/%Y')
+        _dsz, _ = cv2.getTextSize(_date_str, NAME_FONT, NAME_SCALE, NAME_THICKNESS)
+        _date_pos_w = int(image_paint.shape[1] - (_dsz[0] + width_padding + RATE_ALIGN * im_width))
+        _date_pos_h = height_padding - text_size[1] - SUB_PADDING_IN_PIXEL
+        cv2.putText(image_paint, _date_str, (_date_pos_w, _date_pos_h), NAME_FONT, NAME_SCALE, EDGE_COLOR,
+                    NAME_THICKNESS)
+
         # draw made in vietnam bottom left
         start_name_pos_h = int(im_height + height_padding + text_size[1] + SUB_PADDING_IN_PIXEL)
         cv2.putText(image_paint, "MADE IN VIETNAM", (start_name_pos_w, start_name_pos_h), NAME_FONT, NAME_SCALE,
