@@ -656,46 +656,62 @@ def plan(items, width_cm=152.0, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0, 
     }
 
 
-def _stamp_date_pdf(page, rect, date_str, fitz):
-    """fitz: vẽ NGÀY IN vào dải viền TRÊN của ô (canh phải), NẰM NGANG (đọc được trên tấm).
-    rect = ô trên trang (gốc TRÊN-trái, y hướng xuống). Dùng insert_text (API bền mọi bản
-    PyMuPDF, không có kiểu 'không vừa hộp thì không vẽ' như insert_textbox)."""
+def _stamp_date_pdf(page, rect, date_str, fitz, rot=0):
+    """fitz: vẽ NGÀY IN ở GIỮA cạnh TRÊN của TRANH, XOAY THEO ô để KHỚP HƯỚNG KHUNG (mã 4 cạnh
+    + MADE IN VIETNAM đã xoay theo tranh). rect = ô trên trang (gốc TRÊN-trái, y xuống).
+    rot 0/90 giống show_pdf_page (90 = xoay CCW: cạnh TRÊN tranh -> dải TRÁI ô; chữ khung đọc
+    DƯỚI-LÊN nên dùng fitz rotate=90 — đã kiểm: fitz rotate=90 đọc dưới-lên, 270 đọc trên-xuống).
+    insert_text bền mọi bản PyMuPDF."""
+    x0, y0, x1, y1 = rect.x0, rect.y0, rect.x1, rect.y1
     w_pt, h_pt = rect.width, rect.height
-    band = min(_STAMP_BORDER_MM * PT_PER_MM, 0.3 * h_pt)           # dải viền trên
-    fs = min(_STAMP_DATE_PT, band * 0.9)                          # cỡ chữ 19pt (chặn nếu viền quá mỏng)
+    band = min(_STAMP_BORDER_MM * PT_PER_MM, 0.3 * min(w_pt, h_pt))   # bề dày viền in
+    top_len = h_pt if rot else w_pt                                   # cạnh TRÊN của tranh dài bao nhiêu
+    fs = min(_STAMP_DATE_PT, band * 0.9)                              # cỡ chữ 19pt
 
     def _txt_w(size):
         try:
             return fitz.get_text_length(date_str, fontname="helv", fontsize=size)
         except Exception:
-            return size * 0.5 * len(date_str)                    # ước lượng nếu API khác
+            return size * 0.5 * len(date_str)
 
     tw = _txt_w(fs)
-    max_w = _STAMP_MAX_W_FRAC * w_pt                              # chừa nửa trái cho mã có sẵn
+    max_w = _STAMP_MAX_W_FRAC * top_len                              # ngày <= 50% cạnh trên
     if tw > max_w and tw > 0:
         fs = max(5.0, fs * max_w / tw)
         tw = _txt_w(fs)
-    margin = _STAMP_MARGIN_MM * PT_PER_MM
-    x = rect.x1 - margin - tw                                     # canh phải
-    y = rect.y0 + band * 0.5 + fs * 0.35                         # baseline ~giữa dải viền trên
+    if rot:                    # tranh xoay CCW: cạnh TRÊN -> dải TRÁI ô; ĐẶT GIỮA; đọc dưới-lên (R=90)
+        y_mid = (y0 + y1) / 2.0
+        x, y, R = x0 + band * 0.5 - fs * 0.35, y_mid + tw / 2.0, 90
+    else:                      # không xoay: cạnh TRÊN nằm ngang trên đỉnh; ĐẶT GIỮA
+        x, y, R = (x0 + x1) / 2.0 - tw / 2.0, y0 + band * 0.6, 0
     try:
-        page.insert_text((x, y), date_str, fontname="helv", fontsize=fs, color=(0, 0, 0))
+        page.insert_text((x, y), date_str, fontname="helv", fontsize=fs, color=(0, 0, 0), rotate=R)
     except Exception:
         pass
 
 
-def _stamp_date_raster_pdf(c, x_pt, y_pt, w_pt, h_pt, date_str):
-    """reportlab (gốc DƯỚI-trái): vẽ NGÀY IN dải viền TRÊN của ô, canh phải, nằm ngang."""
-    band = min(_STAMP_BORDER_MM * PT_PER_MM, 0.3 * h_pt)
+def _stamp_date_raster_pdf(c, x_pt, y_pt, w_pt, h_pt, date_str, rot=0):
+    """reportlab (gốc DƯỚI-trái, y LÊN): NGÀY IN góc TRÊN-PHẢI của TRANH, XOAY THEO ô.
+    rot=90: viền TRÊN tranh -> dải TRÁI ô; chữ chạy LÊN (đọc dưới-lên) tới góc TR."""
+    band = min(_STAMP_BORDER_MM * PT_PER_MM, 0.3 * min(w_pt, h_pt))
+    top_len = h_pt if rot else w_pt
     fs = min(_STAMP_DATE_PT, band * 0.9)                          # cỡ chữ 19pt
     tw = c.stringWidth(date_str, 'Helvetica', fs)
-    max_w = _STAMP_MAX_W_FRAC * w_pt
+    max_w = _STAMP_MAX_W_FRAC * top_len
     if tw > max_w and tw > 0:
         fs = max(5.0, fs * max_w / tw)
+        tw = c.stringWidth(date_str, 'Helvetica', fs)
+    margin = _STAMP_MARGIN_MM * PT_PER_MM
     c.saveState()
     c.setFillColorRGB(0, 0, 0)
     c.setFont('Helvetica', fs)
-    c.drawRightString(x_pt + w_pt - _STAMP_MARGIN_MM * PT_PER_MM, y_pt + h_pt - band * 0.6, date_str)
+    if rot:                    # xoay CCW: cạnh TRÊN -> dải TRÁI; ĐẶT GIỮA; chữ chạy LÊN (đọc dưới-lên)
+        y_mid = y_pt + h_pt / 2.0
+        c.translate(x_pt + band * 0.5 + fs * 0.35, y_mid - tw / 2.0)
+        c.rotate(90)
+        c.drawString(0, 0, date_str)
+    else:                      # không xoay: cạnh TRÊN ngang; ĐẶT GIỮA
+        c.drawCentredString(x_pt + w_pt / 2.0, y_pt + h_pt - band * 0.6, date_str)
     c.restoreState()
 
 
@@ -750,8 +766,8 @@ def render_pdf(planned, out_path, title=''):
                                     align=1)
             except Exception:
                 pass
-        if ok:                                            # NGÀY IN lên dải viền trên (ô có ảnh)
-            _stamp_date_pdf(page, rect, date_str, fitz)
+        if ok:                                            # NGÀY IN góc trên-phải TRANH (xoay theo ô)
+            _stamp_date_pdf(page, rect, date_str, fitz, rot=rot)
     for s in src_cache.values():
         try:
             s.close()
@@ -820,7 +836,8 @@ def _render_pdf_raster(planned, out_path, title=''):
         if not ok:
             _miss_box(x_pt, y_pt, w_pt, h_pt, label)
         else:
-            _stamp_date_raster_pdf(c, x_pt, y_pt, w_pt, h_pt, date_str)   # NGÀY IN viền trên
+            _stamp_date_raster_pdf(c, x_pt, y_pt, w_pt, h_pt, date_str,   # NGÀY IN góc trên-phải tranh
+                                   rot=1 if p.get('rot') else 0)
     c.showPage()
     c.save()
     return embedded
@@ -856,9 +873,10 @@ def render_preview(planned, out_path, scale=2.0, image_paths=None):
         else:
             d.rectangle([x0, top, x0 + w, top + h], fill='#cfe2d8')
         d.rectangle([x0, top, x0 + w - 1, top + h - 1], outline='#198754', width=1)
-        # NGÀY IN góc trên-phải ô (nhỏ — chỉ MINH HOẠ; PDF mới là bản in chuẩn)
-        if w >= 30:
-            band_px = min(_STAMP_BORDER_MM * scale / 10.0, 0.3 * h)
+        # NGÀY IN GIỮA cạnh TRÊN của TRANH (nhỏ — chỉ MINH HOẠ; PDF mới là bản in chuẩn). Xoay theo ô.
+        if w >= 30 and h >= 30:
+            band_px = min(_STAMP_BORDER_MM * scale / 10.0, 0.3 * min(w, h))
+            top_len = h if p.get('rot') else w                    # cạnh TRÊN tranh (dài)
             fs_px = int(max(5, min(_STAMP_DATE_PT / 72.0 * 2.54 * scale, band_px * 0.9)))
             try:
                 fnt = ImageFont.load_default(size=fs_px)
@@ -867,13 +885,21 @@ def render_preview(planned, out_path, scale=2.0, image_paths=None):
             try:
                 bb = d.textbbox((0, 0), date_str, font=fnt)
                 tw = bb[2] - bb[0]
-                if tw > _STAMP_MAX_W_FRAC * w and tw > 0 and fs_px > 6:
-                    fs_px = max(6, int(fs_px * _STAMP_MAX_W_FRAC * w / tw))
+                if tw > _STAMP_MAX_W_FRAC * top_len and tw > 0 and fs_px > 5:
+                    fs_px = max(5, int(fs_px * _STAMP_MAX_W_FRAC * top_len / tw))
                     try:
                         fnt = ImageFont.load_default(size=fs_px)
                     except TypeError:
                         pass
-                d.text((x0 + w - 2, top + 1), date_str, fill='#c0141d', font=fnt, anchor='ra')
+                    bb = d.textbbox((0, 0), date_str, font=fnt); tw = bb[2] - bb[0]
+                if p.get('rot'):                                  # xoay CCW -> đọc dưới-lên, GIỮA dải viền TRÁI
+                    th = bb[3] - bb[1]
+                    tmp = Image.new('RGBA', (max(1, tw + 2), max(1, th + 2)), (0, 0, 0, 0))
+                    ImageDraw.Draw(tmp).text((1, 1), date_str, fill='#c0141d', font=fnt)
+                    tmp = tmp.rotate(90, expand=True)
+                    img.paste(tmp, (x0 + 2, top + max(0, h // 2 - tmp.height // 2)), tmp)
+                else:                                             # ngang, GIỮA cạnh trên
+                    d.text((x0 + w // 2, top + 1), date_str, fill='#c0141d', font=fnt, anchor='ma')
             except Exception:
                 pass
     img.save(out_path)
