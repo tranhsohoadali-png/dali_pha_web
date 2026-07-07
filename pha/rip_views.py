@@ -89,16 +89,19 @@ def rip_list(request):
     if not _staff(request):
         return HttpResponseForbidden('staff only')
     from pha.models import PrintJob
+    from django.utils import timezone
     show = request.GET.get('show', 'active')
     qs = PrintJob.objects.all()
     if show != 'all':
         qs = qs.exclude(status=PrintJob.PRINTED)
     jobs = []
     for j in qs[:50]:
+        # created lưu UTC (USE_TZ=True) -> phải đổi sang giờ VN trước khi format, nếu không lệch -7h
+        _ct = timezone.localtime(j.created) if j.created else None
         jobs.append({'id': j.id, 'name': j.name, 'meters': round(j.meters, 2),
                      'util': j.util, 'count': j.count, 'status': j.status,
                      'message': j.message, 'prt_mb': round(j.prt_mb, 1),
-                     'created': j.created.strftime('%H:%M %d/%m')})
+                     'created': _ct.strftime('%H:%M %d/%m') if _ct else ''})
     return JsonResponse({'ok': True, 'jobs': jobs, 'show': show, 'key': _rip_key()})
 
 
