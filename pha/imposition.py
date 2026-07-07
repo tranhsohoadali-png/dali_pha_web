@@ -903,7 +903,6 @@ def ghep_in(request):
         rotate = request.POST.get('rotate') == '1'
         target_dpi = int(_f(request.POST.get('dpi'), 150))
         # Xếp gọn 20×20 (ô 28×28) thành khối lưới N cột cho DỄ CẮT (đánh đổi ít vải)
-        tidy20 = request.POST.get('tidy20') == '1'
         tidy_cols = max(1, min(20, int(_f(request.POST.get('tidy_cols'), 4))))
 
         outdir = os.path.join(settings.MEDIA_ROOT, 'ghep')
@@ -976,7 +975,7 @@ def ghep_in(request):
         if overlap_cm >= 4:
             warnings.insert(0, 'Chồng mí %g cm khá lớn — có thể đè lên phần TRANH (viền thường chỉ ~4cm).' % overlap_cm)
         planned = plan(items, width_cm=width_cm, gap_cm=gap_cm, allow_rotate=rotate, overlap_cm=overlap_cm,
-                       tidy_wh=(28, 28) if tidy20 else None, tidy_cols=tidy_cols)
+                       tidy_wh=(28, 28), tidy_cols=tidy_cols)
         pdf_rel = 'ghep/ghep_%s.pdf' % stamp
         prev_rel = 'ghep/ghep_%s.png' % stamp
         try:
