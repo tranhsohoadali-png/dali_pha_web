@@ -28,6 +28,24 @@ _MAX_RASTER_PX = 9000          # cho phép tile lớn vẫn ~300 DPI (chặn ả
 _IMG_EXTS = ('.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff')
 _PDF_HINT = 'là PDF nhưng server chưa cài pymupdf — chạy update.sh, hoặc up ảnh PNG/JPG'
 
+# ---- NGÀY IN: đóng dấu lên MỖI ô LÚC GHÉP (thay vì nướng vào file) -> tranh KHO CŨ cũng có ----
+# Viền in DALI = 4cm/cạnh (cỡ IN = tranh + 8cm), nên viền ngoài 4cm LUÔN nằm ở mép ô dù xoay
+# hay không -> đặt ngày trong DẢI VIỀN TRÊN (nằm ngang, canh phải) là an toàn cho mọi cỡ/hướng.
+_STAMP_BORDER_MM = 40.0     # bề dày viền in (mm) — dải chứa ngày
+_STAMP_DATE_H_MM = 20.0     # cao chữ ngày mong muốn (mm); tự CO nếu ô hẹp
+_STAMP_MARGIN_MM = 10.0     # lề phải/trên (mm)
+_STAMP_MAX_W_FRAC = 0.5     # ngày chiếm tối đa 50% bề rộng ô (chừa nửa trái cho mã có sẵn)
+
+
+def _print_date_str():
+    """NGÀY IN hôm nay (giờ VN) 'dd/mm/yyyy' — vẽ NGANG lên dải viền TRÊN của mọi ô."""
+    try:
+        from pha.views import _now
+        return _now().strftime('%d/%m/%Y')
+    except Exception:
+        from datetime import datetime
+        return datetime.now().strftime('%d/%m/%Y')
+
 
 def _import_fitz():
     """Trả module PyMuPDF (fitz) hoặc None nếu chưa cài."""
@@ -638,6 +656,43 @@ def plan(items, width_cm=152.0, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0, 
     }
 
 
+def _stamp_date_pdf(page, rect, date_str, fitz):
+    """fitz: vẽ NGÀY IN vào dải viền TRÊN của ô (canh phải), NẰM NGANG (đọc được trên tấm).
+    rect = ô trên trang (gốc TRÊN-trái, y hướng xuống)."""
+    w_pt, h_pt = rect.width, rect.height
+    band = min(_STAMP_BORDER_MM * PT_PER_MM, 0.3 * h_pt)           # dải viền trên
+    fs = min(_STAMP_DATE_H_MM * PT_PER_MM, band * 0.55)            # cao chữ
+    try:
+        tw = fitz.get_text_length(date_str, fontname="helv", fontsize=fs)
+    except Exception:
+        tw = fs * 0.5 * len(date_str)
+    max_w = _STAMP_MAX_W_FRAC * w_pt                               # chừa nửa trái cho mã có sẵn
+    if tw > max_w and tw > 0:
+        fs = max(5.0, fs * max_w / tw)
+    margin = _STAMP_MARGIN_MM * PT_PER_MM
+    box = fitz.Rect(rect.x0 + margin, rect.y0 + band * 0.12, rect.x1 - margin, rect.y0 + band)
+    try:
+        page.insert_textbox(box, date_str, fontname="helv", fontsize=fs,
+                            color=(0, 0, 0), align=fitz.TEXT_ALIGN_RIGHT)
+    except Exception:
+        pass
+
+
+def _stamp_date_raster_pdf(c, x_pt, y_pt, w_pt, h_pt, date_str):
+    """reportlab (gốc DƯỚI-trái): vẽ NGÀY IN dải viền TRÊN của ô, canh phải, nằm ngang."""
+    band = min(_STAMP_BORDER_MM * PT_PER_MM, 0.3 * h_pt)
+    fs = min(_STAMP_DATE_H_MM * PT_PER_MM, band * 0.55)
+    tw = c.stringWidth(date_str, 'Helvetica', fs)
+    max_w = _STAMP_MAX_W_FRAC * w_pt
+    if tw > max_w and tw > 0:
+        fs = max(5.0, fs * max_w / tw)
+    c.saveState()
+    c.setFillColorRGB(0, 0, 0)
+    c.setFont('Helvetica', fs)
+    c.drawRightString(x_pt + w_pt - _STAMP_MARGIN_MM * PT_PER_MM, y_pt + h_pt - band * 0.6, date_str)
+    c.restoreState()
+
+
 def render_pdf(planned, out_path, title=''):
     """Xuất PDF khổ thật, đặt từng tranh đúng vị trí. ƯU TIÊN GIỮ VECTOR: nếu nguồn có
     bản .pdf (cạnh ảnh) thì nhúng NGUYÊN trang PDF (vector → nét tuyệt đối mọi cỡ, file
@@ -652,6 +707,7 @@ def render_pdf(planned, out_path, title=''):
     page = doc.new_page(width=W_pt, height=L_pt)
     embedded = 0
     src_cache = {}
+    date_str = _print_date_str()                          # NGÀY IN — đóng dấu lên mọi ô
     for p in planned['placements']:
         dw, dh = p.get('dw', p['w']), p.get('dh', p['h'])
         x0 = p['x'] * PT_PER_MM
@@ -688,6 +744,8 @@ def render_pdf(planned, out_path, title=''):
                                     align=1)
             except Exception:
                 pass
+        if ok:                                            # NGÀY IN lên dải viền trên (ô có ảnh)
+            _stamp_date_pdf(page, rect, date_str, fitz)
     for s in src_cache.values():
         try:
             s.close()
@@ -710,6 +768,7 @@ def _render_pdf_raster(planned, out_path, title=''):
     if title:
         c.setTitle(title)
     embedded = 0
+    date_str = _print_date_str()                          # NGÀY IN — đóng dấu lên mọi ô
 
     def _miss_box(x_pt, y_pt, w_pt, h_pt, label):
         # Ô THIẾU ẢNH: tô đỏ nhạt + viền đỏ + chữ -> không bao giờ ra ô trắng "bí ẩn"
@@ -754,6 +813,8 @@ def _render_pdf_raster(planned, out_path, title=''):
                 ok = False
         if not ok:
             _miss_box(x_pt, y_pt, w_pt, h_pt, label)
+        else:
+            _stamp_date_raster_pdf(c, x_pt, y_pt, w_pt, h_pt, date_str)   # NGÀY IN viền trên
     c.showPage()
     c.save()
     return embedded
@@ -761,11 +822,12 @@ def _render_pdf_raster(planned, out_path, title=''):
 
 def render_preview(planned, out_path, scale=2.0, image_paths=None):
     """Ảnh PNG xem trước bố cục (thu nhỏ) bằng Pillow — để hiển thị trên web."""
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageDraw, ImageFont
     W = max(1, int(planned['width_mm'] * scale / 10))      # ~scale px / cm
     H = max(1, int(max(planned['length_mm'], 10) * scale / 10))
     img = Image.new('RGB', (W, H), '#e9ecef')
     d = ImageDraw.Draw(img)
+    date_str = _print_date_str()                           # NGÀY IN (minh hoạ trên preview)
     for p in planned['placements']:
         x0 = int(p['x'] * scale / 10)
         y0 = int(p['y'] * scale / 10)
@@ -788,6 +850,26 @@ def render_preview(planned, out_path, scale=2.0, image_paths=None):
         else:
             d.rectangle([x0, top, x0 + w, top + h], fill='#cfe2d8')
         d.rectangle([x0, top, x0 + w - 1, top + h - 1], outline='#198754', width=1)
+        # NGÀY IN góc trên-phải ô (nhỏ — chỉ MINH HOẠ; PDF mới là bản in chuẩn)
+        if w >= 30:
+            band_px = min(_STAMP_BORDER_MM * scale / 10.0, 0.3 * h)
+            fs_px = int(max(6, min(_STAMP_DATE_H_MM * scale / 10.0, band_px * 0.8)))
+            try:
+                fnt = ImageFont.load_default(size=fs_px)
+            except TypeError:
+                fnt = ImageFont.load_default()
+            try:
+                bb = d.textbbox((0, 0), date_str, font=fnt)
+                tw = bb[2] - bb[0]
+                if tw > _STAMP_MAX_W_FRAC * w and tw > 0 and fs_px > 6:
+                    fs_px = max(6, int(fs_px * _STAMP_MAX_W_FRAC * w / tw))
+                    try:
+                        fnt = ImageFont.load_default(size=fs_px)
+                    except TypeError:
+                        pass
+                d.text((x0 + w - 2, top + 1), date_str, fill='#c0141d', font=fnt, anchor='ra')
+            except Exception:
+                pass
     img.save(out_path)
     return out_path
 
