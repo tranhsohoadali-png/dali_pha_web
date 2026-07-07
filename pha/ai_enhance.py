@@ -222,8 +222,54 @@ def get_api_key():
 
 
 def is_configured():
-    """True nếu đã có khoá API để dùng tính năng AI."""
-    return bool(get_api_key())
+    """True nếu đã có ÍT NHẤT một khoá AI (Google HOẶC OpenAI)."""
+    return bool(get_api_key() or get_openai_key())
+
+
+# ===================== ĐA NHÀ CUNG CẤP AI (Gemini + OpenAI) =====================
+# Model ảnh của OpenAI (chính là model tạo/sửa ảnh của ChatGPT). Đổi qua env nếu cần.
+AI_OPENAI_MODEL = config("AI_OPENAI_MODEL", default="gpt-image-1")
+
+
+def get_openai_key():
+    """Khoá OpenAI (ChatGPT) — ưu tiên DB (Cài đặt AI), rồi biến môi trường OPENAI_API_KEY."""
+    try:
+        from pha.models import AppSetting
+        v = (AppSetting.get("OPENAI_API_KEY") or "").strip()
+        if v:
+            return v
+    except Exception:
+        pass
+    return os.environ.get("OPENAI_API_KEY") or ""
+
+
+def get_provider():
+    """Nhà cung cấp AI CHÍNH: 'gemini' (mặc định) hoặc 'openai' — từ AppSetting AI_PROVIDER."""
+    try:
+        from pha.models import AppSetting
+        p = (AppSetting.get("AI_PROVIDER") or "").strip().lower()
+        if p in ("gemini", "openai"):
+            return p
+    except Exception:
+        pass
+    return (os.environ.get("AI_PROVIDER") or "gemini").lower()
+
+
+def get_fallback():
+    """Có TỰ DỰ PHÒNG sang nhà cung cấp kia khi nhà chính lỗi (vd 429 hết quota) không?
+    Mặc định BẬT -> AI ít khi 'chết' vì hết hạn mức một bên."""
+    try:
+        from pha.models import AppSetting
+        v = AppSetting.get("AI_FALLBACK")
+        if v is not None and str(v).strip() != "":
+            return str(v).strip().lower() not in ("0", "false", "no", "off")
+    except Exception:
+        pass
+    return True
+
+
+def _provider_key(prov):
+    return get_api_key() if prov == "gemini" else get_openai_key()
 
 
 def _get_api_key():
@@ -247,10 +293,10 @@ STYLE_REF_INSTRUCTION = (
 )
 
 
-def enhance_image(input_path, output_path, prompt=None, reference_paths=None,
-                  color_limit=0, use_refs=None):
+def _enhance_gemini(input_path, output_path, prompt=None, reference_paths=None,
+                    color_limit=0, use_refs=None):
     """
-    Gọi Google Gemini Image để tăng cường ảnh.
+    Gọi Google Gemini Image để tăng cường ảnh. (1 nhà cung cấp — dispatch ở enhance_image.)
 
     input_path      : đường dẫn ảnh gốc (ảnh khách).
     output_path     : nơi ghi ảnh đã tăng cường (PNG).
@@ -364,6 +410,104 @@ def enhance_image(input_path, output_path, prompt=None, reference_paths=None,
         raise AIEnhanceError(f"Không lưu được ảnh đã tăng cường: {e}") from e
 
     return output_path
+
+
+def _enhance_openai(input_path, output_path, prompt=None, reference_paths=None,
+                    color_limit=0, use_refs=None):
+    """Tăng cường ảnh bằng OpenAI (gpt-image-1, images.edit). Cùng prompt/ảnh-mẫu như Gemini."""
+    key = get_openai_key()
+    if not key:
+        raise AIEnhanceError("Chưa cấu hình OpenAI API key — vào trang Cài đặt AI để nhập khoá.")
+    try:
+        from openai import OpenAI
+    except ImportError as e:
+        raise AIEnhanceError("Thiếu thư viện openai. Cài bằng: pip install openai") from e
+    import io
+    import base64
+    from PIL import Image
+
+    if use_refs is None:
+        use_refs = AI_USE_STYLE_REFS
+    try:
+        src = Image.open(input_path)
+        src.load()
+    except Exception as e:
+        raise AIEnhanceError(f"Không mở được ảnh gốc: {e}") from e
+    if max(src.size) > AI_MAX_EDGE:
+        src = src.copy()
+        src.thumbnail((AI_MAX_EDGE, AI_MAX_EDGE), Image.LANCZOS)
+    # OpenAI: CHỈ gửi ảnh khách (KHÔNG gửi ảnh mẫu — tránh trộn mặt/người từ ảnh mẫu vào
+    # chân dung; prompt đã tả đủ phong cách tô-màu-số).
+    text = prompt or DEFAULT_ENHANCE_PROMPT
+    try:
+        cl = int(color_limit or 0)
+    except (TypeError, ValueError):
+        cl = 0
+    if cl > 0:
+        text += (f" Use at most {cl} distinct flat colors in total for the whole image; "
+                 f"merge similar shades so the final artwork has no more than {cl} colors.")
+
+    def _png(im):
+        b = io.BytesIO()
+        im.convert("RGB").save(b, format="PNG")
+        b.seek(0)
+        b.name = "image.png"
+        return b
+
+    imgs = [_png(src)]
+    try:
+        client = OpenAI(api_key=key, timeout=AI_TIMEOUT_MS / 1000.0)
+        resp = client.images.edit(
+            model=AI_OPENAI_MODEL,
+            image=imgs if len(imgs) > 1 else imgs[0],
+            prompt=text[:32000],
+            size="auto",
+        )
+    except Exception as e:
+        raise AIEnhanceError(f"Gọi OpenAI thất bại: {e}") from e
+
+    try:
+        image_bytes = base64.b64decode(resp.data[0].b64_json)
+    except Exception as e:
+        raise AIEnhanceError(f"OpenAI không trả về ảnh: {e}") from e
+
+    try:
+        with open(output_path, "wb") as f:
+            f.write(image_bytes)
+        out = Image.open(output_path)
+        if out.mode not in ("RGB", "RGBA"):
+            out = out.convert("RGB")
+        out.save(output_path, format="PNG")
+    except Exception as e:
+        raise AIEnhanceError(f"Không lưu được ảnh đã tăng cường: {e}") from e
+    return output_path
+
+
+def enhance_image(input_path, output_path, prompt=None, reference_paths=None,
+                  color_limit=0, use_refs=None):
+    """TĂNG CƯỜNG ẢNH — TỰ CHỌN nhà cung cấp (Gemini/OpenAI) + DỰ PHÒNG.
+
+    Chạy nhà CHÍNH (AI_PROVIDER, mặc định gemini); nếu lỗi (vd 429 hết quota) và bật dự
+    phòng (AI_FALLBACK) thì TỰ thử nhà kia. Chỉ dùng nhà đã có khoá. Trả output_path khi
+    thành công; ném AIEnhanceError nếu MỌI nhà đều lỗi (process_image sẽ bỏ qua AI, xử lý ảnh gốc)."""
+    primary = get_provider()
+    order = [primary]
+    if get_fallback():
+        order.append("openai" if primary == "gemini" else "gemini")
+    order = [p for p in order if _provider_key(p)]     # bỏ nhà chưa có khoá
+    if not order:
+        raise AIEnhanceError("Chưa cấu hình khoá AI nào (Google hoặc OpenAI) — vào trang Cài đặt AI.")
+
+    errors = []
+    for prov in order:
+        fn = _enhance_gemini if prov == "gemini" else _enhance_openai
+        try:
+            return fn(input_path, output_path, prompt=prompt, reference_paths=reference_paths,
+                      color_limit=color_limit, use_refs=use_refs)
+        except Exception as e:
+            errors.append("%s: %s" % (prov, str(e)[:140]))
+            continue
+    raise AIEnhanceError("AI thất bại — " + " | ".join(errors))
 
 
 # Model đọc/hiểu ảnh (vision) để ĐẾM SỐ MÀU từ bảng chú giải. Rẻ & nhanh hơn model ảnh.

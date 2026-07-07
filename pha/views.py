@@ -3011,6 +3011,24 @@ def _test_google_key():
         return False, f'Khoá không dùng được: {e}'
 
 
+def _test_openai_key():
+    """Gọi nhẹ OpenAI để xác thực khoá (models.list — không tốn phí tạo ảnh)."""
+    from pha.ai_enhance import get_openai_key
+    key = get_openai_key()
+    if not key:
+        return False, 'Chưa có OpenAI API key.'
+    try:
+        from openai import OpenAI
+    except ImportError:
+        return False, 'Máy chủ chưa cài thư viện openai (pip install openai) — chạy update.sh.'
+    try:
+        client = OpenAI(api_key=key)
+        next(iter(client.models.list()), None)
+        return True, 'Kết nối OpenAI thành công.'
+    except Exception as e:
+        return False, f'Khoá không dùng được: {e}'
+
+
 @csrf_exempt
 @staff_required
 def cai_dat_ai(request):
@@ -3030,6 +3048,27 @@ def cai_dat_ai(request):
         if action == 'test':
             ok, msg = _test_google_key()
             return JsonResponse({'ok': ok, 'msg': msg})
+        # ---- OpenAI (ChatGPT) + chọn nhà cung cấp AI ----
+        if action == 'save_openai':
+            k = (request.POST.get('api_key') or '').strip()
+            if not k:
+                return JsonResponse({'ok': False, 'msg': 'Chưa nhập OpenAI key.'})
+            AppSetting.set('OPENAI_API_KEY', k)
+            return JsonResponse({'ok': True, 'msg': 'Đã lưu khoá OpenAI.', 'masked': _mask_key(k)})
+        if action == 'clear_openai':
+            AppSetting.objects.filter(key='OPENAI_API_KEY').delete()
+            return JsonResponse({'ok': True, 'msg': 'Đã xoá khoá OpenAI.'})
+        if action == 'test_openai':
+            ok, msg = _test_openai_key()
+            return JsonResponse({'ok': ok, 'msg': msg})
+        if action == 'save_provider':
+            prov = (request.POST.get('provider') or 'gemini').strip().lower()
+            if prov not in ('gemini', 'openai'):
+                prov = 'gemini'
+            AppSetting.set('AI_PROVIDER', prov)
+            AppSetting.set('AI_FALLBACK', '1' if request.POST.get('fallback') == '1' else '0')
+            return JsonResponse({'ok': True, 'msg': 'Đã lưu: nhà chính = %s%s.'
+                                 % (prov.upper(), ' + dự phòng' if request.POST.get('fallback') == '1' else '')})
         # ---- Khoá API cho web bán hàng (tranhdali.vn/thiet-ke) ----
         if action == 'save_thietke':
             k = (request.POST.get('api_key') or '').strip()
@@ -3053,6 +3092,10 @@ def cai_dat_ai(request):
     tk_db = (AppSetting.get('THIETKE_API_KEY') or '').strip()
     tk_env = os.environ.get('THIETKE_API_KEY') or ''
     tk_cur = tk_db or tk_env
+    oa_db = (AppSetting.get('OPENAI_API_KEY') or '').strip()
+    oa_env = os.environ.get('OPENAI_API_KEY') or ''
+    oa_cur = oa_db or oa_env
+    from pha import ai_enhance as _ai
     return render(request, 'cai_dat_ai.html', {
         'has_key': bool(cur),
         'masked': _mask_key(cur),
@@ -3060,6 +3103,11 @@ def cai_dat_ai(request):
         'tk_has': bool(tk_cur),
         'tk_masked': _mask_key(tk_cur),
         'tk_from_env': bool(not tk_db and tk_env),
+        'oa_has': bool(oa_cur),
+        'oa_masked': _mask_key(oa_cur),
+        'oa_from_env': bool(not oa_db and oa_env),
+        'provider': _ai.get_provider(),
+        'fallback': _ai.get_fallback(),
     })
 
 
