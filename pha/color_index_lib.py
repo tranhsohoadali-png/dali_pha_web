@@ -1694,10 +1694,18 @@ def draw_result(edge_img, dpi, width, height, img_name: str = None, debug=False)
         except Exception:
             import datetime as _dt
             _date_str = _dt.datetime.now().strftime('%d/%m/%Y')
-        _dsz, _ = cv2.getTextSize(_date_str, NAME_FONT, NAME_SCALE, NAME_THICKNESS)
-        _date_pos_w = int(image_paint.shape[1] - (_dsz[0] + width_padding + RATE_ALIGN * im_width))
+        # Tự CO cỡ chữ ngày nếu khung HẸP (vd 20×20) để KHÔNG ĐÈ lên mã ở góc trái
+        _right_margin = int(width_padding + RATE_ALIGN * im_width)      # canh phải, đối xứng với mã trái
+        _code_right = start_name_pos_w + text_size[0]                   # mép phải của MÃ ở góc trái
+        _avail = image_paint.shape[1] - _right_margin - _code_right - SUB_PADDING_IN_PIXEL
+        _date_scale = NAME_SCALE
+        _dsz, _ = cv2.getTextSize(_date_str, NAME_FONT, _date_scale, NAME_THICKNESS)
+        if _avail > 0 and _dsz[0] > _avail:                            # không đủ chỗ -> thu nhỏ vừa khít
+            _date_scale = max(0.6, NAME_SCALE * _avail / float(_dsz[0]))
+            _dsz, _ = cv2.getTextSize(_date_str, NAME_FONT, _date_scale, NAME_THICKNESS)
+        _date_pos_w = int(image_paint.shape[1] - (_dsz[0] + _right_margin))
         _date_pos_h = height_padding - text_size[1] - SUB_PADDING_IN_PIXEL
-        cv2.putText(image_paint, _date_str, (_date_pos_w, _date_pos_h), NAME_FONT, NAME_SCALE, EDGE_COLOR,
+        cv2.putText(image_paint, _date_str, (_date_pos_w, _date_pos_h), NAME_FONT, _date_scale, EDGE_COLOR,
                     NAME_THICKNESS)
 
         # draw made in vietnam bottom left
