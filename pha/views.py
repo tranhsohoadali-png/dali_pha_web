@@ -205,7 +205,7 @@ def _ketoan_cfg():
     }
 
 
-def _ketoan_salary(username, day, month):
+def _ketoan_salary(username, day, month, want_raw=False):
     """Gọi API của phần mềm kế toán để lấy lương 1 nhân viên (theo ngày công đã setup bên đó).
 
     Hợp đồng API (ketoan.tranhdali.vn tự code 1 endpoint GET, ví dụ /api/luong-nhan-vien):
@@ -247,8 +247,10 @@ def _ketoan_salary(username, day, month):
                 return None
             if isinstance(v, (int, float)):
                 return float(v)
-            # Chuỗi tiền VND: bỏ 'đ', khoảng trắng và dấu phân cách nghìn (cả , và .)
-            s = str(v).replace('đ', '').replace(' ', '').replace(',', '').replace('.', '').strip()
+            # Chuỗi tiền VND: GIỮ CHỈ CHỮ SỐ (bỏ đ/d/₫/VND, dấu chấm-phẩy nghìn, khoảng trắng,
+            # mọi ký tự khác) -> chống lỗi khi kế toán trả "634.615đ" / "634615 d" / "634,615₫".
+            import re as _re
+            s = _re.sub(r'\D', '', str(v))
             if not s:
                 return None
             try:
@@ -257,11 +259,18 @@ def _ketoan_salary(username, day, month):
                 return None
         return None
     d = pick('day', 'day_total', 'today', 'luong_ngay', 'luong_hom_nay')
-    m = pick('month', 'month_total', 'total', 'luong_thang')
+    m = pick('month', 'month_total', 'total', 'luong_thang', 'thang', 'tong', 'monthly',
+             'total_month', 'month_salary', 'tong_luong', 'sum', 'thu_nhap_thang', 'luong_thang_nay')
     if d is None and m is None:
-        return {'error': 'Không thấy trường lương (day/month) trong phản hồi.'}
-    return {'day': round(d or 0), 'month': round(m or 0),
-            'month_label': str(data.get('month_label') or '')}
+        err = {'error': 'Không thấy trường lương (day/month) trong phản hồi.'}
+        if want_raw:
+            err['raw'] = data
+        return err
+    res = {'day': round(d or 0), 'month': round(m or 0),
+           'month_label': str(data.get('month_label') or '')}
+    if want_raw:
+        res['raw'] = data                    # để endpoint Test soi KẾ TOÁN trả về gì
+    return res
 
 
 @csrf_exempt
@@ -270,16 +279,18 @@ def ketoan_luong_test(request):
     """Quản lý bấm Test: thử kéo lương 1 nhân viên từ kế toán để kiểm tra kết nối."""
     user = (request.GET.get('user') or request.user.username or '').strip()
     now = _now()
-    res = _ketoan_salary(user, now.strftime('%Y-%m-%d'), now.strftime('%Y-%m'))
+    res = _ketoan_salary(user, now.strftime('%Y-%m-%d'), now.strftime('%Y-%m'), want_raw=True)
     cfg = _ketoan_cfg()
     if not cfg['url']:
         return JsonResponse({'ok': False, 'msg': 'Chưa nhập URL API kế toán.'})
     if res is None:
         return JsonResponse({'ok': False, 'msg': 'Chưa cấu hình.'})
     if 'error' in res:
-        return JsonResponse({'ok': False, 'user': user, 'msg': res['error']})
+        return JsonResponse({'ok': False, 'user': user, 'msg': res['error'],
+                             'raw': res.get('raw'), 'fields': list((res.get('raw') or {}).keys())})
     return JsonResponse({'ok': True, 'user': user, 'day': res['day'], 'month': res['month'],
-                         'month_label': res.get('month_label', '')})
+                         'month_label': res.get('month_label', ''),
+                         'raw': res.get('raw'), 'fields': list((res.get('raw') or {}).keys())})
 
 
 @csrf_exempt
