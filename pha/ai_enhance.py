@@ -80,56 +80,25 @@ AI_USE_STYLE_REFS = config("AI_USE_STYLE_REFS", default="0") == "1"
 # ===================== GÓI CẤU HÌNH THEO LOẠI TRANH (PRESETS) =====================
 # Mỗi preset đóng gói: prompt AI riêng + bộ thông số tách màu phù hợp.
 # Chọn preset trên giao diện -> tự điền thông số + dùng đúng prompt khi bật AI.
+# gpt-image-1 + input_fidelity=high: prompt NHẸ, KHÔNG "posterize/vector-trace" (mâu thuẫn với
+# fidelity=high, lại khiến model vẽ lại kiểu anime). Việc posterize để index_color lo; AI chỉ
+# khử nhiễu + dọn nền + GIỮ NGƯỜI THẬT. (Gemini vẫn dùng prompt này, hợp lý.)
 _PROMPT_PHOTO = config("AI_PROMPT_PHOTO", default=(
-    "ROLE. Convert this REAL PHOTOGRAPH into a high-fidelity, REALISTIC vectorised "
-    "portrait — exactly like Adobe Illustrator 'Image Trace (High Fidelity Photo)' "
-    "or a smooth posterise of the real photo. The result is a paint-by-numbers design "
-    "that must still look like the SAME REAL PERSON in a realistic style.\n"
-    "ABSOLUTE RULES (never break):\n"
-    "- REALISTIC, not stylised. Do NOT make it anime, manga, cartoon, comic, 3D, "
-    "oil painting or any illustration look. Do NOT beautify, slim, reshape or "
-    "AI-generate a new face. Keep the EXACT same person, real face shape, real "
-    "features, real proportions, real expression/smile, pose, hair and clothing — "
-    "it must be instantly recognisable as the same person.\n"
-    "- Keep the REAL colours and REAL skin tone of the photo. Only flatten/clean "
-    "them; never invent a new palette or change the mood.\n"
-    "HOW TO RENDER (match the realistic vector-trace look):\n"
-    "1) Re-render every area as SMOOTH FLAT COLOUR BANDS that follow the real light "
-    "and shadow: split smooth gradients into several adjacent flat tones (e.g. skin "
-    "= highlight, mid, soft shadow; hair = a few flat strands of light/dark brown). "
-    "Use a GENEROUS number of flat tones (around 30-48) so skin and hair look smooth, "
-    "soft and three-dimensional — NOT a harsh 2-3 colour poster.\n"
-    "2) FACE & FACIAL FEATURES are the MOST IMPORTANT part — spend the most detail "
-    "here. Render the eyes, eyebrows, nose and lips crisply and clearly, exactly "
-    "where and how they really are: each eye with a clearly defined dark "
-    "iris/pupil, eyelid crease, lashes and a small white catch-light; clear shaped "
-    "eyebrows; a defined nose (bridge + nostrils) with soft shading; and full lips "
-    "in their own rosy/red tone with the lip line visible. LIPS ARE CRITICAL: "
-    "always paint the lips in a clearly SATURATED rosy/pink/red tone that is "
-    "OBVIOUSLY different from the surrounding skin — keep at least the saturation "
-    "of the real photo and if the natural lips are pale, make them slightly MORE "
-    "rosy, never less. NEVER render beige/nude/skin-coloured lips. Give these "
-    "features their OWN distinct flat colors (do NOT let the iris, lashes or lips "
-    "wash into the skin tone), and keep their edges sharp and clean — never blurred or melted. "
-    "Keep them well separated and symmetrical so the face looks lively, pretty and "
-    "instantly recognizable. Soft natural blush on cheeks. Skin warm and healthy, "
-    "NEVER grey/muddy.\n"
-    "3) NO outlines: do NOT draw black ink/cartoon outlines. Shapes are defined ONLY "
-    "by the boundaries between flat colour areas (soft, clean edges), like the photo.\n"
-    "4) Remove photographic noise, grain, pores and stray hair wisps so each area is a "
-    "clean solid shape.\n"
-    "5) BACKGROUND — SIMPLIFY AGGRESSIVELY (very important): the PERSON is the focus "
-    "and must stay detailed and faithful; the BACKGROUND must be reduced to only a FEW "
-    "(about 4-7) large, calm, flat colour shapes. Aggressively DELETE background "
-    "clutter: cables, wires, railings, poles, fences, road markings, window/beam "
-    "edges, signage, bricks, individual leaves and twigs, and any small or thin "
-    "objects. Merge the background into broad simple masses (e.g. one flat sky, one "
-    "flat road/ground, one simplified building block, one soft tree/plant mass). Lower "
-    "the background's detail, contrast and saturation so it visibly recedes and the "
-    "person pops; keep background colours roughly recognisable but MUCH simpler. Do "
-    "NOT invent new background detail. The background must look like a minimal, "
-    "easy-to-paint backdrop — the OPPOSITE of a busy photo.\n"
-    "Keep the same framing and aspect ratio. Output ONLY the rendered realistic image."
+    "Edit this real photograph with a light, non-destructive pass. This is NOT a "
+    "redraw and NOT a stylisation.\n"
+    "KEEP UNCHANGED (do not regenerate): the exact same real person, real face, real "
+    "facial features, proportions, expression, pose, hair and clothing. Keep the real "
+    "skin tone and real colours. Fully photographic — absolutely NO anime, cartoon, "
+    "illustration, 3D-render, painting or line-art look. Do not beautify, slim or "
+    "reshape the face.\n"
+    "ONLY DO THIS, gently: reduce photographic noise, grain, skin pores and stray hair "
+    "wisps; smooth harsh JPEG artefacts. Keep the eyes, eyebrows, nose and lips sharp "
+    "and clearly separated. Keep the lips in their own natural rosy tone, a little more "
+    "saturated than the skin, never skin-coloured.\n"
+    "BACKGROUND ONLY: calm and de-clutter it — remove small distracting objects (wires, "
+    "poles, leaves, signage, clutter) and lower its contrast so the person stands out. "
+    "Do not invent new background detail.\n"
+    "Keep the same framing and aspect ratio. Output only the edited image."
 ))
 _PROMPT_DESIGN = config("AI_PROMPT_DESIGN", default=(
     "ROLE & GOAL. This is already a clean flat/vector-style DESIGN. Standardize it "
@@ -229,6 +198,11 @@ def is_configured():
 # ===================== ĐA NHÀ CUNG CẤP AI (Gemini + OpenAI) =====================
 # Model ảnh của OpenAI (chính là model tạo/sửa ảnh của ChatGPT). Đổi qua env nếu cần.
 AI_OPENAI_MODEL = config("AI_OPENAI_MODEL", default="gpt-image-1")
+# GIỮ MẶT/MÀU NGƯỜI THẬT (chống "ra anime"): input_fidelity='high' bám sát ảnh gốc; mặc định
+# OpenAI là 'low' -> tái tạo mạnh -> vẽ lại mặt kiểu hoạt hình. quality cao = chi tiết hơn.
+# (Cần SDK openai đủ mới ~>=1.75; nếu SDK cũ báo tham số lạ thì tự bỏ 2 tham số này.)
+AI_OPENAI_FIDELITY = config("AI_OPENAI_FIDELITY", default="high")   # high | low
+AI_OPENAI_QUALITY = config("AI_OPENAI_QUALITY", default="high")     # low | medium | high | auto
 
 
 def get_openai_key():
@@ -455,16 +429,33 @@ def _enhance_openai(input_path, output_path, prompt=None, reference_paths=None,
         return b
 
     imgs = [_png(src)]
+    client = OpenAI(api_key=key, timeout=AI_TIMEOUT_MS / 1000.0)
+    _kwargs = dict(
+        model=AI_OPENAI_MODEL,
+        image=imgs if len(imgs) > 1 else imgs[0],
+        prompt=text[:32000],
+        size="auto",                       # GIỮ auto -> KHÔNG ép 1024x1024 (méo ảnh dọc)
+    )
+    if AI_OPENAI_FIDELITY:
+        _kwargs["input_fidelity"] = AI_OPENAI_FIDELITY   # 'high' = giữ mặt/người thật (chống anime)
+    if AI_OPENAI_QUALITY:
+        _kwargs["quality"] = AI_OPENAI_QUALITY
     try:
-        client = OpenAI(api_key=key, timeout=AI_TIMEOUT_MS / 1000.0)
-        resp = client.images.edit(
-            model=AI_OPENAI_MODEL,
-            image=imgs if len(imgs) > 1 else imgs[0],
-            prompt=text[:32000],
-            size="auto",
-        )
+        resp = client.images.edit(**_kwargs)
     except Exception as e:
-        raise AIEnhanceError(f"Gọi OpenAI thất bại: {e}") from e
+        # CHỈ retry-bỏ-2-tham-số khi lỗi nói về tham số LẠ (SDK/endpoint cũ chưa hỗ trợ).
+        # Lỗi thật (429 hết quota, ảnh hỏng) -> ném lên để enhance_image fallback Gemini.
+        msg = str(e).lower()
+        if any(k in msg for k in ("input_fidelity", "quality", "unexpected keyword",
+                                  "unknown", "unrecognized", "not permitted", "invalid_request")):
+            _kwargs.pop("input_fidelity", None)
+            _kwargs.pop("quality", None)
+            try:
+                resp = client.images.edit(**_kwargs)
+            except Exception as e2:
+                raise AIEnhanceError(f"Gọi OpenAI thất bại: {e2}") from e2
+        else:
+            raise AIEnhanceError(f"Gọi OpenAI thất bại: {e}") from e
 
     try:
         image_bytes = base64.b64decode(resp.data[0].b64_json)
