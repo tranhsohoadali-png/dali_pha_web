@@ -37,14 +37,23 @@ _STAMP_MARGIN_MM = 10.0     # lề phải/trên (mm)
 _STAMP_MAX_W_FRAC = 0.5     # ngày chiếm tối đa 50% bề rộng ô (chừa nửa trái cho mã có sẵn)
 
 
+_2020_PRINT_MM = 280.0      # bản in tranh 20×20 = 28×28cm (art 20 + viền 8)
+
+
 def _print_date_str():
-    """NGÀY IN hôm nay (giờ VN) 'dd/mm/yyyy' — vẽ NGANG lên dải viền TRÊN của mọi ô."""
+    """NGÀY IN hôm nay (giờ VN) 'dd/mm/yyyy' — vẽ lên viền tranh của mọi ô."""
     try:
         from pha.views import _now
         return _now().strftime('%d/%m/%Y')
     except Exception:
         from datetime import datetime
         return datetime.now().strftime('%d/%m/%Y')
+
+
+def _is_2020(w_mm, h_mm):
+    """Ô là tranh 20×20 (bản in ~28×28cm)? -> QR thường ở cạnh TRÊN nên NGÀY IN né sang cạnh BÊN.
+    Nhận w/h theo ĐƠN VỊ mm (đổi từ point trước khi gọi nếu cần)."""
+    return abs(w_mm - _2020_PRINT_MM) < 20 and abs(h_mm - _2020_PRINT_MM) < 20
 
 
 def _import_fitz():
@@ -674,13 +683,17 @@ def _stamp_date_pdf(page, rect, date_str, fitz, rot=0):
         except Exception:
             return size * 0.5 * len(date_str)
 
+    is_2020 = _is_2020(w_pt / PT_PER_MM, h_pt / PT_PER_MM)          # 20×20: QR ở cạnh TRÊN -> né sang cạnh BÊN
+    top_len2 = h_pt if is_2020 else top_len                         # 20×20: ngày dọc theo cạnh phải (cao)
     tw = _txt_w(fs)
-    max_w = _STAMP_MAX_W_FRAC * top_len                              # ngày <= 50% cạnh trên
+    max_w = _STAMP_MAX_W_FRAC * top_len2                            # ngày <= 50% cạnh
     if tw > max_w and tw > 0:
         fs = max(5.0, fs * max_w / tw)
         tw = _txt_w(fs)
-    if rot:                    # tranh xoay CCW: cạnh TRÊN -> dải TRÁI ô; ĐẶT GIỮA; đọc dưới-lên (R=90)
-        y_mid = (y0 + y1) / 2.0
+    y_mid = (y0 + y1) / 2.0
+    if is_2020:                # 20×20 (vuông, rot=0): GIỮA cạnh BÊN PHẢI, dọc, đọc dưới-lên
+        x, y, R = x1 - band * 0.5 - fs * 0.35, y_mid + tw / 2.0, 90
+    elif rot:                  # tranh xoay CCW: cạnh TRÊN -> dải TRÁI ô; ĐẶT GIỮA; đọc dưới-lên (R=90)
         x, y, R = x0 + band * 0.5 - fs * 0.35, y_mid + tw / 2.0, 90
     else:                      # không xoay: cạnh TRÊN nằm ngang trên đỉnh; ĐẶT GIỮA
         x, y, R = (x0 + x1) / 2.0 - tw / 2.0, y0 + band * 0.6, 0
@@ -694,19 +707,23 @@ def _stamp_date_raster_pdf(c, x_pt, y_pt, w_pt, h_pt, date_str, rot=0):
     """reportlab (gốc DƯỚI-trái, y LÊN): NGÀY IN góc TRÊN-PHẢI của TRANH, XOAY THEO ô.
     rot=90: viền TRÊN tranh -> dải TRÁI ô; chữ chạy LÊN (đọc dưới-lên) tới góc TR."""
     band = min(_STAMP_BORDER_MM * PT_PER_MM, 0.3 * min(w_pt, h_pt))
-    top_len = h_pt if rot else w_pt
+    is_2020 = _is_2020(w_pt / PT_PER_MM, h_pt / PT_PER_MM)        # 20×20: né QR -> cạnh BÊN PHẢI
+    top_len = h_pt if (rot or is_2020) else w_pt
     fs = min(_STAMP_DATE_PT, band * 0.9)                          # cỡ chữ 19pt
     tw = c.stringWidth(date_str, 'Helvetica', fs)
     max_w = _STAMP_MAX_W_FRAC * top_len
     if tw > max_w and tw > 0:
         fs = max(5.0, fs * max_w / tw)
         tw = c.stringWidth(date_str, 'Helvetica', fs)
-    margin = _STAMP_MARGIN_MM * PT_PER_MM
     c.saveState()
     c.setFillColorRGB(0, 0, 0)
     c.setFont('Helvetica', fs)
-    if rot:                    # xoay CCW: cạnh TRÊN -> dải TRÁI; ĐẶT GIỮA; chữ chạy LÊN (đọc dưới-lên)
-        y_mid = y_pt + h_pt / 2.0
+    y_mid = y_pt + h_pt / 2.0
+    if is_2020:                # 20×20 (vuông): GIỮA cạnh BÊN PHẢI, dọc, đọc dưới-lên
+        c.translate(x_pt + w_pt - band * 0.5 + fs * 0.35, y_mid - tw / 2.0)
+        c.rotate(90)
+        c.drawString(0, 0, date_str)
+    elif rot:                  # xoay CCW: cạnh TRÊN -> dải TRÁI; ĐẶT GIỮA; chữ chạy LÊN (đọc dưới-lên)
         c.translate(x_pt + band * 0.5 + fs * 0.35, y_mid - tw / 2.0)
         c.rotate(90)
         c.drawString(0, 0, date_str)
@@ -876,7 +893,8 @@ def render_preview(planned, out_path, scale=2.0, image_paths=None):
         # NGÀY IN GIỮA cạnh TRÊN của TRANH (nhỏ — chỉ MINH HOẠ; PDF mới là bản in chuẩn). Xoay theo ô.
         if w >= 30 and h >= 30:
             band_px = min(_STAMP_BORDER_MM * scale / 10.0, 0.3 * min(w, h))
-            top_len = h if p.get('rot') else w                    # cạnh TRÊN tranh (dài)
+            is_2020 = _is_2020(p.get('dw', p['w']), p.get('dh', p['h']))   # 20×20 -> cạnh BÊN PHẢI
+            top_len = h if (p.get('rot') or is_2020) else w       # cạnh chứa ngày (dài)
             fs_px = int(max(5, min(_STAMP_DATE_PT / 72.0 * 2.54 * scale, band_px * 0.9)))
             try:
                 fnt = ImageFont.load_default(size=fs_px)
@@ -892,7 +910,13 @@ def render_preview(planned, out_path, scale=2.0, image_paths=None):
                     except TypeError:
                         pass
                     bb = d.textbbox((0, 0), date_str, font=fnt); tw = bb[2] - bb[0]
-                if p.get('rot'):                                  # xoay CCW -> đọc dưới-lên, GIỮA dải viền TRÁI
+                if is_2020:                                       # 20×20: GIỮA cạnh BÊN PHẢI, dọc
+                    th = bb[3] - bb[1]
+                    tmp = Image.new('RGBA', (max(1, tw + 2), max(1, th + 2)), (0, 0, 0, 0))
+                    ImageDraw.Draw(tmp).text((1, 1), date_str, fill='#c0141d', font=fnt)
+                    tmp = tmp.rotate(90, expand=True)
+                    img.paste(tmp, (x0 + w - tmp.width - 2, top + max(0, h // 2 - tmp.height // 2)), tmp)
+                elif p.get('rot'):                                # xoay CCW -> đọc dưới-lên, GIỮA dải viền TRÁI
                     th = bb[3] - bb[1]
                     tmp = Image.new('RGBA', (max(1, tw + 2), max(1, th + 2)), (0, 0, 0, 0))
                     ImageDraw.Draw(tmp).text((1, 1), date_str, fill='#c0141d', font=fnt)
