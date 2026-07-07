@@ -658,22 +658,28 @@ def plan(items, width_cm=152.0, gap_cm=0.0, allow_rotate=False, overlap_cm=0.0, 
 
 def _stamp_date_pdf(page, rect, date_str, fitz):
     """fitz: vẽ NGÀY IN vào dải viền TRÊN của ô (canh phải), NẰM NGANG (đọc được trên tấm).
-    rect = ô trên trang (gốc TRÊN-trái, y hướng xuống)."""
+    rect = ô trên trang (gốc TRÊN-trái, y hướng xuống). Dùng insert_text (API bền mọi bản
+    PyMuPDF, không có kiểu 'không vừa hộp thì không vẽ' như insert_textbox)."""
     w_pt, h_pt = rect.width, rect.height
     band = min(_STAMP_BORDER_MM * PT_PER_MM, 0.3 * h_pt)           # dải viền trên
-    fs = min(_STAMP_DATE_H_MM * PT_PER_MM, band * 0.55)            # cao chữ
-    try:
-        tw = fitz.get_text_length(date_str, fontname="helv", fontsize=fs)
-    except Exception:
-        tw = fs * 0.5 * len(date_str)
-    max_w = _STAMP_MAX_W_FRAC * w_pt                               # chừa nửa trái cho mã có sẵn
+    fs = min(_STAMP_DATE_H_MM * PT_PER_MM, band * 0.6)            # cao chữ
+
+    def _txt_w(size):
+        try:
+            return fitz.get_text_length(date_str, fontname="helv", fontsize=size)
+        except Exception:
+            return size * 0.5 * len(date_str)                    # ước lượng nếu API khác
+
+    tw = _txt_w(fs)
+    max_w = _STAMP_MAX_W_FRAC * w_pt                              # chừa nửa trái cho mã có sẵn
     if tw > max_w and tw > 0:
         fs = max(5.0, fs * max_w / tw)
+        tw = _txt_w(fs)
     margin = _STAMP_MARGIN_MM * PT_PER_MM
-    box = fitz.Rect(rect.x0 + margin, rect.y0 + band * 0.12, rect.x1 - margin, rect.y0 + band)
+    x = rect.x1 - margin - tw                                     # canh phải
+    y = rect.y0 + band * 0.5 + fs * 0.35                         # baseline ~giữa dải viền trên
     try:
-        page.insert_textbox(box, date_str, fontname="helv", fontsize=fs,
-                            color=(0, 0, 0), align=fitz.TEXT_ALIGN_RIGHT)
+        page.insert_text((x, y), date_str, fontname="helv", fontsize=fs, color=(0, 0, 0))
     except Exception:
         pass
 
