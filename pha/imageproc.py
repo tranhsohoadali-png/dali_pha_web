@@ -225,7 +225,7 @@ def _process_large_into(obj, name, long_cm, color_limit):
 
 def process_image(rec_id, name, enhance=False, style_category=None, color_limit=0,
                   min_area=0, smooth=0, ai_prompt=None, use_refs=False, print_long_cm=0,
-                  detail=False, face_priority=False, large=False):
+                  detail=False, face_priority=False, large=False, num_detail=1.0):
     """Chạy nền: (tùy chọn) tăng cường ảnh bằng AI, rồi xử lý + cập nhật ImageResult.
 
     enhance=True: gọi Google AI làm sạch/nâng cấp ảnh khách trước khi đánh số.
@@ -234,6 +234,8 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
     min_area: bỏ các mảng màu nhỏ hơn N pixel ở bản đồ đánh số (0 = không lọc).
     face_priority=True: ảnh CHÂN DUNG thật (preset 'photo') — dò & bảo vệ ngũ quan
     (mắt/mũi/miệng) khi tách màu + đánh số. CHỈ bật cho preset chân dung.
+    num_detail: nút "Độ chi tiết đánh số" của web (1.0 = chuẩn, <1 = ô nhỏ hơn/nhiều ô
+    hơn). Chỉ ăn vào preset chi tiết (Tranh thiết kế, Cây/Hoa); mặc định giữ nguyên cũ.
     (Cứu màu môi _boost_lip_color vẫn chạy cho MỌI ảnh enhance như cũ — tự no-op
     nếu không có mặt — nên luồng API bán hàng không đổi.)
     Khâu đánh số + khớp mã DALI luôn chạy như cũ trên ảnh (đã hoặc chưa tăng cường).
@@ -320,7 +322,7 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
         edge_img, color_mapping, percentages = index_color(
             path, debug=False, num_colors=color_limit, min_area=min_area, smooth=smooth,
             design_out=design_path, print_long_cm=print_long_cm, detail=detail,
-            face_priority=face_priority)
+            face_priority=face_priority, num_detail=num_detail)
         name_output = save_img(edge_img, orig_dpi)
         colors = create_image_color(color_mapping, convert_to_hex(color_mapping), percentages)
         obj.name_output = name_output

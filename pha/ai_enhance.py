@@ -165,7 +165,9 @@ def presets_for_ui():
     """Danh sách preset gọn cho giao diện (JSON-able)."""
     return {k: {'label': v['label'], 'desc': v['desc'],
                 'color_limit': v['color_limit'], 'smooth': v['smooth'],
-                'min_area': v['min_area'], 'enhance': v['enhance']}
+                'min_area': v['min_area'], 'enhance': v['enhance'],
+                # 'detail' -> web bật/tắt nút "Độ chi tiết đánh số"; 'large' -> khổ TO.
+                'detail': bool(v.get('detail')), 'large': bool(v.get('large'))}
             for k, v in PRESETS.items()}
 
 

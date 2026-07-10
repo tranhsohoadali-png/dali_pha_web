@@ -65,6 +65,16 @@
                     <option value="3">Mạnh (ảnh màu nước/ảnh chụp)</option>
                   </select>
                 </div>
+                <div class="col-12" id="ndWrap">
+                  <label class="form-label small mb-1">Độ chi tiết đánh số <span class="text-secondary fw-normal" id="ndHint">— chỉ áp cho Tranh thiết kế / Cây–Hoa</span></label>
+                  <select name="num_detail" class="form-select form-select-sm">
+                    <option value="tho">Thô — ô to hơn ~50%, số to nhất, dễ tô</option>
+                    <option value="chuan" selected>Chuẩn (như trước giờ)</option>
+                    <option value="chitiet">Chi tiết — ô nhỏ hơn ~25%</option>
+                    <option value="sieu">Siêu chi tiết — ô nhỏ hơn ~40% (trần của máy)</option>
+                  </select>
+                  <div class="form-text">Giữ được càng nhiều ô nhỏ (lá, cánh hoa) thì bản đồ càng chi tiết, nhưng số ở các ô bé đó cũng bé theo (khó tô hơn). Ô to vẫn giữ số to như cũ, và không bao giờ có ô thiếu số. Thời gian xử lý gần như không đổi. Ảnh gốc càng nét (≥2400px) càng ăn thua.</div>
+                </div>
                 <div class="col-12">
                   <label class="form-label small mb-1">Khổ in (cm) <span class="text-secondary fw-normal">— tranh khổ TO phải chọn LỚN (vd 120×200), KHÔNG để 40×50</span></label>
                   <select name="print_size" class="form-select form-select-sm">
@@ -246,6 +256,14 @@
     var sm=document.querySelector('[name="smooth"]'); if(sm) sm.value=String(p.smooth||0);
     var ps=document.querySelector('[name="print_size"]');
     if(ps && (k==='kholon'||p.large)) ps.value='120x200';
+    // "Độ chi tiết đánh số" chỉ ăn vào preset chi tiết (Tranh thiết kế / Cây-Hoa).
+    // Khổ TO có sàn số riêng (mm thật) nên cũng không dùng nút này.
+    // Giữ nguyên lựa chọn khi đổi qua-lại preset: select disabled không được gửi lên,
+    // backend tự về 'chuan' -> không cần reset value (đổi lại preset chi tiết thì còn).
+    var nd=document.querySelector('[name="num_detail"]'), ndh=document.getElementById('ndHint');
+    var ndOn=!!p.detail && !p.large && k!=='kholon';
+    if(nd) nd.disabled=!ndOn;
+    if(ndh) ndh.textContent=ndOn?'— giữ ô nhỏ tới cỡ nào':'— không áp cho loại tranh này';
     document.getElementById('presetBase').value=p.base||k;
     var en=document.getElementById('enhance');
     if(en){ en.checked=!!p.enhance; var sw=document.getElementById('styleWrap'); if(sw) sw.classList.toggle('d-none',!en.checked); }
@@ -380,10 +398,11 @@
       // Dòng thông số đã dùng (để kiểm tra)
       var p=res.params||{}; var pi=document.getElementById('paramInfo');
       var sm=['Không','Nhẹ','Vừa','Mạnh'][p.smooth||0]||'Không';
-      var dl=['Dễ tô nhất','Dễ tô','Vừa','Chi tiết','Chi tiết nhất'];
+      var ND={tho:'Thô',chuan:'Chuẩn',chitiet:'Chi tiết',sieu:'Siêu chi tiết'};
       var t='<i class="bi bi-sliders"></i> Thông số: '+(p.color_limit?('Số màu '+p.color_limit):'Số màu tự động')
             +' · '+(p.min_area?('Bỏ mảng <'+p.min_area+'px'):'Không lọc mảng')
             +(p.print_size?(' · Khổ '+p.print_size):'')
+            +(p.detail?(' · Chi tiết: '+(ND[p.num_detail]||'Chuẩn')):'')
             +' · Đơn giản: '+sm
             +' · AI: '+(p.enhance?'có':'không')+(p.enhance&&p.style_category?(' ('+p.style_category+')'):'');
       pi.innerHTML=t; pi.classList.remove('d-none');
