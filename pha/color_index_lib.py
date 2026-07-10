@@ -776,7 +776,7 @@ def _refine_faces(arr, im_pre, boxes, s, k_face=24):
 
 
 def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=None,
-                   detail=False, face_priority=False):
+                   detail=False, face_priority=False, size_scale=1.0):
     """Tạo ảnh THIẾT KẾ chất lượng Illustrator-trace rồi lưu file LÀM VIỆC tạm (1x)
     cho khâu đánh số. Trả đường_dẫn_tạm.
 
@@ -878,7 +878,9 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         del src2x
     else:
         del src2x
-        r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s
+        # size_scale>1 (khổ NHỎ 20x20/30x30): số sẽ vẽ TO hơn (giữ mm khi in) -> ngưỡng
+        # gộp ô cũng PHÓNG theo, kẻo ô giữ lại mà không nhét nổi số (ô-trống).
+        r_keep = ((MIN_TEXT_SIZE * size_scale + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s
         arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=18.0,
                                          min_area=int(min_area * s * s), max_pass=4,
                                          protect=face_protect)
@@ -888,8 +890,8 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         ks = int(round(3 * s)) | 1                      # ksize lẻ (3 ở 1x, 7 ở 2x)
         arr = _smooth_boundaries(arr, ksize=max(3, ks), protect_mask=feat)
         arr = _smooth_labels_voting(arr, sigma=1.6 * s, protect=feat)
-        arr, _ = _merge_keep_features(arr, r_keep=1.8 * s, de_keep=10.0, max_pass=2,
-                                      protect=face_protect)
+        arr, _ = _merge_keep_features(arr, r_keep=1.8 * s * size_scale, de_keep=10.0,
+                                      max_pass=2, protect=face_protect)
     # CHÂN DUNG: dán vùng mặt CHI TIẾT (lượng tử cục bộ) đè lên kết quả gộp -> mặt nhỏ
     # hết chảy. Làm TRƯỚC _smooth_fill để vệt oval được làm mượt cùng các biên khác.
     if im_pre is not None and face_boxes:
@@ -911,7 +913,8 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     if detail:
         # HOA/CẢNH: gộp ô không đặt nổi SỐ NGANG vào hàng xóm (sau khi mượt biên) ->
         # bản đồ SẠCH, số ngang to & đều. Có thể rớt vài màu hiếm (ưu tiên sạch).
-        arr = _merge_unnumberable(arr, _DETAIL_NUM_MIN_H, s, n_colors=target)
+        # size_scale: khổ NHỎ -> số sàn to hơn -> gộp theo cùng tỉ lệ.
+        arr = _merge_unnumberable(arr, _DETAIL_NUM_MIN_H * size_scale, s, n_colors=target)
 
     if design_out:
         try:
@@ -1408,7 +1411,7 @@ def _smooth_fill(arr, iters=2):
     return out
 
 
-def _place_detail_numbers(img_white, mask, num_str, draws, rs):
+def _place_detail_numbers(img_white, mask, num_str, draws, rs, size_scale=1.0):
     """HOA/CẢNH: đánh SỐ NGANG từng ô (connected component) của 'mask' — KHÔNG để sót.
     mask + img_white CÙNG ĐỘ PHÂN GIẢI (bản 2x = ĐÚNG vùng _merge_unnumberable đã quyết)
     -> ô nào merge GIỮ thì ở đây CHẮC CHẮN đặt được số (không lệch 2x<->1x) -> 0 ô trống.
@@ -1418,7 +1421,8 @@ def _place_detail_numbers(img_white, mask, num_str, draws, rs):
     # SÀN số = MIN_TEXT_SIZE (không phải _DETAIL_NUM_MIN_H): _merge_unnumberable đã GỘP hết ô
     # nhỏ KHÔNG-phải-lỗ-kín; cái còn sót dưới _DETAIL_NUM_MIN_H chỉ là LỖ KÍN (counter) cố ý
     # GIỮ -> cần cho số NHỎ ở đây. Ô thường vẫn ra số to (lớn dần tới mean), không bị bé đi.
-    mn, me, mx = MIN_TEXT_SIZE * rs, MEAN_TEXT_SIZE * rs, MAX_TEXT_SIZE * rs
+    ss = float(size_scale) if (size_scale and float(size_scale) > 1.0) else 1.0
+    mn, me, mx = MIN_TEXT_SIZE * rs * ss, MEAN_TEXT_SIZE * rs * ss, MAX_TEXT_SIZE * rs * ss
     for k in range(1, nc):
         if int(stats[k, cv2.CC_STAT_AREA]) < 4:
             continue
@@ -1438,7 +1442,8 @@ def _place_detail_numbers(img_white, mask, num_str, draws, rs):
 
 
 def _number_work_image(work_path, design_out=None, debug=False,
-                       render_arr=None, render_scale=1.0, keep_all=False):
+                       render_arr=None, render_scale=1.0, keep_all=False,
+                       size_scale=1.0):
     """ĐÁNH SỐ + đếm % trên 1 ảnh LÀM VIỆC đã chuẩn bị — đây là phần index_color GỐC
     (extract màu -> contour từng màu -> polylabel -> vẽ số). design_out: lưu ảnh work
     (bản màu phẳng) để xem trước. Xoá file work tạm khi xong.
@@ -1471,11 +1476,13 @@ def _number_work_image(work_path, design_out=None, debug=False,
 
     rs = float(render_scale) if (render_arr is not None and render_scale
                                  and float(render_scale) > 1.0) else 1.0
-    # Cỡ số CHUẨN theo px trên ảnh 1x — nhân theo scale khi vẽ trên nền 2x.
-    min_t, mean_t, max_t = MIN_TEXT_SIZE * rs, MEAN_TEXT_SIZE * rs, MAX_TEXT_SIZE * rs
+    ss = float(size_scale) if (size_scale and float(size_scale) > 1.0) else 1.0
+    # Cỡ số CHUẨN theo px trên ảnh 1x — nhân theo scale khi vẽ trên nền 2x. size_scale (ss):
+    # khổ NHỎ 20x20/30x30 -> số PHÓNG 50/khổ để in ra giữ đúng mm như chuẩn 40x50.
+    min_t, mean_t, max_t = MIN_TEXT_SIZE * rs * ss, MEAN_TEXT_SIZE * rs * ss, MAX_TEXT_SIZE * rs * ss
     # HOA/CẢNH: SÀN cỡ số = _DETAIL_NUM_MIN_H (không vẽ số nhỏ hơn; ô không đủ đã được
     # _merge_unnumberable gộp vào hàng xóm ở khâu dựng ảnh) -> số to & đều, bản đồ sạch.
-    num_min_t = (_DETAIL_NUM_MIN_H * rs) if keep_all else min_t
+    num_min_t = (_DETAIL_NUM_MIN_H * rs * ss) if keep_all else min_t
 
     if rs > 1.0:
         big_rgb = np.ascontiguousarray(render_arr)
@@ -1514,7 +1521,8 @@ def _number_work_image(work_path, design_out=None, debug=False,
             # CHẮN có số -> KHÔNG để sót ô.
             num_src = big_rgb if (rs > 1.0 and big_rgb is not None) else img_rgb
             count_number = _place_detail_numbers(img_white, cv2.inRange(num_src, color, color),
-                                                 f'{len(color_mapping) + 1}', draws, rs)
+                                                 f'{len(color_mapping) + 1}', draws, rs,
+                                                 size_scale=ss)
         else:
             centers, dists = get_center_poly_from_contours(contours, hierarchy, range_img, np.array(img), debug=debug)
             count_number = 0
@@ -1572,17 +1580,26 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
     design_out: nếu có, lưu ảnh THIẾT KẾ (bản màu phẳng đã gom) ra đường dẫn này.
     detail=True: chế độ CÂY/HOA — giữ nhiều ô nhỏ, ít gộp -> số nhỏ, chi tiết.
     face_priority=True: ảnh CHÂN DUNG thật — dò & bảo vệ ngũ quan (mắt/mũi/miệng).
-    print_long_cm: nhận cho tương thích, không dùng (cỡ số cố định)."""
+    print_long_cm: KHỔ NHỎ (<=35cm, vd 20x20/30x30) -> PHÓNG cỡ số + ngưỡng gộp theo
+    tỉ lệ 50/khổ để số/ô IN RA giữ đúng mm như chuẩn 40x50 (in 20cm số không teo còn
+    một nửa, ô li ti không tô nổi). Khổ >=40cm giữ NGUYÊN chuẩn cũ (không đổi kết quả)."""
     effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
+    try:
+        _L = float(print_long_cm or 0)
+    except (TypeError, ValueError):
+        _L = 0.0
+    size_scale = min(2.5, 50.0 / _L) if 0 < _L <= 35 else 1.0
     # design_out được ghi NGAY trong _quantize_file (bản 2x sắc nét);
     # bản đồ SỐ vẽ nét trên ảnh 2x (mượt), vị trí số tính trên bản 1x (nhanh).
     work_path, arr2x, s = _quantize_file(path, effective_n, smooth=smooth,
                                          min_area=min_area,
                                          print_long_cm=print_long_cm,
                                          design_out=design_out, detail=detail,
-                                         face_priority=face_priority)
+                                         face_priority=face_priority,
+                                         size_scale=size_scale)
     return _number_work_image(work_path, design_out=None, debug=debug,
-                              render_arr=arr2x, render_scale=s, keep_all=detail)
+                              render_arr=arr2x, render_scale=s, keep_all=detail,
+                              size_scale=size_scale)
 
 
 def index_color_flat(path, min_area=0, design_out=None):
