@@ -117,7 +117,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_URL = '/login'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/login'
-SESSION_COOKIE_AGE = 60 * 60 * 24 * 30   # giữ đăng nhập 30 ngày (nhân viên đỡ phải nhập lại)
+# Giữ đăng nhập 1 NĂM. Trước để 30 ngày -> vì Django KHÔNG gia hạn hạn session khi dùng
+# (không bật SESSION_SAVE_EVERY_REQUEST), cả nhóm đăng nhập cùng ngày sẽ bị đá ra cùng ngày,
+# đúng 30 ngày sau (07/07/2026 là đợt của những người đăng nhập 07/06/2026).
+# LƯU Ý: chỉ áp cho session TẠO MỚI sau khi deploy; session cũ vẫn hết hạn theo mốc 30 ngày cũ.
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 365   # 1 năm
 
 # Nếu chạy sau reverse-proxy (nginx) có HTTPS:
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
