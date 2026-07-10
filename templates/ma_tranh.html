@@ -142,15 +142,18 @@
                   <td>{% if r.assignee %}<span class="badge text-bg-info">{{ r.assignee }}</span>{% else %}<span class="text-secondary">Mọi người</span>{% endif %}</td>
                   <td class="text-center">{{ r.qty }}</td>
                   <td class="small">{{ r.note }}</td>
-                  <td class="text-end text-nowrap">
-                    <form method="POST" action="/ma-tranh" class="d-inline">{% csrf_token %}
-                      <input type="hidden" name="action" value="done_request"><input type="hidden" name="id" value="{{ r.id }}">
-                      <button class="btn btn-sm btn-success py-0"><i class="bi bi-check-lg"></i> Đã rót</button>
-                    </form>
-                    <form method="POST" action="/ma-tranh" class="d-inline" onsubmit="return confirm('Xoá yêu cầu này?')">{% csrf_token %}
-                      <input type="hidden" name="action" value="delete_request"><input type="hidden" name="id" value="{{ r.id }}">
-                      <button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-x-lg"></i></button>
-                    </form>
+                  <td class="text-end">
+                    <span class="badge text-bg-warning d-inline-block mb-1"><i class="bi bi-hourglass-split"></i> Đang chuẩn bị</span>
+                    <div class="text-nowrap">
+                      <form method="POST" action="/ma-tranh" class="d-inline">{% csrf_token %}
+                        <input type="hidden" name="action" value="done_request"><input type="hidden" name="id" value="{{ r.id }}">
+                        <button class="btn btn-sm btn-success py-0"><i class="bi bi-check-lg"></i> Xác nhận rót xong</button>
+                      </form>
+                      <form method="POST" action="/ma-tranh" class="d-inline" onsubmit="return confirm('Xoá yêu cầu này?')">{% csrf_token %}
+                        <input type="hidden" name="action" value="delete_request"><input type="hidden" name="id" value="{{ r.id }}">
+                        <button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-x-lg"></i></button>
+                      </form>
+                    </div>
                   </td>
                 </tr>
                 {% endfor %}

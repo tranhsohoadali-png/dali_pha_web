@@ -304,9 +304,9 @@
             '<b class="flex-grow-1">'+escp(r.painting)+' <span class="text-secondary">×'+r.qty+'</span> <span class="badge text-bg-primary">'+(r.count||0)+' màu</span></b>'+
             (r.image?'<img src="'+r.image+'" class="rounded border zoom-img" style="height:38px;cursor:zoom-in">':'')+
           '</div>'+
-          '<div class="small mt-1">'+(r.assignee?'<span class="badge text-bg-info">'+escp(r.assignee)+'</span>':'<span class="text-secondary">Mọi người</span>')+(r.note?' · '+escp(r.note):'')+'</div>'+
+          '<div class="small mt-1"><span class="badge text-bg-warning"><i class="bi bi-hourglass-split"></i> Đang chuẩn bị</span> '+(r.assignee?'<span class="badge text-bg-info">'+escp(r.assignee)+'</span>':'<span class="text-secondary">Mọi người</span>')+(r.note?' · '+escp(r.note):'')+'</div>'+
           '<div class="d-flex gap-2 mt-2">'+
-            '<button class="btn btn-sm btn-success flex-fill rdone" data-id="'+r.id+'"><i class="bi bi-check-lg"></i> Đã rót</button>'+
+            '<button class="btn btn-sm btn-success flex-fill rdone" data-id="'+r.id+'"><i class="bi bi-check-lg"></i> Xác nhận rót xong</button>'+
             '<button class="btn btn-sm btn-outline-danger rdel" data-id="'+r.id+'"><i class="bi bi-x-lg"></i></button>'+
           '</div>'+
         '</div>';
