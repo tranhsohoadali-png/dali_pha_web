@@ -2069,10 +2069,19 @@ def _attendance_ips():
 
 
 def _ip_allowed(ip):
-    """True nếu ip khớp danh sách IP công ty. Mỗi mục: IP đầy đủ (113.161.4.20) hoặc
-    tiền tố theo octet (113.161. hoặc 113.161.4). Chưa cấu hình -> cho phép (để lấy IP)."""
+    """True nếu ip khớp danh sách IP công ty (nhập tay) HOẶC IP xưởng TỰ CẬP NHẬT
+    (pha/wifi_ip.py — agent in ở xưởng báo về, kèm ân hạn IP cũ). Mỗi mục nhập tay:
+    IP đầy đủ (113.161.4.20) hoặc tiền tố theo octet (113.161. / 113.161.4).
+    Chưa cấu hình GÌ CẢ -> cho phép (để lấy IP)."""
     allow = _attendance_ips()
-    if not allow:
+    try:
+        from pha.wifi_ip import auto_ips
+        auto = auto_ips()
+    except Exception:
+        auto = []
+    if not allow and not auto:
+        return True
+    if ip and ip in auto:
         return True
     for a in allow:
         if ip == a:

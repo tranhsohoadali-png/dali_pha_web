@@ -116,6 +116,91 @@ proxy_set_header X-Real-IP $remote_addr;</pre>
           </div>
         </div>
 
+        <!-- IP WiFi xưởng TỰ CẬP NHẬT (agent in báo về) -->
+        <div class="card shadow-sm">
+          <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="bi bi-arrow-repeat text-success"></i> Tự cập nhật IP WiFi xưởng</span>
+            <span class="small text-secondary fst-italic fw-normal">Khỏi sửa tay mỗi lần nhà mạng đổi IP</span>
+          </div>
+          <div class="card-body">
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="wAuto">
+              <label class="form-check-label fw-semibold" for="wAuto">
+                Cho <b>máy in (DALI Print Agent)</b> tự ghi IP xưởng
+              </label>
+            </div>
+            <div id="wBox" class="small text-secondary">Đang tải…</div>
+            <div class="d-flex gap-2 mt-2 flex-wrap">
+              <button id="wSetNow" type="button" class="btn btn-sm btn-success">
+                <i class="bi bi-pin-map"></i> Dùng IP hiện tại làm IP xưởng
+              </button>
+              <button id="wClear" type="button" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-x-lg"></i> Xoá IP tự động
+              </button>
+            </div>
+            <div class="small text-secondary mt-2">
+              Agent ở xưởng poll server mỗi 3 giây → server thấy đúng IP WiFi xưởng.
+              Khi IP đổi, <b>IP cũ vẫn dùng được thêm <span id="wGrace">12</span> giờ</b> (ân hạn, không chặn giữa ca).
+              Nếu agent tắt, bấm nút trên <b>khi đang đứng ở xưởng</b>.
+            </div>
+          </div>
+        </div>
+
+        <script>
+        (function(){
+          function csrf(){ var m=document.cookie.match(/csrftoken=([^;]+)/); return m?m[1]:''; }
+          function post(url, body){
+            return fetch(url, {method:'POST', headers:{'X-CSRFToken':csrf(),
+              'Content-Type':'application/x-www-form-urlencoded'}, body:body||''}).then(function(r){return r.json();});
+          }
+          var box=document.getElementById('wBox'), sw=document.getElementById('wAuto');
+          function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){
+            return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+          function load(){
+            fetch('/api/wifi-ip').then(function(r){return r.json();}).then(function(d){
+              if(!d.ok) return;
+              sw.checked = !!d.on;
+              document.getElementById('wGrace').textContent = d.grace_hours;
+              var h = '';
+              h += '<div>IP xưởng đang áp dụng: <b class="text-success">'+(esc(d.auto)||'—')+'</b>'
+                 + (d.auto_at? ' <span class="text-secondary">(đặt lúc '+esc(d.auto_at)+')</span>':'') + '</div>';
+              h += '<div>Máy in (agent) báo IP: <b>'+(esc(d.seen)||'chưa thấy agent')+'</b> '
+                 + (d.agent_online? '<span class="badge text-bg-success">agent ONLINE</span>'
+                                  : '<span class="badge text-bg-secondary">agent OFFLINE</span>')
+                 + (d.seen_last? ' <span class="text-secondary">(báo lúc '+esc(d.seen_last)+')</span>':'') + '</div>';
+              if(d.prev) h += '<div class="text-warning">IP cũ '+esc(d.prev)+' còn ân hạn '+esc(d.grace_left)+'</div>';
+              h += '<div>IP bạn đang truy cập: <b>'+esc(d.cur_ip)+'</b>'
+                 + (d.cur_private? ' <span class="badge text-bg-danger">nội bộ — nginx chưa chuyển IP thật</span>':'') + '</div>';
+              if(!d.cur_is_v4)
+                h += '<div class="alert alert-danger py-1 px-2 mt-2 mb-0 small"><b>Bạn đang vào bằng IPv6.</b> '
+                   + 'Chấm công theo IP chỉ chạy với IPv4 (IPv6 không có NAT, mỗi máy một địa chỉ riêng). '
+                   + 'Tắt IPv6 trên router/WiFi xưởng, hoặc dùng danh sách IP nhập tay.</div>';
+              if(d.seen && d.auto && !d.match)
+                h += '<div class="alert alert-warning py-1 px-2 mt-2 mb-0 small">Agent đang báo IP <b>'+esc(d.seen)
+                   + '</b> khác IP xưởng <b>'+esc(d.auto)+'</b>. Bật công tắc trên để áp dụng IP agent.</div>';
+              if(!d.seen)
+                h += '<div class="alert alert-secondary py-1 px-2 mt-2 mb-0 small">Chưa nhận được IP từ agent — hãy bật DALI Print Agent trên máy in.</div>';
+              box.innerHTML = h;
+            }).catch(function(){ box.innerHTML='<span class="text-danger">Lỗi tải trạng thái.</span>'; });
+          }
+          sw.addEventListener('change', function(){
+            post('/api/wifi-ip/toggle', 'on='+(sw.checked?'1':'0')).then(function(d){
+              if(d && d.ok === false && d.msg) alert(d.msg);   // vd: agent chưa online -> từ chối bật
+              load();                                          // load() đồng bộ lại công tắc theo server
+            });
+          });
+          document.getElementById('wSetNow').addEventListener('click', function(){
+            if(!confirm('Đặt IP bạn ĐANG truy cập làm IP WiFi xưởng?\n\nChỉ bấm khi bạn đang ở XƯỞNG — nếu bấm ở nhà, nhân viên sẽ không chấm công được.')) return;
+            post('/api/wifi-ip/set').then(function(d){ alert(d.msg||''); load(); });
+          });
+          document.getElementById('wClear').addEventListener('click', function(){
+            if(!confirm('TẮT tự cập nhật và xoá IP xưởng?\n\nSau đó chấm công chỉ theo danh sách IP nhập tay. Muốn tự động lại thì bật công tắc.')) return;
+            post('/api/wifi-ip/clear').then(function(d){ alert(d.msg||''); load(); });
+          });
+          load(); setInterval(load, 30000);
+        })();
+        </script>
+
         <!-- Khung giờ & quy định -->
         <div class="card shadow-sm">
           <div class="card-header"><i class="bi bi-clock-history text-primary"></i> Khung giờ làm việc &amp; quy định</div>

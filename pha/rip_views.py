@@ -45,6 +45,13 @@ def rip_queue(request):
     (-> sent) để không lấy lại; Agent báo lại trạng thái qua rip_status."""
     if not _check_key(request):
         return HttpResponseForbidden('bad key')
+    try:
+        # Agent chạy TẠI XƯỞNG -> IP công cộng của nó = IP WiFi xưởng. Ghi nhận để
+        # chấm công tự cập nhật IP (pha/wifi_ip.py). Không được làm hỏng vòng poll.
+        from pha.wifi_ip import remember as _remember_wifi_ip
+        _remember_wifi_ip(request)
+    except Exception:
+        pass
     from pha.models import PrintJob
     jobs = list(PrintJob.objects.filter(status=PrintJob.PENDING).order_by('created')[:20])
     out = []

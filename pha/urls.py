@@ -14,6 +14,7 @@ from pha import imposition
 from pha import in_a3 as in_a3_views
 from pha import large_format
 from pha import rip_views
+from pha import wifi_ip
 
 urlpatterns = [
     path('login', views.login_view, name='login'),
@@ -97,6 +98,11 @@ urlpatterns = [
     path('kho-lon/status', large_format.kho_lon_status, name='kho_lon_status'),
     # Hàng đợi RIP (web <-> DALI Print Agent <-> Flexi)
     path('api/rip-queue', rip_views.rip_queue, name='rip_queue'),
+    # IP WiFi xưởng tự cập nhật (chấm công) — chỉ quản lý
+    path('api/wifi-ip', wifi_ip.wifi_ip_status, name='wifi_ip_status'),
+    path('api/wifi-ip/set', wifi_ip.wifi_ip_set, name='wifi_ip_set'),
+    path('api/wifi-ip/toggle', wifi_ip.wifi_ip_toggle, name='wifi_ip_toggle'),
+    path('api/wifi-ip/clear', wifi_ip.wifi_ip_clear, name='wifi_ip_clear'),
     path('api/rip-status', rip_views.rip_status, name='rip_status'),
     path('api/rip-list', rip_views.rip_list, name='rip_list'),
     path('api/rip-action', rip_views.rip_action, name='rip_action'),
