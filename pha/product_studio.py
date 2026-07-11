@@ -153,14 +153,32 @@ def _compose_scene(tpl_bgr, spec, art_bgr):
         piece = cv2.warpPerspective(art, M, (W, H), flags=cv2.INTER_LINEAR)
         sel = comp > 0
         warped[sel] = piece[sel]
-    mask = cv2.dilate(mask, np.ones((3, 3), np.uint8))
-    # nở mask kéo theo mép: lấp phần nở bằng chính warped gần nhất (inpaint mép 1px)
-    ring = (mask > 0) & (warped.sum(2) == 0)
-    if ring.any():
+    # Mask THAY THẾ = mask chuẩn + QUẦNG xanh JPEG quanh mép (nén JPEG loang màu
+    # xanh 2-3px sang khung -> nếu chỉ nở 1px sẽ sót viền xanh quanh tranh).
+    hsv = cv2.cvtColor(tpl_bgr, cv2.COLOR_BGR2HSV)
+    loose = cv2.inRange(hsv, (40, 60, 60), (85, 255, 255))
+    near = cv2.dilate(mask, np.ones((11, 11), np.uint8))
+    rep = cv2.bitwise_or(mask, cv2.bitwise_and(loose, near))
+    rep = cv2.dilate(rep, np.ones((3, 3), np.uint8))
+    # mask nở rộng hơn quad: lấp phần nở bằng chính warped gần nhất (kéo mép tranh ra)
+    for _ in range(3):
+        ring = (rep > 0) & (warped.sum(2) == 0)
+        if not ring.any():
+            break
         warped[ring] = cv2.dilate(warped, np.ones((5, 5), np.uint8))[ring]
-    alpha = (cv2.GaussianBlur(mask, (3, 3), 0).astype(np.float32) / 255.0)[..., None]
-    return (tpl_bgr.astype(np.float32) * (1 - alpha)
-            + warped.astype(np.float32) * alpha).astype(np.uint8)
+    alpha = (cv2.GaussianBlur(rep, (3, 3), 0).astype(np.float32) / 255.0)[..., None]
+    out = (tpl_bgr.astype(np.float32) * (1 - alpha)
+           + warped.astype(np.float32) * alpha).astype(np.uint8)
+    # DESPILL: ngoài vùng thay thế nhưng sát mép vẫn có thể còn pixel ÁM XANH
+    # (halo nén) -> ghìm kênh G về max(R,B). CHỈ làm ngoài rep nên màu xanh
+    # THẬT của tranh (lá cây trong art) không bị đụng.
+    band = (cv2.dilate(rep, np.ones((9, 9), np.uint8)) > 0) & (rep == 0)
+    if band.any():
+        b, g, r = out[..., 0].astype(np.int16), out[..., 1].astype(np.int16), out[..., 2].astype(np.int16)
+        spill = band & (g > np.maximum(b, r) + 12)
+        if spill.any():
+            out[..., 1][spill] = np.maximum(b, r)[spill].astype(np.uint8)
+    return out
 
 
 _logo_cache = [None]
