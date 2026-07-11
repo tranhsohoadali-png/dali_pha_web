@@ -135,10 +135,10 @@
                 <select id="pubCat" class="form-select form-select-sm"></select></div>
               <div class="col-3"><label class="form-label small mb-1">Số màu</label>
                 <input id="pubColors" class="form-control form-control-sm"></div>
-              <div class="col-4"><label class="form-label small mb-1">Giá (đ)</label>
-                <input id="pubPrice" type="number" class="form-control form-control-sm"></div>
+              <div class="col-4"><label class="form-label small mb-1">Giá KM (đ, tuỳ chọn)</label>
+                <input id="pubPrice" type="number" class="form-control form-control-sm" placeholder="bỏ trống nếu không giảm"></div>
             </div>
-            <label class="form-label small mb-1 mt-2">Khổ bán <span class="text-secondary">(tick sẵn theo họ tỉ lệ khổ gốc — giá tự theo khổ nhỏ nhất)</span></label>
+            <label class="form-label small mb-1 mt-2">Khổ bán <span class="text-secondary">(tick sẵn theo họ tỉ lệ khổ gốc — GIÁ BÁN tự theo bảng khổ trên web)</span></label>
             <div id="pubSizeWarn" class="alert alert-danger py-1 small d-none">KT gốc không khớp khổ nào trong catalog — chọn khổ thủ công.</div>
             <div id="pubSizes" class="border rounded p-2"></div>
           </div>
@@ -310,7 +310,7 @@ function openPub(o, btn){
       document.getElementById('pubName').value='';
       document.getElementById('pubDesc').value='';
       document.getElementById('pubColors').value=j.suggest.colors||'';
-      document.getElementById('pubPrice').value=j.suggest.sale_price||'';
+      document.getElementById('pubPrice').value='';   // giá KM tuỳ chọn — giá bán tự theo khổ
       var cs=document.getElementById('pubCat'); cs.innerHTML='';
       (j.categories||[]).forEach(function(c){ var op=document.createElement('option'); op.value=c.id; op.textContent=c.name; cs.appendChild(op); });
       var last=localStorage.getItem('pubCat'); if(last && cs.querySelector('option[value="'+last+'"]')) cs.value=last;
@@ -350,20 +350,13 @@ function fireDraft(){
 }
 document.getElementById('pubName').addEventListener('input', function(){ PUB.userTouched.name=true; });
 document.getElementById('pubDesc').addEventListener('input', function(){ PUB.userTouched.desc=true; });
-document.getElementById('pubPrice').addEventListener('input', function(){ PUB.userTouched.price=true; });
-document.getElementById('pubSizes').addEventListener('change', function(){
-  if(PUB.userTouched.price) return;               // chủ sửa giá rồi thì không gợi ý đè
-  var ps=tickedSizes().map(function(c){ return parseInt(c.dataset.price)||0; }).filter(Boolean);
-  if(ps.length) document.getElementById('pubPrice').value=Math.min.apply(null, ps);
-});
 document.getElementById('pubGo').addEventListener('click', function(){
   var name=document.getElementById('pubName').value.trim();
   var sz=tickedSizes().map(function(c){ return c.value; });
-  var price=parseInt(document.getElementById('pubPrice').value)||0;
+  var price=parseInt(document.getElementById('pubPrice').value)||0;   // 0 = không giảm giá
   var err=document.getElementById('pubErr');
   if(!name){ err.textContent='Thiếu tên sản phẩm.'; err.classList.remove('d-none'); return; }
   if(!sz.length){ err.textContent='Chọn ít nhất 1 khổ bán.'; err.classList.remove('d-none'); return; }
-  if(price<=0){ err.textContent='Giá phải > 0.'; err.classList.remove('d-none'); return; }
   err.classList.add('d-none');
   var btn=this; btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> Đang đăng…';
   var fd=new URLSearchParams({id:PUB.o.id, name:name,

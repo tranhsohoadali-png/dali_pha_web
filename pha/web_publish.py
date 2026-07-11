@@ -269,16 +269,15 @@ def dang_web_chuan_bi(request):
         cat = _catalog()
         sizes = cat.get('sizes') or []
         ticks, matched = _ticks_for_kt(meta.get('kt'), sizes)
-        tick_prices = [s.get('price') or 0 for s in sizes if int(s['id']) in ticks]
-        suggest_price = min([p for p in tick_prices if p] or [0])
         pub = _reg().get((meta.get('ma') or '').strip()) or meta.get('published')
+        # GIÁ BÁN tự theo bảng khổ trên web — KHÔNG gửi; sale_price chỉ là
+        # giá KHUYẾN MÃI tuỳ chọn (web bắt phải NHỎ HƠN giá gốc).
         return JsonResponse({'ok': True, 'asset_id': aid,
                              'categories': cat.get('categories') or [],
                              'sizes': [{'id': int(s['id']), 'name': s.get('name'),
                                         'price': s.get('price') or 0,
                                         'checked': int(s['id']) in ticks} for s in sizes],
-                             'suggest': {'sale_price': suggest_price,
-                                         'ma': meta.get('ma') or '',
+                             'suggest': {'ma': meta.get('ma') or '',
                                          'kt': meta.get('kt') or '',
                                          'colors': meta.get('colors') or ''},
                              'size_matched': matched,
@@ -334,7 +333,9 @@ def dang_web_publish(request):
         name = (request.POST.get('name') or '').strip()
         desc = (request.POST.get('description') or '').strip()
         try:
-            price = int(float(request.POST.get('sale_price') or 0))
+            # GIÁ BÁN tự theo bảng khổ trên web. sale_price = giá KHUYẾN MÃI,
+            # TUỲ CHỌN — chỉ gửi khi có (web bắt phải NHỎ HƠN giá gốc của khổ).
+            sale = int(float(request.POST.get('sale_price') or 0))
             cat_id = int(request.POST.get('category_id') or 0)
             size_ids = [int(x) for x in request.POST.getlist('size_ids')]
             colors_count = int(request.POST.get('colors_count') or 0)
@@ -342,18 +343,18 @@ def dang_web_publish(request):
             raise _AgentErr('Giá/danh mục/khổ không hợp lệ.')
         if not name:
             raise _AgentErr('Thiếu tên sản phẩm.')
-        if price <= 0:
-            raise _AgentErr('Giá phải > 0.')
         if not cat_id or not size_ids:
             raise _AgentErr('Chọn danh mục và ít nhất 1 khổ.')
         valid_ids = {int(s['id']) for s in (_catalog().get('sizes') or [])}
         size_ids = [i for i in size_ids if i in valid_ids]
         if not size_ids:
             raise _AgentErr('Khổ đã chọn không còn trong catalog — tải lại trang.')
-        res = _request('POST', '/api/web/publish-product', json_body={
-            'name': name, 'description': desc, 'colors_count': colors_count,
-            'sale_price': price, 'category_id': cat_id, 'size_ids': size_ids,
-            'image_asset_id': int(aid)}, timeout=45)
+        body = {'name': name, 'description': desc, 'colors_count': colors_count,
+                'category_id': cat_id, 'size_ids': size_ids,
+                'image_asset_id': int(aid)}
+        if sale > 0:
+            body['sale_price'] = sale
+        res = _request('POST', '/api/web/publish-product', json_body=body, timeout=45)
         admin_url = res.get('admin_url') or ''
         rec = {'admin_url': admin_url, 'at': datetime.now().strftime('%Y-%m-%d %H:%M'),
                'out_id': oid, 'name': name}
