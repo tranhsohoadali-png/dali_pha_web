@@ -155,7 +155,8 @@
           <div class="row g-2 mb-2">
             <div class="col"><div class="small text-secondary mb-1">Ảnh gốc (đầu vào)</div><img id="imgOrigin" src="{{ file_url }}" class="result-img"></div>
             <div class="col" id="enhancedWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-stars text-warning"></i> Ảnh đã tăng cường (AI)</div><img id="imgEnhanced" src="#" class="result-img"></div>
-            <div class="col" id="designWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-palette-fill text-success"></i> Ảnh thiết kế (bản màu) <span class="text-secondary">· sửa HEX bên phải để đổi màu</span></div><canvas id="imgDesign" class="result-img"></canvas></div>
+            <div class="col" id="designWrap" hidden><div class="small text-secondary mb-1"><i class="bi bi-palette-fill text-success"></i> Ảnh thiết kế (bản màu) <span class="text-secondary">· sửa HEX bên phải để đổi màu</span></div><canvas id="imgDesign" class="result-img"></canvas>
+              <button id="btnFrame2" class="btn btn-warning btn-sm mt-2 w-100" hidden title="Đưa bản thiết kế này sang Xưởng ảnh: ghép khung mockup thành ảnh sản phẩm, tự điền Mã/KT/Số màu"><i class="bi bi-easel"></i> Đóng khung ảnh này (ảnh SP)</button></div>
             <div class="col"><div class="small text-secondary mb-1 d-flex justify-content-between"><span>Bản đồ đánh số</span><a id="btnZoom" href="#" class="text-success d-none" title="Phóng to 1:1 để kiểm tra số/biên trước khi in"><i class="bi bi-zoom-in"></i> Phóng to</a></div><img id="imgResult" src="#" class="result-img" hidden style="cursor:zoom-in"></div>
           </div>
           <div id="paramInfo" class="small text-secondary mb-3 d-none"></div>
@@ -221,15 +222,18 @@
   var curDesign = "";                 // URL bản thiết kế (bản màu) của kết quả hiện tại
   var curColorCount = 0;              // số màu THẬT của bảng (không phải trần cài đặt)
   var curPrintSize = "";              // khổ in đã chọn lúc xử lý (params.print_size)
-  // ĐÓNG KHUNG: đẩy bản thiết kế + Mã/KT/Số màu sang Xưởng ảnh (mở tab mới, tự điền sẵn)
+  // ĐÓNG KHUNG: đẩy bản thiết kế + Mã/KT/Số màu sang Xưởng ảnh (mở tab mới, tự điền sẵn).
+  // 2 nút cùng 1 việc: btnFrame2 ngay DƯỚI ảnh thiết kế (dễ thấy), btnFrame ở hàng nút dưới.
+  function openFrameStudio(){
+    if(!curDesign) return;
+    var ma=document.getElementById('imgName').value.trim();
+    var kt=curPrintSize||document.getElementById('scale').value;
+    window.open('/xuong-anh?art='+encodeURIComponent(curDesign)+'&ma='+encodeURIComponent(ma)
+                +'&kt='+encodeURIComponent(kt)+'&mau='+curColorCount, '_blank');
+  }
   document.addEventListener('DOMContentLoaded', function(){
-    document.getElementById('btnFrame').addEventListener('click', function(){
-      if(!curDesign) return;
-      var ma=document.getElementById('imgName').value.trim();
-      var kt=curPrintSize||document.getElementById('scale').value;
-      window.open('/xuong-anh?art='+encodeURIComponent(curDesign)+'&ma='+encodeURIComponent(ma)
-                  +'&kt='+encodeURIComponent(kt)+'&mau='+curColorCount, '_blank');
-    });
+    document.getElementById('btnFrame').addEventListener('click', openFrameStudio);
+    document.getElementById('btnFrame2').addEventListener('click', openFrameStudio);
   });
   var dz=document.getElementById('dz'), fi=document.getElementById('image');
   dz.addEventListener('click',function(){fi.click()});
@@ -430,6 +434,7 @@
       curColorCount=(res.colors||[]).length;
       curPrintSize=p.print_size||'';
       document.getElementById('btnFrame').hidden=!curDesign;   // có bản thiết kế mới đóng khung được
+      document.getElementById('btnFrame2').hidden=!curDesign;  // nút ngay dưới ảnh thiết kế
       showPalette(res.colors||[]); if(onDone)onDone();
     }).fail(function(){ spin(false); document.getElementById('err').textContent='Không kết nối được máy chủ.'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); });
   }
