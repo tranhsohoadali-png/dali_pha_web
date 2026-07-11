@@ -177,6 +177,7 @@
             <button id="btnPrint" class="btn btn-success btn-sm mt-3" hidden><i class="bi bi-download"></i> Tải bản in + A3</button>
             <a id="btnMat" class="btn btn-outline-success btn-sm mt-3 ms-1" hidden download target="_blank" title="Bản phóng to các vùng mặt (in kèm bản số để thợ đọc số ô nhỏ ở mặt)"><i class="bi bi-person-bounding-box"></i> Tải bản chi tiết mặt</a>
             <button id="btnLearn" class="btn btn-outline-primary btn-sm mt-3 ms-1" hidden title="Lưu ca này (ảnh gốc + thông số + thiết kế) vào kho học để hệ thống học dần"><i class="bi bi-mortarboard"></i> Lưu vào kho học</button>
+            <button id="btnFrame" class="btn btn-warning btn-sm mt-3 ms-1" hidden title="Đưa bản THIẾT KẾ (bản màu) sang Xưởng ảnh: ghép vào khung mockup -> ảnh Web + Shopee 1:1, tự điền Mã/KT/Số màu"><i class="bi bi-easel"></i> Đóng khung (ảnh SP)</button>
             <a href="/kho-hoc" class="btn btn-link btn-sm mt-3" title="Xem kho học">Kho học »</a>
           </div>
         </div>
@@ -217,6 +218,19 @@
 
 <script>
   var curUrl = "";
+  var curDesign = "";                 // URL bản thiết kế (bản màu) của kết quả hiện tại
+  var curColorCount = 0;              // số màu THẬT của bảng (không phải trần cài đặt)
+  var curPrintSize = "";              // khổ in đã chọn lúc xử lý (params.print_size)
+  // ĐÓNG KHUNG: đẩy bản thiết kế + Mã/KT/Số màu sang Xưởng ảnh (mở tab mới, tự điền sẵn)
+  document.addEventListener('DOMContentLoaded', function(){
+    document.getElementById('btnFrame').addEventListener('click', function(){
+      if(!curDesign) return;
+      var ma=document.getElementById('imgName').value.trim();
+      var kt=curPrintSize||document.getElementById('scale').value;
+      window.open('/xuong-anh?art='+encodeURIComponent(curDesign)+'&ma='+encodeURIComponent(ma)
+                  +'&kt='+encodeURIComponent(kt)+'&mau='+curColorCount, '_blank');
+    });
+  });
   var dz=document.getElementById('dz'), fi=document.getElementById('image');
   dz.addEventListener('click',function(){fi.click()});
   ['dragover','dragenter'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.style.borderColor='#198754'}));
@@ -393,6 +407,7 @@
       else { ew.hidden=true; }
       // Ảnh thiết kế (bản màu phẳng) - luôn hiện, kể cả khi không dùng AI
       var dw=document.getElementById('designWrap');
+      curDesign = res.design || '';
       if(res.design){ dw.hidden=false; loadDesign(res.design); }
       else { dw.hidden=true; loadDesign(''); }
       // Dòng thông số đã dùng (để kiểm tra)
@@ -412,6 +427,9 @@
       var mat=document.getElementById('btnMat');
       if(p.detail_sheet){ mat.href='/media/'+p.detail_sheet; mat.hidden=false; } else { mat.hidden=true; }
       var bl=document.getElementById('btnLearn'); bl.disabled=false; bl.classList.add('btn-outline-primary'); bl.classList.remove('btn-primary'); bl.innerHTML='<i class="bi bi-mortarboard"></i> Lưu vào kho học';
+      curColorCount=(res.colors||[]).length;
+      curPrintSize=p.print_size||'';
+      document.getElementById('btnFrame').hidden=!curDesign;   // có bản thiết kế mới đóng khung được
       showPalette(res.colors||[]); if(onDone)onDone();
     }).fail(function(){ spin(false); document.getElementById('err').textContent='Không kết nối được máy chủ.'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); });
   }

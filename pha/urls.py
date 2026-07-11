@@ -15,6 +15,7 @@ from pha import in_a3 as in_a3_views
 from pha import large_format
 from pha import rip_views
 from pha import wifi_ip
+from pha import product_studio
 
 urlpatterns = [
     path('login', views.login_view, name='login'),
@@ -96,6 +97,13 @@ urlpatterns = [
     path('kho-lon', large_format.kho_lon, name='kho_lon'),
     path('kho-lon/upload', large_format.kho_lon_upload, name='kho_lon_upload'),
     path('kho-lon/status', large_format.kho_lon_status, name='kho_lon_status'),
+
+    # XƯỞNG ẢNH SẢN PHẨM: đóng khung tranh vào mockup -> ảnh Web + Shopee 1:1
+    path('xuong-anh', product_studio.xuong_anh, name='xuong_anh'),
+    path('xuong-anh/khung-upload', product_studio.khung_upload, name='xuong_anh_khung_upload'),
+    path('xuong-anh/khung-xoa', product_studio.khung_xoa, name='xuong_anh_khung_xoa'),
+    path('xuong-anh/ghep', product_studio.ghep, name='xuong_anh_ghep'),
+    path('xuong-anh/out-xoa', product_studio.out_xoa, name='xuong_anh_out_xoa'),
     # Hàng đợi RIP (web <-> DALI Print Agent <-> Flexi)
     path('api/rip-queue', rip_views.rip_queue, name='rip_queue'),
     # IP WiFi xưởng tự cập nhật (chấm công) — chỉ quản lý

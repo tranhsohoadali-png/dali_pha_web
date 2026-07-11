@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Xưởng ảnh sản phẩm</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+  <style>
+    body{font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;}
+    [data-bs-theme=light] body.bg-body-tertiary{background-color:#f4f6f6!important;}
+    .page-head h1{font-size:1.35rem;font-weight:800;letter-spacing:-.01em;margin-bottom:.1rem;}
+    .page-head .sub{color:var(--bs-secondary-color);font-size:.875rem;}
+    .page-head .bi{color:#198754;}
+    .card{border-radius:16px;box-shadow:0 2px 12px rgba(25,135,84,.07);overflow:hidden;}
+    [data-bs-theme=light] .card{border:1px solid #e9ecef;}
+    .card-header{font-weight:700;padding:.85rem 1.1rem;}
+    [data-bs-theme=light] .card-header{background:#fff;border-bottom:1px solid #f0f2f1;}
+    .kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:.7rem;}
+    .kcard{border:2px solid #e3e6e8;border-radius:12px;overflow:hidden;background:var(--bs-body-bg);position:relative;cursor:pointer;transition:.12s;}
+    .kcard.sel{border-color:#198754;box-shadow:0 0 0 2px rgba(25,135,84,.25);}
+    .kthumb{height:110px;background:#f1f3f4;}
+    .kthumb img{width:100%;height:100%;object-fit:cover;}
+    .kname{font-size:.7rem;color:var(--bs-secondary-color);padding:.3rem .45rem;line-height:1.2;max-height:2.6em;overflow:hidden;}
+    .kratio{position:absolute;top:.35rem;left:.35rem;font-size:.65rem;background:rgba(0,0,0,.55);color:#fff;border-radius:6px;padding:0 .35rem;}
+    .kdel{position:absolute;top:.25rem;right:.25rem;padding:0 .35rem;font-size:.7rem;display:none;}
+    .kcard:hover .kdel{display:block;}
+    .kchk{position:absolute;bottom:.35rem;right:.35rem;font-size:1.05rem;color:#198754;display:none;}
+    .kcard.sel .kchk{display:block;}
+    .artbox{max-height:220px;border-radius:10px;border:1px solid #e3e6e8;object-fit:contain;background:#fff;}
+    .outimg{height:170px;object-fit:contain;background:#f8f9fa;border:1px solid #eceff0;border-radius:10px;width:100%;}
+    .drop{border:2px dashed #adb5bd;border-radius:14px;padding:1rem;text-align:center;cursor:pointer;transition:.15s;font-size:.85rem;}
+    .drop:hover,.drop.drag{border-color:#198754;background:rgba(25,135,84,.05);}
+  </style>
+</head>
+<body class="bg-body-tertiary">
+{% include '_nav.html' %}
+
+<div class="container-fluid py-3 px-3 px-md-4" style="max-width:1250px">
+  <div class="page-head mb-3">
+    <h1><i class="bi bi-easel"></i> Xưởng ảnh sản phẩm</h1>
+    <div class="sub">Ghép tranh vào khung mockup → mỗi khung ra 2 ảnh (Web + Shopee 1:1) kèm logo DALI + Mã/KT/Số màu. Tranh từ trang <a href="/xu-ly-anh">Tạo bản đồ màu</a> bấm <b>Đóng khung</b> là tự nhảy sang đây.</div>
+  </div>
+
+  <div id="err" class="alert alert-danger d-none"></div>
+
+  <!-- KHO KHUNG -->
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-grid-1x2 text-success"></i> Kho khung <span class="text-secondary fw-normal small">— nạp 1 lần, ảnh mockup có Ô MÀN XANH (#00FF00) chỗ đặt tranh</span></span>
+      <label class="btn btn-outline-success btn-sm mb-0"><i class="bi bi-cloud-arrow-up"></i> Nạp khung
+        <input id="khungFiles" type="file" accept="image/*" multiple hidden>
+      </label>
+    </div>
+    <div class="card-body">
+      <div id="khungGrid" class="kgrid"></div>
+      <div id="khungEmpty" class="text-secondary small text-center py-3 d-none">Chưa có khung nào — bấm "Nạp khung" để tải ảnh mockup màn xanh lên.</div>
+      <div class="small text-secondary mt-2">Bấm vào khung để CHỌN/BỎ CHỌN (được nhiều khung). <a href="#" id="selAll">Chọn hết</a> · <a href="#" id="selNone">Bỏ chọn hết</a></div>
+    </div>
+  </div>
+
+  <!-- GHÉP -->
+  <div class="card mb-3">
+    <div class="card-header"><i class="bi bi-images text-success"></i> Ghép tranh vào khung</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="small text-secondary mb-1">1) Tranh (bản thiết kế/bản màu)</div>
+          <img id="artPreview" class="artbox w-100 {% if not pre_art %}d-none{% endif %}" src="{{ pre_art }}">
+          <label class="drop d-block mt-2"><i class="bi bi-cloud-arrow-up"></i> <span id="artDropTxt">{% if pre_art %}Đã nhận tranh từ Bản đồ màu — bấm để đổi ảnh khác{% else %}Bấm chọn / kéo-thả ảnh tranh{% endif %}</span>
+            <input id="artFile" type="file" accept="image/*" hidden>
+          </label>
+          <input type="hidden" id="artPath" value="{{ pre_art }}">
+        </div>
+        <div class="col-md-8">
+          <div class="small text-secondary mb-1">2) Thông tin in lên ảnh</div>
+          <div class="row g-2">
+            <div class="col-6 col-lg-4"><label class="form-label small mb-1">Mã sản phẩm</label><input id="ma" class="form-control form-control-sm" placeholder="vd: C102" value="{{ pre_ma }}"></div>
+            <div class="col-6 col-lg-4"><label class="form-label small mb-1">KT (kích thước)</label><input id="kt" class="form-control form-control-sm" placeholder="vd: 40x50" value="{{ pre_kt }}"></div>
+            <div class="col-6 col-lg-4"><label class="form-label small mb-1">Số lượng màu</label><input id="mau" class="form-control form-control-sm" placeholder="vd: 24" value="{{ pre_mau }}"></div>
+          </div>
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" id="logoChk" checked>
+            <label class="form-check-label small" for="logoChk">Gắn logo DALI (góc trên)</label>
+          </div>
+          <button id="btnGhep" class="btn btn-success mt-3"><i class="bi bi-magic"></i> Tạo bộ ảnh sản phẩm</button>
+          <span id="ghepSpin" class="spinner-border spinner-border-sm text-success ms-2 d-none"></span>
+          <span id="ghepInfo" class="small text-secondary ms-2"></span>
+        </div>
+      </div>
+      <!-- kết quả vừa ghép -->
+      <div id="freshWrap" class="mt-3 d-none">
+        <div class="border-top pt-3 fw-semibold small mb-2"><i class="bi bi-stars text-warning"></i> Bộ ảnh vừa tạo — bấm ảnh để tải về</div>
+        <div id="freshGrid" class="row g-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ẢNH ĐÃ GHÉP -->
+  <div class="card mb-4">
+    <div class="card-header"><i class="bi bi-collection text-success"></i> Ảnh đã ghép <span class="text-secondary fw-normal small">— kho ảnh sản phẩm hoàn chỉnh (Web + Shopee 1:1)</span></div>
+    <div class="card-body">
+      <div id="outList"></div>
+      <div id="outEmpty" class="text-secondary small text-center py-3 d-none">Chưa có ảnh nào.</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+var KHUNG = {{ khung_json|safe }};
+var OUTS = {{ outs_json|safe }};
+function csrf(){ return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ''; }
+function showErr(m){ var e=document.getElementById('err'); if(!m){e.classList.add('d-none');return;} e.textContent=m; e.classList.remove('d-none'); }
+
+/* ---------- Kho khung ---------- */
+var SEL = new Set(KHUNG.map(k=>k.id));           // mặc định chọn hết (thao tác nhanh)
+function renderKhung(){
+  var g=document.getElementById('khungGrid'); g.innerHTML='';
+  document.getElementById('khungEmpty').classList.toggle('d-none', KHUNG.length>0);
+  KHUNG.forEach(function(k){
+    var d=document.createElement('div');
+    d.className='kcard'+(SEL.has(k.id)?' sel':'');
+    d.innerHTML='<div class="kthumb"><img src="'+k.url+'" loading="lazy"></div>'
+      +'<div class="kratio">'+((k.spec&&k.spec.ratio)||'')+'</div>'
+      +'<button class="btn btn-danger kdel" title="Xoá khung"><i class="bi bi-trash"></i></button>'
+      +'<i class="bi bi-check-circle-fill kchk"></i>'
+      +'<div class="kname">'+ (k.name||'') +'</div>';
+    d.addEventListener('click', function(ev){
+      if(ev.target.closest('.kdel')) return;
+      if(SEL.has(k.id)) SEL.delete(k.id); else SEL.add(k.id);
+      d.classList.toggle('sel', SEL.has(k.id));
+    });
+    d.querySelector('.kdel').addEventListener('click', function(){
+      if(!confirm('Xoá khung "'+(k.name||k.id)+'"?')) return;
+      fetch('/xuong-anh/khung-xoa',{method:'POST',headers:{'X-CSRFToken':csrf()},body:new URLSearchParams({id:k.id})})
+        .then(r=>r.json()).then(function(){ KHUNG=KHUNG.filter(x=>x.id!==k.id); SEL.delete(k.id); renderKhung(); });
+    });
+    g.appendChild(d);
+  });
+}
+document.getElementById('selAll').addEventListener('click', function(e){ e.preventDefault(); KHUNG.forEach(k=>SEL.add(k.id)); renderKhung(); });
+document.getElementById('selNone').addEventListener('click', function(e){ e.preventDefault(); SEL.clear(); renderKhung(); });
+document.getElementById('khungFiles').addEventListener('change', function(){
+  if(!this.files.length) return;
+  var fd=new FormData();
+  for(var f of this.files) fd.append('files', f);
+  showErr('');
+  fetch('/xuong-anh/khung-upload',{method:'POST',headers:{'X-CSRFToken':csrf()},body:fd})
+    .then(r=>r.json()).then(function(j){
+      if(j.added) j.added.forEach(function(k){ KHUNG.unshift(k); SEL.add(k.id); });
+      renderKhung();
+      if(j.errors && j.errors.length) showErr('Một số file lỗi: '+j.errors.join(' · '));
+    }).catch(function(){ showErr('Không kết nối được máy chủ.'); });
+  this.value='';
+});
+
+/* ---------- Tranh nguồn ---------- */
+var ART_FILE=null;
+document.getElementById('artFile').addEventListener('change', function(){
+  if(!this.files.length) return;
+  ART_FILE=this.files[0];
+  document.getElementById('artPath').value='';
+  var img=document.getElementById('artPreview');
+  img.src=URL.createObjectURL(ART_FILE); img.classList.remove('d-none');
+  document.getElementById('artDropTxt').textContent='Đã chọn: '+ART_FILE.name+' — bấm để đổi';
+});
+
+/* ---------- Ghép ---------- */
+function outCardHtml(o){
+  return '<div class="col-6 col-md-4 col-lg-3">'
+    +'<a href="'+o.web+'" download target="_blank"><img class="outimg" src="'+o.web+'" loading="lazy"></a>'
+    +'<div class="small text-center mt-1"><i class="bi bi-globe2"></i> Web</div></div>'
+    +'<div class="col-6 col-md-4 col-lg-3">'
+    +'<a href="'+o.shopee+'" download target="_blank"><img class="outimg" src="'+o.shopee+'" loading="lazy"></a>'
+    +'<div class="small text-center mt-1"><i class="bi bi-cart3"></i> Shopee 1:1</div></div>';
+}
+document.getElementById('btnGhep').addEventListener('click', function(){
+  showErr('');
+  if(!SEL.size) return showErr('Chưa chọn khung nào — bấm vào khung trong Kho khung.');
+  var artPath=document.getElementById('artPath').value;
+  if(!ART_FILE && !artPath) return showErr('Chưa có tranh — chọn ảnh hoặc sang Bản đồ màu bấm "Đóng khung".');
+  var fd=new FormData();
+  fd.append('ma', document.getElementById('ma').value);
+  fd.append('kt', document.getElementById('kt').value);
+  fd.append('colors', document.getElementById('mau').value);
+  fd.append('logo', document.getElementById('logoChk').checked?'1':'0');
+  SEL.forEach(id=>fd.append('khung', id));
+  if(ART_FILE) fd.append('art', ART_FILE); else fd.append('art_path', artPath);
+  var btn=this, sp=document.getElementById('ghepSpin');
+  btn.disabled=true; sp.classList.remove('d-none');
+  document.getElementById('ghepInfo').textContent='Đang ghép '+SEL.size+' khung…';
+  fetch('/xuong-anh/ghep',{method:'POST',headers:{'X-CSRFToken':csrf()},body:fd})
+    .then(r=>r.json()).then(function(j){
+      btn.disabled=false; sp.classList.add('d-none'); document.getElementById('ghepInfo').textContent='';
+      if(!j.ok){ showErr(j.error||(j.errors||[]).join(' · ')||'Lỗi ghép'); return; }
+      if(j.errors && j.errors.length) showErr('Một số khung lỗi: '+j.errors.join(' · '));
+      var fg=document.getElementById('freshGrid'); fg.innerHTML='';
+      j.results.forEach(function(o){ fg.insertAdjacentHTML('beforeend', outCardHtml(o)); OUTS.unshift(o); });
+      document.getElementById('freshWrap').classList.remove('d-none');
+      renderOuts();
+    }).catch(function(){ btn.disabled=false; sp.classList.add('d-none'); showErr('Không kết nối được máy chủ.'); });
+});
+
+/* ---------- Ảnh đã ghép ---------- */
+function renderOuts(){
+  var w=document.getElementById('outList'); w.innerHTML='';
+  document.getElementById('outEmpty').classList.toggle('d-none', OUTS.length>0);
+  OUTS.forEach(function(o){
+    var d=document.createElement('div');
+    d.className='border rounded-3 p-2 mb-2';
+    d.innerHTML='<div class="d-flex justify-content-between align-items-center mb-1">'
+      +'<span class="small fw-semibold">'+(o.ma||'—')+' · '+(o.kt||'')+' — '+(o.khung_name||'')+' <span class="text-secondary fw-normal">'+(o.created||'')+'</span></span>'
+      +'<button class="btn btn-outline-danger btn-sm odel"><i class="bi bi-trash"></i></button></div>'
+      +'<div class="row g-2">'+outCardHtml(o)+'</div>';
+    d.querySelector('.odel').addEventListener('click', function(){
+      if(!confirm('Xoá bộ ảnh này?')) return;
+      fetch('/xuong-anh/out-xoa',{method:'POST',headers:{'X-CSRFToken':csrf()},body:new URLSearchParams({id:o.id})})
+        .then(r=>r.json()).then(function(){ OUTS=OUTS.filter(x=>x.id!==o.id); renderOuts(); });
+    });
+    w.appendChild(d);
+  });
+}
+renderKhung(); renderOuts();
+</script>
+</body>
+</html>
