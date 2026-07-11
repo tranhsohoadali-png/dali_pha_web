@@ -104,35 +104,60 @@ def _detect_spec(bgr):
                 mode = 'quad'
             corners = {'tl': tl.tolist(), 'tr': tr.tolist(),
                        'bl': bl.tolist(), 'br': br.tolist()}
+    panels = int(sum(1 for i in range(1, n)
+                     if stats[i, cv2.CC_STAT_AREA] >= 0.01 * W * H))
     return {'mode': mode, 'width': W, 'height': H,
             'rect': {'left': x, 'top': y, 'width': w, 'height': h},
             'corners': corners, 'ratio': round(w / float(h), 3),
-            'label_pos': 'top'}, ''
+            'panels': panels, 'label_pos': 'top'}, ''
 
 
 # ------------------------------------------------------------------- ghép ảnh
+def _component_quad(comp):
+    """Component mask 0/1 -> 4 góc (tl,tr,br,bl) float32. Thử quad từ contour
+    (khung chụp nghiêng); không ra 4 điểm thì dùng bounding rect."""
+    x, y, w, h = cv2.boundingRect(comp)
+    quad = np.float32([[x, y], [x + w, y], [x + w, y + h], [x, y + h]])
+    cnts, _ = cv2.findContours(comp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if cnts:
+        c = max(cnts, key=cv2.contourArea)
+        ap = cv2.approxPolyDP(c, 0.02 * cv2.arcLength(c, True), True)
+        if len(ap) == 4:
+            pts = ap.reshape(-1, 2).astype(np.float32)
+            s = pts.sum(1)
+            d = pts[:, 0] - pts[:, 1]
+            quad = np.float32([pts[np.argmin(s)], pts[np.argmax(d)],
+                               pts[np.argmax(s)], pts[np.argmin(d)]])
+    return quad, (w, h)
+
+
 def _compose_scene(tpl_bgr, spec, art_bgr):
-    """Dán tranh vào ô màn xanh: ép tranh đúng cỡ ô (khách thấy TOÀN BỘ tranh),
-    warp theo 4 góc (khung nghiêng vẫn đúng), alpha = mask xanh nở 1px (hết viền
-    xanh sót) + feather (mép mượt). Vật che phía trước ô (lá cây…) tự giữ nguyên
-    vì chỗ đó không phải màu xanh."""
+    """Dán tranh vào TỪNG ô màn xanh (mockup BỘ 2-3 TRANH có nhiều ô -> mỗi ô
+    một bản tranh): ép tranh đúng cỡ ô (khách thấy TOÀN BỘ tranh), warp theo
+    4 góc (khung nghiêng vẫn đúng), alpha = mask xanh nở 1px (hết viền xanh sót)
+    + feather (mép mượt). Vật che phía trước ô (lá cây…) tự giữ nguyên vì chỗ đó
+    không phải màu xanh. spec chỉ dùng cho ratio/UI — ô dò LẠI trực tiếp."""
     H, W = tpl_bgr.shape[:2]
-    r = spec.get('rect') or {}
-    c = spec.get('corners') or {}
-    try:
-        quad = np.float32([c['tl'], c['tr'], c['br'], c['bl']])
-    except (KeyError, TypeError):
-        quad = np.float32([[r['left'], r['top']],
-                           [r['left'] + r['width'], r['top']],
-                           [r['left'] + r['width'], r['top'] + r['height']],
-                           [r['left'], r['top'] + r['height']]])
-    rw = max(2, int(r.get('width') or 2))
-    rh = max(2, int(r.get('height') or 2))
-    art = cv2.resize(art_bgr, (rw, rh), interpolation=cv2.INTER_AREA)
-    M = cv2.getPerspectiveTransform(
-        np.float32([[0, 0], [rw, 0], [rw, rh], [0, rh]]), quad)
-    warped = cv2.warpPerspective(art, M, (W, H), flags=cv2.INTER_LINEAR)
-    mask = cv2.dilate(_green_mask(tpl_bgr), np.ones((3, 3), np.uint8))
+    mask = _green_mask(tpl_bgr)
+    n, lbl, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
+    warped = np.zeros_like(tpl_bgr)
+    for k in range(1, n):
+        if stats[k, cv2.CC_STAT_AREA] < 0.01 * W * H:
+            continue                                 # đốm xanh lạc: bỏ, không dán
+        comp = (lbl == k).astype(np.uint8)
+        quad, (rw, rh) = _component_quad(comp)
+        art = cv2.resize(art_bgr, (max(2, rw), max(2, rh)),
+                         interpolation=cv2.INTER_AREA)
+        M = cv2.getPerspectiveTransform(
+            np.float32([[0, 0], [rw, 0], [rw, rh], [0, rh]]), quad)
+        piece = cv2.warpPerspective(art, M, (W, H), flags=cv2.INTER_LINEAR)
+        sel = comp > 0
+        warped[sel] = piece[sel]
+    mask = cv2.dilate(mask, np.ones((3, 3), np.uint8))
+    # nở mask kéo theo mép: lấp phần nở bằng chính warped gần nhất (inpaint mép 1px)
+    ring = (mask > 0) & (warped.sum(2) == 0)
+    if ring.any():
+        warped[ring] = cv2.dilate(warped, np.ones((5, 5), np.uint8))[ring]
     alpha = (cv2.GaussianBlur(mask, (3, 3), 0).astype(np.float32) / 255.0)[..., None]
     return (tpl_bgr.astype(np.float32) * (1 - alpha)
             + warped.astype(np.float32) * alpha).astype(np.uint8)
