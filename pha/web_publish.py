@@ -205,19 +205,46 @@ def _ensure_asset(oid, meta):
                        f"{meta.get('ma') or oid}-{meta.get('kt') or ''}.jpg")
         res = _request('POST', '/api/assets', multipart=[('files', fname, blob, 'image/jpeg')],
                        timeout=60)
-        items = res if isinstance(res, list) else res.get('assets') or res.get('added') or res.get('items') or []
-        if isinstance(items, dict):
-            items = [items]
-        if not items or 'id' not in items[0]:
+        # agent THẬT trả {'ok': True, 'ids': [22]} (đo 2026-07-11); các dạng khác giữ dự phòng
+        aid = None
+        if isinstance(res, dict) and res.get('ids'):
+            aid = int(res['ids'][0])
+        else:
+            items = res if isinstance(res, list) else (
+                res.get('assets') or res.get('added') or res.get('items') or [])
+            if isinstance(items, dict):
+                items = [items]
+            if items and isinstance(items[0], dict) and 'id' in items[0]:
+                aid = int(items[0]['id'])
+        if aid is None:
             raise _AgentErr('Upload kho agent không trả id — agent đổi API?')
-        aid = int(items[0]['id'])
         meta['agent_asset_id'] = aid
         _save_sidecar(oid, meta)
     if not meta.get('agent_asset_approved'):
-        _request('POST', f'/api/assets/{aid}/approve', json_body={}, timeout=15)
-        meta['agent_asset_approved'] = True
-        _save_sidecar(oid, meta)
+        # Agent xử lý ảnh BẤT ĐỒNG BỘ sau upload (AI viết title/tags): duyệt ngay
+        # trả ok nhưng KHÔNG DÍNH (status vẫn pending) — đo thật 2026-07-11.
+        # -> duyệt xong phải KIỂM lại status; chưa dính thì chờ 2s duyệt tiếp.
+        for _ in range(5):
+            _request('POST', f'/api/assets/{aid}/approve', json_body={}, timeout=15)
+            if _asset_status(aid) == 'approved':
+                meta['agent_asset_approved'] = True
+                _save_sidecar(oid, meta)
+                break
+            time.sleep(2)
+        else:
+            raise _AgentErr('Kho agent đang xử lý ảnh, chưa duyệt được — chờ vài giây rồi bấm lại.')
     return aid
+
+
+def _asset_status(aid):
+    try:
+        assets = _request('GET', '/api/assets', timeout=20)
+        for a in (assets if isinstance(assets, list) else []):
+            if int(a.get('id', -1)) == int(aid):
+                return a.get('status') or ''
+    except (_AgentErr, ValueError, TypeError):
+        pass
+    return ''
 
 
 def _load_out(request):
@@ -278,8 +305,9 @@ def dang_web_draft(request):
         try:
             res = _request('POST', '/api/web/product-draft', json_body=body, timeout=75)
         except _AgentErr as e:
-            if 'duyệt' in str(e) or 'duyet' in str(e):
-                meta['agent_asset_approved'] = False   # duyệt lại 1 lần rồi thử lại
+            # lỗi thật gặp: "Ảnh không hợp lệ — cần ảnh ĐÃ DUYỆT trong kho" (HOA)
+            if any(k in str(e).lower() for k in ('duyệt', 'duyet', 'hợp lệ', 'hop le')):
+                meta['agent_asset_approved'] = False   # duyệt lại (có kiểm) rồi thử lại
                 _ensure_asset(oid, meta)
                 res = _request('POST', '/api/web/product-draft', json_body=body, timeout=75)
             else:

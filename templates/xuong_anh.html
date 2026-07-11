@@ -263,8 +263,6 @@ function pubBadge(o){
       +'<a class="btn btn-outline-success btn-sm me-1" target="_blank" href="'+u+'" title="Mở trang quản trị sản phẩm"><i class="bi bi-box-arrow-up-right"></i></a>'
       +'<button class="btn btn-outline-secondary btn-sm opub me-1" title="Đăng BẢN MỚI (mã này đã có sản phẩm)"><i class="bi bi-globe2"></i> Đăng lại</button>';
   }
-  if(!AGENT_READY)
-    return '<button class="btn btn-warning btn-sm opub me-1" disabled title="Chưa cấu hình tài khoản Agent — vào Cài đặt AI (mục Agent đăng web)"><i class="bi bi-globe2"></i> Đăng web</button>';
   return '<button class="btn btn-warning btn-sm opub me-1" title="Đăng sản phẩm này lên tranhdali.vn (AI tự viết tên + mô tả)"><i class="bi bi-globe2"></i> Đăng web</button>';
 }
 function renderOuts(){
@@ -284,7 +282,15 @@ function renderOuts(){
         .then(r=>r.json()).then(function(){ OUTS=OUTS.filter(x=>x.id!==o.id); renderOuts(); });
     });
     var pb=d.querySelector('.opub');
-    if(pb && !pb.disabled) pb.addEventListener('click', function(){ openPub(o, pb); });
+    if(pb) pb.addEventListener('click', function(){
+      // Chưa cấu hình tài khoản Agent -> nói RÕ + chỉ đường (đừng khoá nút chết im)
+      if(!AGENT_READY){
+        showErr('Chưa cấu hình tài khoản Agent đăng web. Vào Cài đặt AI → khối "Agent đăng web" → dán user/mật khẩu đăng nhập agent.tranhdali.vn → Lưu → Kiểm tra kết nối, rồi tải lại trang này.');
+        window.open('/cai-dat-ai#agent', '_blank');
+        return;
+      }
+      openPub(o, pb);
+    });
     w.appendChild(d);
   });
 }
