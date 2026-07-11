@@ -42,7 +42,7 @@
 <div class="container-fluid py-3 px-3 px-md-4" style="max-width:1250px">
   <div class="page-head mb-3">
     <h1><i class="bi bi-easel"></i> Xưởng ảnh sản phẩm</h1>
-    <div class="sub">Ghép tranh vào khung mockup → mỗi khung ra 2 ảnh (Web + Shopee 1:1) kèm logo DALI + Mã/KT/Số màu. Tranh từ trang <a href="/xu-ly-anh">Tạo bản đồ màu</a> bấm <b>Đóng khung</b> là tự nhảy sang đây.</div>
+    <div class="sub">Ghép tranh vào khung mockup → mỗi khung 1 ảnh sản phẩm kèm logo DALI + Mã/KT/Số màu. Tranh từ trang <a href="/xu-ly-anh">Tạo bản đồ màu</a> bấm <b>Đóng khung</b> là tự nhảy sang đây.</div>
   </div>
 
   <div id="err" class="alert alert-danger d-none"></div>
@@ -101,7 +101,7 @@
 
   <!-- ẢNH ĐÃ GHÉP -->
   <div class="card mb-4">
-    <div class="card-header"><i class="bi bi-collection text-success"></i> Ảnh đã ghép <span class="text-secondary fw-normal small">— kho ảnh sản phẩm hoàn chỉnh (Web + Shopee 1:1)</span></div>
+    <div class="card-header"><i class="bi bi-collection text-success"></i> Ảnh đã ghép <span class="text-secondary fw-normal small">— kho ảnh sản phẩm hoàn chỉnh</span></div>
     <div class="card-body">
       <div id="outList"></div>
       <div id="outEmpty" class="text-secondary small text-center py-3 d-none">Chưa có ảnh nào.</div>
@@ -171,7 +171,12 @@ document.getElementById('artFile').addEventListener('change', function(){
 
 /* ---------- Ghép ---------- */
 function outCardHtml(o){
-  return '<div class="col-6 col-md-4 col-lg-3">'
+  if(o.img){                         // bản hiện tại: 1 ảnh duy nhất
+    return '<div class="col-6 col-md-4 col-lg-3">'
+      +'<a href="'+o.img+'" download target="_blank"><img class="outimg" src="'+o.img+'" loading="lazy"></a>'
+      +'<div class="small text-center mt-1"><i class="bi bi-download"></i> Bấm để tải</div></div>';
+  }
+  return '<div class="col-6 col-md-4 col-lg-3">'   // ảnh cũ còn 2 bản web/shopee
     +'<a href="'+o.web+'" download target="_blank"><img class="outimg" src="'+o.web+'" loading="lazy"></a>'
     +'<div class="small text-center mt-1"><i class="bi bi-globe2"></i> Web</div></div>'
     +'<div class="col-6 col-md-4 col-lg-3">'

@@ -419,15 +419,14 @@ def ghep(request):
             continue
         try:
             scene = _compose_scene(tpl, meta.get('spec') or {}, art)
-            web = _finish(scene, ma, kt, colors, logo, square=False)
-            shp = _finish(scene, ma, kt, colors, logo, square=True)
+            # 1 ảnh duy nhất (user bỏ tách Web/Shopee): giữ nguyên khung cảnh
+            # mockup, trần 1400px — phôi đa số vuông nên dùng được mọi kênh.
+            img = _finish(scene, ma, kt, colors, logo, square=False)
             stem = f'out-{uuid.uuid4().hex[:12]}'
-            web.save(os.path.join(od, stem + '_web.jpg'), quality=92)
-            shp.save(os.path.join(od, stem + '_shopee.jpg'), quality=92)
+            img.save(os.path.join(od, stem + '.jpg'), quality=92)
             rec = {'ma': ma, 'kt': kt, 'colors': colors,
                    'khung_name': meta.get('name', ''),
-                   'web': f'/media/xuong_anh/out/{stem}_web.jpg',
-                   'shopee': f'/media/xuong_anh/out/{stem}_shopee.jpg',
+                   'img': f'/media/xuong_anh/out/{stem}.jpg',
                    'created': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             with open(os.path.join(od, stem + '.json'), 'w', encoding='utf-8') as fh:
                 json.dump(rec, fh, ensure_ascii=False)
@@ -446,7 +445,8 @@ def out_xoa(request):
     if not _ID_RE.match(oid):
         return JsonResponse({'ok': False, 'error': 'id sai'})
     d = _dir(_OUT_SUB)
-    for suf in ('_web.jpg', '_shopee.jpg', '.json'):
+    # '.jpg' = bản 1-ảnh hiện tại; _web/_shopee = bản cũ 2-ảnh còn trong kho
+    for suf in ('.jpg', '_web.jpg', '_shopee.jpg', '.json'):
         try:
             os.remove(os.path.join(d, oid + suf))
         except OSError:
