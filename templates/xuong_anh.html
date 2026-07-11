@@ -109,6 +109,50 @@
   </div>
 </div>
 
+<!-- Modal ĐĂNG SẢN PHẨM lên tranhdali.vn: duyệt nhanh 1 chặng rồi Đăng -->
+<div class="modal fade" id="pubModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <span class="fw-semibold"><i class="bi bi-globe2 text-success"></i> Đăng sản phẩm lên tranhdali.vn</span>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="pubDupe" class="alert alert-warning py-2 small d-none"></div>
+        <div class="row g-3">
+          <div class="col-md-5">
+            <img id="pubImg" class="w-100 rounded border" src="#">
+            <div id="pubMeta" class="small text-secondary mt-1"></div>
+          </div>
+          <div class="col-md-7">
+            <div id="pubAiState" class="small text-secondary mb-2"></div>
+            <label class="form-label small mb-1">Tên sản phẩm</label>
+            <input id="pubName" class="form-control form-control-sm mb-2" placeholder="AI đang viết…">
+            <label class="form-label small mb-1">Mô tả</label>
+            <textarea id="pubDesc" class="form-control form-control-sm mb-2" rows="6" placeholder="AI đang viết…"></textarea>
+            <div class="row g-2">
+              <div class="col-5"><label class="form-label small mb-1">Danh mục</label>
+                <select id="pubCat" class="form-select form-select-sm"></select></div>
+              <div class="col-3"><label class="form-label small mb-1">Số màu</label>
+                <input id="pubColors" class="form-control form-control-sm"></div>
+              <div class="col-4"><label class="form-label small mb-1">Giá (đ)</label>
+                <input id="pubPrice" type="number" class="form-control form-control-sm"></div>
+            </div>
+            <label class="form-label small mb-1 mt-2">Khổ bán <span class="text-secondary">(tick sẵn theo họ tỉ lệ khổ gốc — giá tự theo khổ nhỏ nhất)</span></label>
+            <div id="pubSizeWarn" class="alert alert-danger py-1 small d-none">KT gốc không khớp khổ nào trong catalog — chọn khổ thủ công.</div>
+            <div id="pubSizes" class="border rounded p-2"></div>
+          </div>
+        </div>
+        <div id="pubErr" class="alert alert-danger py-2 small mt-2 d-none"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Huỷ</button>
+        <button id="pubGo" class="btn btn-success"><i class="bi bi-globe2"></i> Đăng lên tranhdali.vn</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 var KHUNG = {{ khung_json|safe }};
@@ -211,6 +255,18 @@ document.getElementById('btnGhep').addEventListener('click', function(){
 });
 
 /* ---------- Ảnh đã ghép ---------- */
+var AGENT_READY = {{ agent_ready|yesno:'true,false' }};
+function pubBadge(o){
+  if(o.published){
+    var u=o.published.admin_url||'#';
+    return '<span class="badge text-bg-success me-1" title="Đã đăng '+(o.published.at||'')+'">Đã đăng</span>'
+      +'<a class="btn btn-outline-success btn-sm me-1" target="_blank" href="'+u+'" title="Mở trang quản trị sản phẩm"><i class="bi bi-box-arrow-up-right"></i></a>'
+      +'<button class="btn btn-outline-secondary btn-sm opub me-1" title="Đăng BẢN MỚI (mã này đã có sản phẩm)"><i class="bi bi-globe2"></i> Đăng lại</button>';
+  }
+  if(!AGENT_READY)
+    return '<button class="btn btn-warning btn-sm opub me-1" disabled title="Chưa cấu hình tài khoản Agent — vào Cài đặt AI (mục Agent đăng web)"><i class="bi bi-globe2"></i> Đăng web</button>';
+  return '<button class="btn btn-warning btn-sm opub me-1" title="Đăng sản phẩm này lên tranhdali.vn (AI tự viết tên + mô tả)"><i class="bi bi-globe2"></i> Đăng web</button>';
+}
 function renderOuts(){
   var w=document.getElementById('outList'); w.innerHTML='';
   document.getElementById('outEmpty').classList.toggle('d-none', OUTS.length>0);
@@ -219,17 +275,107 @@ function renderOuts(){
     d.className='border rounded-3 p-2 mb-2';
     d.innerHTML='<div class="d-flex justify-content-between align-items-center mb-1">'
       +'<span class="small fw-semibold">'+(o.ma||'—')+' · '+(o.kt||'')+' — '+(o.khung_name||'')+' <span class="text-secondary fw-normal">'+(o.created||'')+'</span></span>'
-      +'<button class="btn btn-outline-danger btn-sm odel"><i class="bi bi-trash"></i></button></div>'
+      +'<span class="text-nowrap">'+pubBadge(o)
+      +'<button class="btn btn-outline-danger btn-sm odel"><i class="bi bi-trash"></i></button></span></div>'
       +'<div class="row g-2">'+outCardHtml(o)+'</div>';
     d.querySelector('.odel').addEventListener('click', function(){
       if(!confirm('Xoá bộ ảnh này?')) return;
       fetch('/xuong-anh/out-xoa',{method:'POST',headers:{'X-CSRFToken':csrf()},body:new URLSearchParams({id:o.id})})
         .then(r=>r.json()).then(function(){ OUTS=OUTS.filter(x=>x.id!==o.id); renderOuts(); });
     });
+    var pb=d.querySelector('.opub');
+    if(pb && !pb.disabled) pb.addEventListener('click', function(){ openPub(o, pb); });
     w.appendChild(d);
   });
 }
 renderKhung(); renderOuts();
+
+/* ---------- ĐĂNG SẢN PHẨM lên tranhdali.vn ---------- */
+var PUB = {o:null, sizes:[], userTouched:{}};
+function openPub(o, btn){
+  btn.disabled=true; var old=btn.innerHTML; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span>';
+  fetch('/xuong-anh/dang-web/chuan-bi',{method:'POST',headers:{'X-CSRFToken':csrf()},body:new URLSearchParams({id:o.id})})
+    .then(r=>r.json()).then(function(j){
+      btn.disabled=false; btn.innerHTML=old;
+      if(!j.ok){ showErr(j.error||'Lỗi chuẩn bị'); return; }
+      PUB.o=o; PUB.sizes=j.sizes; PUB.userTouched={};
+      document.getElementById('pubImg').src=o.img||o.web;
+      document.getElementById('pubMeta').textContent='Mã '+(j.suggest.ma||'—')+' · KT gốc '+(j.suggest.kt||'—');
+      document.getElementById('pubName').value='';
+      document.getElementById('pubDesc').value='';
+      document.getElementById('pubColors').value=j.suggest.colors||'';
+      document.getElementById('pubPrice').value=j.suggest.sale_price||'';
+      var cs=document.getElementById('pubCat'); cs.innerHTML='';
+      (j.categories||[]).forEach(function(c){ var op=document.createElement('option'); op.value=c.id; op.textContent=c.name; cs.appendChild(op); });
+      var last=localStorage.getItem('pubCat'); if(last && cs.querySelector('option[value="'+last+'"]')) cs.value=last;
+      var sw=document.getElementById('pubSizes'); sw.innerHTML='';
+      j.sizes.forEach(function(s){
+        var id='sz'+s.id;
+        sw.insertAdjacentHTML('beforeend','<label class="form-check form-check-inline small" for="'+id+'">'
+          +'<input class="form-check-input pubsz" type="checkbox" id="'+id+'" value="'+s.id+'" data-price="'+s.price+'"'+(s.checked?' checked':'')+'> '
+          +s.name+' <span class="text-secondary">('+(s.price?s.price.toLocaleString('vi')+'đ':'—')+')</span></label>');
+      });
+      document.getElementById('pubSizeWarn').classList.toggle('d-none', j.size_matched);
+      var dupe=document.getElementById('pubDupe');
+      if(j.published){ dupe.classList.remove('d-none');
+        dupe.innerHTML='⚠️ Mã <b>'+(j.suggest.ma||'')+'</b> đã đăng '+(j.published.at||'')+' — <a target="_blank" href="'+(j.published.admin_url||'#')+'">mở quản trị</a>. Bấm Đăng sẽ tạo SẢN PHẨM MỚI.'; }
+      else dupe.classList.add('d-none');
+      document.getElementById('pubErr').classList.add('d-none');
+      new bootstrap.Modal(document.getElementById('pubModal')).show();
+      fireDraft();     // AI viết tên+mô tả song song trong lúc chủ xem khổ/giá
+    }).catch(function(){ btn.disabled=false; btn.innerHTML=old; showErr('Không kết nối được máy chủ.'); });
+}
+function tickedSizes(){ return [...document.querySelectorAll('.pubsz:checked')]; }
+function fireDraft(){
+  var st=document.getElementById('pubAiState');
+  st.className='small text-secondary'; st.innerHTML='<span class="spinner-border spinner-border-sm"></span> AI đang viết tên + mô tả (5–60s)…';
+  var cat=document.getElementById('pubCat'); var catName=cat.options[cat.selectedIndex]?cat.options[cat.selectedIndex].text:'';
+  var sizesText=tickedSizes().map(function(c){ return c.parentElement.textContent.split('(')[0].trim(); }).join(', ');
+  var fd=new URLSearchParams({id:PUB.o.id, category_name:catName, sizes_text:sizesText});
+  fetch('/xuong-anh/dang-web/draft',{method:'POST',headers:{'X-CSRFToken':csrf()},body:fd})
+    .then(r=>r.json()).then(function(j){
+      if(!j.ok){ st.className='small text-danger'; st.innerHTML='AI không viết được: '+(j.error||'')+' — <a href="#" onclick="fireDraft();return false;">thử lại</a>. Vẫn đăng tay được.';
+        if(!document.getElementById('pubName').value) document.getElementById('pubName').value='Tranh tô màu theo số '+(PUB.o.ma||''); return; }
+      var n=document.getElementById('pubName'), d=document.getElementById('pubDesc');
+      if(!PUB.userTouched.name) n.value=j.draft.name||n.value;       // không đè chữ chủ đã gõ
+      if(!PUB.userTouched.desc) d.value=j.draft.description||d.value;
+      st.className='small text-success'; st.textContent='AI đã viết xong — sửa lại nếu muốn rồi bấm Đăng.';
+    }).catch(function(){ st.className='small text-danger'; st.textContent='Mất kết nối khi AI đang viết — thử lại.'; });
+}
+document.getElementById('pubName').addEventListener('input', function(){ PUB.userTouched.name=true; });
+document.getElementById('pubDesc').addEventListener('input', function(){ PUB.userTouched.desc=true; });
+document.getElementById('pubPrice').addEventListener('input', function(){ PUB.userTouched.price=true; });
+document.getElementById('pubSizes').addEventListener('change', function(){
+  if(PUB.userTouched.price) return;               // chủ sửa giá rồi thì không gợi ý đè
+  var ps=tickedSizes().map(function(c){ return parseInt(c.dataset.price)||0; }).filter(Boolean);
+  if(ps.length) document.getElementById('pubPrice').value=Math.min.apply(null, ps);
+});
+document.getElementById('pubGo').addEventListener('click', function(){
+  var name=document.getElementById('pubName').value.trim();
+  var sz=tickedSizes().map(function(c){ return c.value; });
+  var price=parseInt(document.getElementById('pubPrice').value)||0;
+  var err=document.getElementById('pubErr');
+  if(!name){ err.textContent='Thiếu tên sản phẩm.'; err.classList.remove('d-none'); return; }
+  if(!sz.length){ err.textContent='Chọn ít nhất 1 khổ bán.'; err.classList.remove('d-none'); return; }
+  if(price<=0){ err.textContent='Giá phải > 0.'; err.classList.remove('d-none'); return; }
+  err.classList.add('d-none');
+  var btn=this; btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> Đang đăng…';
+  var fd=new URLSearchParams({id:PUB.o.id, name:name,
+    description:document.getElementById('pubDesc').value,
+    colors_count:document.getElementById('pubColors').value||'0',
+    sale_price:price, category_id:document.getElementById('pubCat').value});
+  sz.forEach(function(s){ fd.append('size_ids', s); });
+  fetch('/xuong-anh/dang-web/publish',{method:'POST',headers:{'X-CSRFToken':csrf()},body:fd})
+    .then(r=>r.json()).then(function(j){
+      btn.disabled=false; btn.innerHTML='<i class="bi bi-globe2"></i> Đăng lên tranhdali.vn';
+      if(!j.ok){ err.textContent=j.error||'Đăng lỗi'; err.classList.remove('d-none'); return; }
+      localStorage.setItem('pubCat', document.getElementById('pubCat').value);
+      PUB.o.published={admin_url:j.admin_url, at:'vừa xong'};
+      bootstrap.Modal.getInstance(document.getElementById('pubModal')).hide();
+      renderOuts();
+    }).catch(function(){ btn.disabled=false; btn.innerHTML='<i class="bi bi-globe2"></i> Đăng lên tranhdali.vn';
+      err.textContent='Mất kết nối — KIỂM TRA trang quản trị trước khi bấm lại (tránh đăng trùng).'; err.classList.remove('d-none'); });
+});
 </script>
 </body>
 </html>

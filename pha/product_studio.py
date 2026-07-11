@@ -281,6 +281,7 @@ def _khung_list():
 
 def _out_list():
     d = _dir(_OUT_SUB)
+    reg = _read_json(os.path.join(_dir('xuong_anh'), 'web_pub.json')) or {}
     items = []
     for fn in os.listdir(d):
         if not fn.endswith('.json'):
@@ -289,6 +290,8 @@ def _out_list():
         if not j:
             continue
         j['id'] = fn[:-5]
+        # đã đăng web chưa: theo bản ghi NÀY hoặc theo MÃ (sổ chống trùng)
+        j['published'] = j.get('published') or reg.get((j.get('ma') or '').strip()) or None
         items.append(j)
     items.sort(key=lambda x: x.get('created', ''), reverse=True)
     return items
@@ -320,6 +323,7 @@ def xuong_anh(request):
     """Trang Xưởng ảnh sản phẩm. Nhận prefill từ nút 'Đóng khung' của /xu-ly-anh:
     ?art=/media/..._design.png&ma=C102&kt=40x50&mau=23"""
     from django.middleware.csrf import get_token
+    from pha.web_publish import agent_configured
     get_token(request)                 # ép phát cookie csrftoken cho các fetch POST
     art = request.GET.get('art', '')
     if not _resolve_media(art):
@@ -331,6 +335,7 @@ def xuong_anh(request):
         'pre_ma': request.GET.get('ma', ''),
         'pre_kt': request.GET.get('kt', ''),
         'pre_mau': request.GET.get('mau', ''),
+        'agent_ready': agent_configured(),
     }
     return render(request, 'xuong_anh.html', ctx)
 
