@@ -177,9 +177,10 @@
             </div>
             <button id="btnPrint" class="btn btn-success btn-sm mt-3" hidden><i class="bi bi-download"></i> Tải bản in + A3</button>
             <a id="btnMat" class="btn btn-outline-success btn-sm mt-3 ms-1" hidden download target="_blank" title="Bản phóng to các vùng mặt (in kèm bản số để thợ đọc số ô nhỏ ở mặt)"><i class="bi bi-person-bounding-box"></i> Tải bản chi tiết mặt</a>
+            <button id="btnSaveMa" class="btn btn-info btn-sm mt-3 ms-1 text-white" hidden title="Lưu bản này vào Kho mã tranh (ảnh thiết kế + bảng màu HIỆN TẠI) để sau mở lại sửa màu, khỏi chạy lại AI"><i class="bi bi-bookmark-star"></i> Lưu vào kho mã</button>
             <button id="btnLearn" class="btn btn-outline-primary btn-sm mt-3 ms-1" hidden title="Lưu ca này (ảnh gốc + thông số + thiết kế) vào kho học để hệ thống học dần"><i class="bi bi-mortarboard"></i> Lưu vào kho học</button>
             <button id="btnFrame" class="btn btn-warning btn-sm mt-3 ms-1" hidden title="Đưa bản THIẾT KẾ (bản màu) sang Xưởng ảnh: ghép vào khung mockup -> ảnh Web + Shopee 1:1, tự điền Mã/KT/Số màu"><i class="bi bi-easel"></i> Đóng khung (ảnh SP)</button>
-            <a href="/kho-hoc" class="btn btn-link btn-sm mt-3" title="Xem kho học">Kho học »</a>
+            <a href="/kho-ma-tranh" class="btn btn-link btn-sm mt-3" title="Xem các mã đã lưu">Kho mã »</a>
           </div>
         </div>
       </div>
@@ -231,9 +232,58 @@
     window.open('/xuong-anh?art='+encodeURIComponent(curDesign)+'&ma='+encodeURIComponent(ma)
                 +'&kt='+encodeURIComponent(kt)+'&mau='+curColorCount, '_blank');
   }
+  // Đọc bảng màu HIỆN TẠI từ giao diện (đã áp mọi sửa HEX) -> [[stt,hex,dali,pct],...]
+  function readPalette(){
+    var rows=[];
+    document.querySelectorAll('#palette .color-card').forEach(function(card){
+      var stt=(card.querySelector('.badge')||{}).textContent||'';
+      var hip=card.querySelector('.hex-input');
+      var hex=(hip?(hip.getAttribute('data-cur')||hip.value):'').toUpperCase().replace(/^#?/,'#');
+      var di=card.querySelector('.dali-input'); var dali=di?di.value.trim():'';
+      var pct=null;
+      card.querySelectorAll('span.text-secondary').forEach(function(s){
+        var m=(s.textContent||'').trim().match(/^([\d.]+)%$/); if(m) pct=parseFloat(m[1]);
+      });
+      rows.push([stt.trim(), hex, dali, pct]);
+    });
+    return rows;
+  }
+  // LƯU VÀO KHO MÃ: gửi canvas thiết kế hiện tại + bảng màu hiện tại
+  function saveMa(){
+    if(!curDesign){ alert('Chưa có bản thiết kế để lưu.'); return; }
+    var ma=(document.getElementById('imgName').value||'').trim();
+    if(!ma){ ma=(prompt('Đặt MÃ cho bản này (để sau tìm lại, vd C098):','')||'').trim(); if(!ma) return;
+      document.getElementById('imgName').value=ma; }
+    var btn=document.getElementById('btnSaveMa'); var old=btn.innerHTML;
+    btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span>';
+    var fd=new FormData();
+    fd.append('file_url', curUrl); fd.append('ma', ma);
+    fd.append('design_png', DCAN.toDataURL('image/png'));
+    fd.append('colors', JSON.stringify(readPalette()));
+    fetch('/kho-ma-tranh/luu',{method:'POST',headers:{'X-CSRFToken':getCsrf()},body:fd})
+      .then(r=>r.json()).then(function(res){
+        btn.disabled=false; btn.innerHTML=old;
+        if(!res.ok){ alert(res.error||'Lưu thất bại'); return; }
+        btn.innerHTML='<i class="bi bi-check-lg"></i> Đã lưu mã '+res.ma;
+        setTimeout(function(){ btn.innerHTML=old; }, 2500);
+      }).catch(function(){ btn.disabled=false; btn.innerHTML=old; alert('Lỗi kết nối'); });
+  }
+  function getCsrf(){ return (document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||''; }
   document.addEventListener('DOMContentLoaded', function(){
     document.getElementById('btnFrame').addEventListener('click', openFrameStudio);
     document.getElementById('btnFrame2').addEventListener('click', openFrameStudio);
+    document.getElementById('btnSaveMa').addEventListener('click', saveMa);
+    // Mở lại 1 mã đã lưu: /xu-ly-anh?ma_saved=<id> -> tạo bản làm việc rồi nạp như kết quả
+    var msid=new URLSearchParams(location.search).get('ma_saved');
+    if(msid){
+      spin(true);
+      fetch('/kho-ma-tranh/mo',{method:'POST',headers:{'X-CSRFToken':getCsrf()},
+        body:new URLSearchParams({id:msid})}).then(r=>r.json()).then(function(res){
+        if(!res.ok){ spin(false); document.getElementById('err').textContent=res.error||'Không mở được mã'; document.getElementById('err').classList.remove('d-none'); return; }
+        if(res.ma) document.getElementById('imgName').value=res.ma;
+        getResult(res.file_url);   // nạp như một kết quả bình thường -> sửa màu ngay
+      }).catch(function(){ spin(false); });
+    }
   });
   var dz=document.getElementById('dz'), fi=document.getElementById('image');
   dz.addEventListener('click',function(){fi.click()});
@@ -426,12 +476,13 @@
             +' · AI: '+(p.enhance?'có':'không')+(p.enhance&&p.style_category?(' ('+p.style_category+')'):'');
       pi.innerHTML=t; pi.classList.remove('d-none');
       if(res.warn){ var e=document.getElementById('err'); e.className='alert alert-warning'; e.textContent='⚠️ '+res.warn; }
-      ['btnPrint','dXlsx','dLegend','dCsv','btnLearn'].forEach(id=>document.getElementById(id).hidden=false);
+      ['btnPrint','dXlsx','dLegend','dCsv','btnLearn','btnSaveMa'].forEach(id=>document.getElementById(id).hidden=false);
       // Tranh khổ TO có mặt -> nút tải BẢN CHI TIẾT MẶT (phóng to vùng mặt + số to đọc rõ)
       var mat=document.getElementById('btnMat');
       if(p.detail_sheet){ mat.href='/media/'+p.detail_sheet; mat.hidden=false; } else { mat.hidden=true; }
       var bl=document.getElementById('btnLearn'); bl.disabled=false; bl.classList.add('btn-outline-primary'); bl.classList.remove('btn-primary'); bl.innerHTML='<i class="bi bi-mortarboard"></i> Lưu vào kho học';
-      curColorCount=(res.colors||[]).length;
+      // res.colors là các TRANG (split 10) -> số màu = tổng số dòng
+      curColorCount=(res.colors||[]).reduce(function(s,pg){return s+pg.length;},0);
       curPrintSize=p.print_size||'';
       document.getElementById('btnFrame').hidden=!curDesign;   // có bản thiết kế mới đóng khung được
       document.getElementById('btnFrame2').hidden=!curDesign;  // nút ngay dưới ảnh thiết kế

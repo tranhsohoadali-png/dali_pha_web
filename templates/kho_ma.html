@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kho mã tranh</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+  <style>
+    body{font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;}
+    [data-bs-theme=light] body.bg-body-tertiary{background-color:#f4f6f6!important;}
+    .page-head h1{font-size:1.35rem;font-weight:800;letter-spacing:-.01em;margin-bottom:.1rem;}
+    .page-head .sub{color:var(--bs-secondary-color);font-size:.875rem;}
+    .page-head .bi{color:#198754;}
+    .card{border-radius:16px;box-shadow:0 2px 12px rgba(25,135,84,.07);overflow:hidden;}
+    [data-bs-theme=light] .card{border:1px solid #e9ecef;}
+    .mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;}
+    .mcard{border:1px solid #e3e6e8;border-radius:14px;overflow:hidden;background:var(--bs-body-bg);display:flex;flex-direction:column;}
+    .mthumb{height:210px;background:#f1f3f4;display:flex;align-items:center;justify-content:center;}
+    .mthumb img{width:100%;height:100%;object-fit:contain;}
+    .mbody{padding:.6rem .7rem;display:flex;flex-direction:column;gap:.35rem;flex:1;}
+    .mma{font-weight:700;font-size:.95rem;}
+    .mmeta{font-size:.74rem;color:var(--bs-secondary-color);}
+  </style>
+</head>
+<body class="bg-body-tertiary">
+{% include '_nav.html' %}
+
+<div class="container-fluid py-3 px-3 px-md-4" style="max-width:1250px">
+  <div class="page-head mb-3">
+    <h1><i class="bi bi-bookmark-star"></i> Kho mã tranh</h1>
+    <div class="sub">Các bản đã số hoá đã lưu. Bấm <b>Mở sửa màu</b> để nạp lại vào trang xử lý ảnh — sửa HEX/mã DALI ngay, khỏi chạy lại AI. Lưu ở <a href="/xu-ly-anh">Tạo bản đồ màu</a> bằng nút "Lưu vào kho mã".</div>
+  </div>
+
+  <div id="mgrid" class="mgrid"></div>
+  <div id="empty" class="text-secondary text-center py-5 d-none">Chưa lưu mã nào. Vào <a href="/xu-ly-anh">Tạo bản đồ màu</a>, xử lý ảnh xong bấm <b>Lưu vào kho mã</b>.</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+var ITEMS = {{ items_json|safe }};
+function csrf(){ return (document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||''; }
+function esc(s){ return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function render(){
+  var g=document.getElementById('mgrid'); g.innerHTML='';
+  document.getElementById('empty').classList.toggle('d-none', ITEMS.length>0);
+  ITEMS.forEach(function(it){
+    var frameUrl='/xuong-anh?art='+encodeURIComponent(it.design)+'&ma='+encodeURIComponent(it.ma||'')
+                 +'&kt='+encodeURIComponent(it.kt||'')+'&mau='+(it.n_colors||'');
+    var d=document.createElement('div'); d.className='mcard';
+    d.innerHTML='<div class="mthumb"><img src="'+it.design+'" loading="lazy"></div>'
+      +'<div class="mbody">'
+      +'<div class="mma">'+(esc(it.ma)||'<span class="text-secondary fw-normal">(không mã)</span>')+'</div>'
+      +'<div class="mmeta">'+(it.kt?('Khổ '+esc(it.kt)+' · '):'')+(it.n_colors||0)+' màu · '+esc(it.created||'')+'</div>'
+      +'<div class="mt-1 d-flex flex-wrap gap-1">'
+      +'<a class="btn btn-success btn-sm flex-fill" href="/xu-ly-anh?ma_saved='+it.id+'"><i class="bi bi-palette"></i> Mở sửa màu</a>'
+      +'<a class="btn btn-warning btn-sm" href="'+frameUrl+'" target="_blank" title="Đóng khung thành ảnh sản phẩm"><i class="bi bi-easel"></i></a>'
+      +'<button class="btn btn-outline-danger btn-sm mdel" title="Xoá mã này"><i class="bi bi-trash"></i></button>'
+      +'</div></div>';
+    d.querySelector('.mdel').addEventListener('click', function(){
+      if(!confirm('Xoá mã "'+(it.ma||it.id)+'"?')) return;
+      fetch('/kho-ma-tranh/xoa',{method:'POST',headers:{'X-CSRFToken':csrf()},body:new URLSearchParams({id:it.id})})
+        .then(r=>r.json()).then(function(){ ITEMS=ITEMS.filter(function(x){return x.id!==it.id;}); render(); });
+    });
+    g.appendChild(d);
+  });
+}
+render();
+</script>
+</body>
+</html>

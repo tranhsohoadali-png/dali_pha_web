@@ -17,6 +17,7 @@ from pha import rip_views
 from pha import wifi_ip
 from pha import product_studio
 from pha import web_publish
+from pha import kho_ma as kho_ma_views
 
 urlpatterns = [
     path('login', views.login_view, name='login'),
@@ -157,6 +158,12 @@ urlpatterns = [
     path('anh-download', views.anh_download_result, name='anh_download'),
 
     # Kho học (Giai đoạn A): lưu ca xử lý đẹp để hệ thống học dần
+    # KHO MÃ TRANH: lưu bản đã số hoá -> mở lại sửa màu (khỏi chạy lại AI)
+    path('kho-ma-tranh', kho_ma_views.kho_ma, name='kho_ma_tranh'),
+    path('kho-ma-tranh/luu', kho_ma_views.kho_ma_luu, name='kho_ma_luu'),
+    path('kho-ma-tranh/mo', kho_ma_views.kho_ma_mo, name='kho_ma_mo'),
+    path('kho-ma-tranh/xoa', kho_ma_views.kho_ma_xoa, name='kho_ma_xoa'),
+
     path('anh-luu-kho-hoc', learn_lib.save_sample, name='anh_luu_kho_hoc'),
     path('kho-hoc', learn_lib.kho_hoc, name='kho_hoc'),
     path('kho-hoc-xoa', learn_lib.delete_sample, name='kho_hoc_xoa'),
