@@ -1298,6 +1298,12 @@ def ma_tranh(request):
         return redirect('/ma-tranh')
 
     paintings = list(Painting.objects.all())
+    # Mã đã số hoá + lưu vào kho mã (ảnh = kho_ma/<id>_design.png) -> nút "Sửa màu"
+    # mở lại file cũ trong /xu-ly-anh để chỉnh HEX/mã DALI, khỏi chạy lại AI.
+    for p in paintings:
+        img = p.image or ''
+        p.reopen_id = img[len('kho_ma/'):-len('_design.png')] \
+            if img.startswith('kho_ma/') and img.endswith('_design.png') else ''
     pmap = {p.code.strip().lower(): p for p in paintings}
     pending = list(PourRequest.objects.filter(status=PourRequest.STATUS_PENDING))
     for r in pending:

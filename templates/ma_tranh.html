@@ -292,7 +292,8 @@
                     </div>
                     {% if p.image %}<img src="/media/{{ p.image }}" class="rounded border w-100 zoom-img mb-1" style="max-height:120px; object-fit:contain; cursor:zoom-in" title="Bấm xem to">{% else %}<div class="text-secondary small text-center py-3 bg-body-secondary rounded mb-1">Chưa có ảnh</div>{% endif %}
                     <div class="d-flex gap-1">
-                      <button class="btn btn-sm btn-outline-secondary py-0 flex-fill edit-btn" title="Sửa"
+                      {% if p.reopen_id %}<a class="btn btn-sm btn-warning py-0 flex-fill" href="/xu-ly-anh?ma_saved={{ p.reopen_id }}" title="Mở lại file đã số hoá để SỬA MÀU (HEX/mã DALI) — khỏi chạy lại AI"><i class="bi bi-palette"></i> Sửa màu</a>{% endif %}
+                      <button class="btn btn-sm btn-outline-secondary py-0 flex-fill edit-btn" title="Sửa mã / ảnh / số màu (khai báo)"
                               data-code="{{ p.code }}" data-count="{{ p.color_count }}"
                               data-image="{% if p.image %}/media/{{ p.image }}{% endif %}"><i class="bi bi-pencil"></i> Sửa</button>
                       <form method="POST" action="/ma-tranh" onsubmit="return confirm('Xoá mã tranh {{ p.code }}?')">{% csrf_token %}

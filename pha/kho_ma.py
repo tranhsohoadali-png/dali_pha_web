@@ -53,6 +53,37 @@ def _write_json(path, obj):
     os.replace(tmp, path)
 
 
+def _register_painting(ma, image_rel, n_colors):
+    """Tự khai báo/cập nhật MÃ vào danh mục mã tranh (/ma-tranh) — nối kho mã với
+    khai báo: số hoá + lưu là mã hiện luôn trong danh mục rót màu, ảnh = bản thiết
+    kế, số màu tự điền. Ảnh cũ (nếu là ảnh khai báo tay) được dọn."""
+    ma = (ma or '').strip()
+    if not ma:
+        return
+    from pha.models import Painting
+    p = Painting.objects.filter(code__iexact=ma).first()
+    if p:
+        old = p.image
+        if old and old != image_rel and old.startswith('painting_'):
+            try:
+                os.remove(os.path.join(settings.MEDIA_ROOT, old))
+            except OSError:
+                pass
+        p.code, p.image, p.color_count = ma, image_rel, int(n_colors)
+        p.save()
+    else:
+        Painting.objects.create(code=ma, image=image_rel, color_count=int(n_colors))
+
+
+def _unlink_painting(mid):
+    """Xoá mã khỏi kho -> gỡ ảnh khỏi thẻ danh mục (khỏi trỏ file đã mất)."""
+    from pha.models import Painting
+    rel = f'{_SUB}/{mid}_design.png'
+    for p in Painting.objects.filter(image=rel):
+        p.image = ''
+        p.save()
+
+
 def _list():
     d = _dir()
     items = []
@@ -152,7 +183,11 @@ def kho_ma_luu(request):
             'params': params, 'has_output': has_output, 'origin_ext': origin_ext,
             'created': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     _write_json(os.path.join(d, mid + '.json'), meta)
-    return JsonResponse({'ok': True, 'id': mid, 'ma': ma,
+    in_catalog = False
+    if ma:                                   # tự khai báo vào danh mục mã tranh
+        _register_painting(ma, f'{_SUB}/{mid}_design.png', len(colors))
+        in_catalog = True
+    return JsonResponse({'ok': True, 'id': mid, 'ma': ma, 'in_catalog': in_catalog,
                          'design': f'/media/{_SUB}/{mid}_design.png'})
 
 
@@ -216,4 +251,5 @@ def kho_ma_xoa(request):
                 os.remove(os.path.join(d, f))
             except OSError:
                 pass
+    _unlink_painting(mid)                    # gỡ ảnh khỏi thẻ danh mục
     return JsonResponse({'ok': True})

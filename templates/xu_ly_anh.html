@@ -264,8 +264,8 @@
       .then(r=>r.json()).then(function(res){
         btn.disabled=false; btn.innerHTML=old;
         if(!res.ok){ alert(res.error||'Lưu thất bại'); return; }
-        btn.innerHTML='<i class="bi bi-check-lg"></i> Đã lưu mã '+res.ma;
-        setTimeout(function(){ btn.innerHTML=old; }, 2500);
+        btn.innerHTML='<i class="bi bi-check-lg"></i> Đã lưu'+(res.in_catalog?' + vào danh mục':'')+' mã '+res.ma;
+        setTimeout(function(){ btn.innerHTML=old; }, 3000);
       }).catch(function(){ btn.disabled=false; btn.innerHTML=old; alert('Lỗi kết nối'); });
   }
   function getCsrf(){ return (document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||''; }
