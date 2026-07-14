@@ -11,7 +11,8 @@
     .dropzone{border:2px dashed var(--bs-border-color);border-radius:.6rem;padding:1.2rem;text-align:center;cursor:pointer;background:var(--bs-tertiary-bg)}
     .dropzone:hover{border-color:var(--bs-primary)}
     .result-img{width:100%;border:1px solid var(--bs-border-color);border-radius:.5rem;cursor:zoom-in}
-    .swatch{width:100%;height:42px;border-radius:.4rem;border:1px solid rgba(0,0,0,.15)}
+    .swatch{width:100%;height:42px;border-radius:.4rem;border:1px solid rgba(0,0,0,.15);cursor:pointer;transition:transform .1s}
+    .swatch:hover{transform:scale(1.02);box-shadow:0 0 0 2px rgba(25,135,84,.4)}
     .color-card{border:1px solid var(--bs-border-color);border-radius:.6rem;padding:.5rem;height:100%}
     .hist{cursor:pointer}.hist:hover{background:var(--bs-tertiary-bg)}
   </style>
@@ -102,9 +103,35 @@
   </div>
 </div>
 
+<!-- SO MÀU: bấm ô màu -> phủ MÀN HÌNH bằng chính màu đó để đưa mẫu sơn thật lên so -->
+<div id="colorCmp" class="d-none" onclick="closeColorCmp()" style="position:fixed;inset:0;z-index:2100;cursor:pointer;">
+  <div style="position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.96);border-radius:12px;padding:8px 18px;box-shadow:0 4px 18px rgba(0,0,0,.25);text-align:center;max-width:92vw;">
+    <div style="font-weight:700"><span id="ccStt"></span> · mã <span id="ccDali"></span> · <span id="ccHex"></span> <span id="ccPct" class="text-secondary fw-normal"></span></div>
+    <div class="small text-secondary"><i class="bi bi-palette2"></i> Đưa mẫu sơn thật lên màn hình để so màu · bấm bất kỳ đâu để đóng</div>
+  </div>
+</div>
+
 <script>
   var curUrl = "";
   function spin(on){ var s=document.getElementById('spin'); s.classList.toggle('d-none',!on); s.classList.toggle('d-flex',on); }
+  // SO MÀU TO: bấm ô màu (.swatch) -> phủ màn hình bằng màu đó (đã áp mọi sửa HEX)
+  function closeColorCmp(){ document.getElementById('colorCmp').classList.add('d-none'); }
+  $(function(){
+    $('#palette').on('click','.swatch',function(){
+      var stt=this.dataset.stt;
+      var hex=($('#palette .hex-input[data-stt="'+stt+'"]').attr('data-cur')||'').toUpperCase();
+      if(!hex){ hex=getComputedStyle(this).backgroundColor; }
+      var dali=$('#palette .dali-input[data-stt="'+stt+'"]').val()||'—';
+      var pct=''; $(this).closest('.color-card').find('span').each(function(){ var m=(this.textContent||'').match(/[\d.]+%/); if(m)pct=m[0]; });
+      var cc=document.getElementById('colorCmp'); cc.style.background=hex;
+      document.getElementById('ccStt').textContent='Số '+stt;
+      document.getElementById('ccDali').textContent=dali;
+      document.getElementById('ccHex').textContent=hex;
+      document.getElementById('ccPct').textContent=pct?('· '+pct):'';
+      cc.classList.remove('d-none');
+    });
+  });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeColorCmp(); });
 
   // ===== Tải ảnh phẳng: chỉ dropzone + nút bấm (không núm) -> /xu-ly-anh-phang =====
   (function flatSection(){
