@@ -368,6 +368,85 @@ def dang_web_publish(request):
         return JsonResponse({'ok': False, 'error': str(e)})
 
 
+def _draft_content(oid, meta, aid, cat_name, sizes_text):
+    """Gọi AI agent viết tên + mô tả (có retry duyệt-lại). Trả (name, desc, cc)."""
+    body = {'asset_ids': [int(aid)], 'category_name': cat_name, 'sizes_text': sizes_text,
+            'hint': f"Tranh tô màu theo số DALI, mã {meta.get('ma') or ''}, "
+                    f"khổ gốc {meta.get('kt') or ''}, {meta.get('colors') or ''} màu"}
+    try:
+        res = _request('POST', '/api/web/product-draft', json_body=body, timeout=75)
+    except _AgentErr as e:
+        if any(k in str(e).lower() for k in ('duyệt', 'duyet', 'hợp lệ', 'hop le')):
+            meta['agent_asset_approved'] = False
+            _ensure_asset(oid, meta)
+            res = _request('POST', '/api/web/product-draft', json_body=body, timeout=75)
+        else:
+            raise
+    draft = res.get('draft') or res
+    return (draft.get('name') or '').strip(), (draft.get('description') or '').strip(), draft.get('colors_count')
+
+
+@staff_required
+def dang_web_danh_muc(request):
+    """Danh mục web (cho ô chọn danh mục ở trang Xưởng ảnh — chế độ đăng thẳng)."""
+    if not agent_configured():
+        return JsonResponse({'ok': False, 'configured': False, 'categories': []})
+    try:
+        cat = _catalog()
+        return JsonResponse({'ok': True, 'configured': True,
+                             'categories': cat.get('categories') or []})
+    except _AgentErr as e:
+        return JsonResponse({'ok': False, 'configured': True, 'error': str(e), 'categories': []})
+
+
+@staff_required
+def dang_web_tu_dong(request):
+    """ĐĂNG THẲNG 1 CHẠM (bỏ bảng duyệt): đẩy ảnh + duyệt -> AI viết tên/mô tả ->
+    đăng thẳng lên tranhdali.vn. Khổ tự theo họ tỉ lệ; giá tự theo bảng khổ; số màu
+    từ bản ghi. Mã KT lạ (không khớp khổ nào) -> trả need_size để mở bảng chọn tay."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'})
+    try:
+        oid, meta = _load_out(request)
+        try:
+            cat_id = int(request.POST.get('category_id') or 0)
+        except ValueError:
+            cat_id = 0
+        cat = _catalog()
+        cats = {int(c['id']): c.get('name') or '' for c in (cat.get('categories') or [])}
+        if cat_id not in cats:
+            return JsonResponse({'ok': False, 'error': 'Chưa chọn danh mục hợp lệ ở ô "Danh mục khi đăng".'})
+        sizes = cat.get('sizes') or []
+        ticks, matched = _ticks_for_kt(meta.get('kt'), sizes)
+        if not ticks:
+            return JsonResponse({'ok': False, 'need_size': True,
+                                 'error': f"Khổ {meta.get('kt') or ''} không khớp khổ chuẩn nào — chọn khổ tay."})
+        aid = _ensure_asset(oid, meta)
+        sizes_text = ', '.join(s.get('name') or '' for s in sizes if int(s['id']) in ticks)
+        name, desc, cc_ai = _draft_content(oid, meta, aid, cats[cat_id], sizes_text)
+        if not name:
+            return JsonResponse({'ok': False, 'error': 'AI chưa viết được nội dung — thử lại.'})
+        try:
+            colors_count = int(str(meta.get('colors') or '').strip() or cc_ai or 0)
+        except (ValueError, TypeError):
+            colors_count = int(cc_ai or 0)
+        res = _request('POST', '/api/web/publish-product', json_body={
+            'name': name, 'description': desc, 'colors_count': colors_count,
+            'category_id': cat_id, 'size_ids': sorted(ticks),
+            'image_asset_id': int(aid)}, timeout=45)
+        admin_url = res.get('admin_url') or ''
+        rec = {'admin_url': admin_url, 'at': datetime.now().strftime('%Y-%m-%d %H:%M'),
+               'out_id': oid, 'name': name}
+        meta['published'] = rec
+        _save_sidecar(oid, meta)
+        ma = (meta.get('ma') or '').strip()
+        if ma:
+            _reg_set(ma, rec)
+        return JsonResponse({'ok': True, 'admin_url': admin_url, 'name': name})
+    except _AgentErr as e:
+        return JsonResponse({'ok': False, 'error': str(e)})
+
+
 @staff_required
 def dang_web_cai_dat(request):
     """Cấu hình tài khoản Agent (dán qua /cai-dat-ai — không cần SSH)."""

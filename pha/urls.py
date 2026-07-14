@@ -110,6 +110,8 @@ urlpatterns = [
     path('xuong-anh/dang-web/chuan-bi', web_publish.dang_web_chuan_bi, name='dang_web_chuan_bi'),
     path('xuong-anh/dang-web/draft', web_publish.dang_web_draft, name='dang_web_draft'),
     path('xuong-anh/dang-web/publish', web_publish.dang_web_publish, name='dang_web_publish'),
+    path('xuong-anh/dang-web/danh-muc', web_publish.dang_web_danh_muc, name='dang_web_danh_muc'),
+    path('xuong-anh/dang-web/tu-dong', web_publish.dang_web_tu_dong, name='dang_web_tu_dong'),
     path('xuong-anh/dang-web/cai-dat', web_publish.dang_web_cai_dat, name='dang_web_cai_dat'),
     # Hàng đợi RIP (web <-> DALI Print Agent <-> Flexi)
     path('api/rip-queue', rip_views.rip_queue, name='rip_queue'),

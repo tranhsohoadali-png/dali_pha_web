@@ -101,8 +101,15 @@
 
   <!-- ẢNH ĐÃ GHÉP -->
   <div class="card mb-4">
-    <div class="card-header"><i class="bi bi-collection text-success"></i> Ảnh đã ghép <span class="text-secondary fw-normal small">— kho ảnh sản phẩm hoàn chỉnh</span></div>
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <span><i class="bi bi-collection text-success"></i> Ảnh đã ghép <span class="text-secondary fw-normal small">— kho ảnh sản phẩm hoàn chỉnh</span></span>
+      <span id="catWrap" class="d-flex align-items-center gap-1 small d-none">
+        <span class="text-secondary">Danh mục khi đăng web:</span>
+        <select id="pubCatSel" class="form-select form-select-sm" style="width:auto"></select>
+      </span>
+    </div>
     <div class="card-body">
+      <div id="dwHint" class="alert alert-warning py-2 small d-none"></div>
       <div id="outList"></div>
       <div id="outEmpty" class="text-secondary small text-center py-3 d-none">Chưa có ảnh nào.</div>
     </div>
@@ -261,9 +268,9 @@ function pubBadge(o){
     var u=o.published.admin_url||'#';
     return '<span class="badge text-bg-success me-1" title="Đã đăng '+(o.published.at||'')+'">Đã đăng</span>'
       +'<a class="btn btn-outline-success btn-sm me-1" target="_blank" href="'+u+'" title="Mở trang quản trị sản phẩm"><i class="bi bi-box-arrow-up-right"></i></a>'
-      +'<button class="btn btn-outline-secondary btn-sm opub me-1" title="Đăng BẢN MỚI (mã này đã có sản phẩm)"><i class="bi bi-globe2"></i> Đăng lại</button>';
+      +'<button class="btn btn-outline-secondary btn-sm opub me-1" title="Đăng thẳng BẢN MỚI lên tranhdali.vn (mã này đã có sản phẩm)"><i class="bi bi-globe2"></i> Đăng lại</button>';
   }
-  return '<button class="btn btn-warning btn-sm opub me-1" title="Đăng sản phẩm này lên tranhdali.vn (AI tự viết tên + mô tả)"><i class="bi bi-globe2"></i> Đăng web</button>';
+  return '<button class="btn btn-warning btn-sm opub me-1" title="Đăng THẲNG lên tranhdali.vn — AI tự viết tên + mô tả, khổ/giá tự điền, không cần duyệt"><i class="bi bi-globe2"></i> Đăng web</button>';
 }
 function renderOuts(){
   var w=document.getElementById('outList'); w.innerHTML='';
@@ -289,7 +296,7 @@ function renderOuts(){
         window.open('/cai-dat-ai#agent', '_blank');
         return;
       }
-      openPub(o, pb);
+      directPublish(o, pb);      // 1 CHẠM đăng thẳng (bỏ bảng duyệt)
     });
     w.appendChild(d);
   });
@@ -297,6 +304,48 @@ function renderOuts(){
 renderKhung(); renderOuts();
 
 /* ---------- ĐĂNG SẢN PHẨM lên tranhdali.vn ---------- */
+// Nạp DANH MỤC vào ô chọn (nhớ lần trước). Đăng thẳng dùng danh mục đang chọn.
+function loadCategories(){
+  if(!AGENT_READY) return;
+  fetch('/xuong-anh/dang-web/danh-muc',{method:'POST',headers:{'X-CSRFToken':csrf()},body:''})
+    .then(r=>r.json()).then(function(j){
+      if(!j.ok || !(j.categories||[]).length){
+        document.getElementById('dwHint').classList.remove('d-none');
+        document.getElementById('dwHint').textContent='Chưa lấy được danh mục web'+(j.error?(': '+j.error):'')+' — kiểm tra Cài đặt AI → Agent đăng web.';
+        return;
+      }
+      var sel=document.getElementById('pubCatSel'); sel.innerHTML='';
+      j.categories.forEach(function(c){ var op=document.createElement('option'); op.value=c.id; op.textContent=c.name; sel.appendChild(op); });
+      var last=localStorage.getItem('pubCat'); if(last && sel.querySelector('option[value="'+last+'"]')) sel.value=last;
+      sel.addEventListener('change', function(){ localStorage.setItem('pubCat', sel.value); });
+      document.getElementById('catWrap').classList.remove('d-none');
+    }).catch(function(){});
+}
+loadCategories();
+
+// 1 CHẠM ĐĂNG THẲNG: AI viết nội dung + đăng luôn lên tranhdali.vn (không bảng duyệt).
+function directPublish(o, btn){
+  showErr('');
+  var sel=document.getElementById('pubCatSel');
+  if(!sel || !sel.value){ showErr('Chọn "Danh mục khi đăng web" ở góc phải mục Ảnh đã ghép trước đã.'); return; }
+  if(o.published && !confirm('Mã '+(o.ma||'')+' ĐÃ đăng rồi. Đăng thêm một sản phẩm MỚI nữa?')) return;
+  var old=btn.innerHTML; btn.disabled=true;
+  btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> Đang đăng…';
+  fetch('/xuong-anh/dang-web/tu-dong',{method:'POST',headers:{'X-CSRFToken':csrf()},
+    body:new URLSearchParams({id:o.id, category_id:sel.value})})
+    .then(r=>r.json()).then(function(j){
+      btn.disabled=false; btn.innerHTML=old;
+      if(j.need_size){ showErr(j.error); openPub(o, btn); return; }  // khổ lạ -> bung bảng chọn khổ tay
+      if(!j.ok){ showErr(j.error||'Đăng lỗi'); return; }
+      o.published={admin_url:j.admin_url, at:'vừa xong'};
+      localStorage.setItem('pubCat', sel.value);
+      renderOuts();
+      var e=document.getElementById('err'); e.className='alert alert-success'; e.classList.remove('d-none');
+      e.innerHTML='✅ Đã đăng "<b>'+(j.name||o.ma||'')+'</b>" lên tranhdali.vn'+(j.admin_url?(' — <a href="'+j.admin_url+'" target="_blank">mở quản trị</a>'):'')+'.';
+    }).catch(function(){ btn.disabled=false; btn.innerHTML=old;
+      showErr('Mất kết nối khi đăng — KIỂM TRA trang quản trị trước khi bấm lại (tránh đăng trùng).'); });
+}
+
 var PUB = {o:null, sizes:[], userTouched:{}};
 function openPub(o, btn){
   btn.disabled=true; var old=btn.innerHTML; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span>';
