@@ -64,10 +64,9 @@ def make_a3_sheet(number_map_path, code, out_path):
     return out_path
 
 
-def make_a3_from_result(result_url, code):
-    """result_url = URL bản đồ số (tuyệt đối https://.../media/... HOẶC tương đối
-    /media/...) -> PDF A3 trong MEDIA_ROOT. Trả URL /media/... của PDF."""
-    import re
+def _src_from_url(result_url):
+    """URL bản đồ số (tuyệt đối https://.../media/... HOẶC tương đối /media/...) ->
+    đường dẫn tuyệt đối AN TOÀN trong MEDIA_ROOT."""
     from urllib.parse import unquote
     u = unquote(result_url or '').split('?', 1)[0].split('#', 1)[0]
     rel = (u.split('/media/', 1)[1] if '/media/' in u else u).lstrip('/')
@@ -75,21 +74,36 @@ def make_a3_from_result(result_url, code):
     src = os.path.normpath(os.path.join(root, rel))
     if not src.startswith(root + os.sep):        # chặn ../ thoát MEDIA_ROOT
         raise RuntimeError('Đường dẫn ảnh bản đồ số không hợp lệ.')
-    safe = re.sub(r'[^A-Za-z0-9._-]', '_', (code or 'tranh').strip()) or 'tranh'
-    out_rel = f'{os.path.splitext(rel)[0]}_{safe}_A3.pdf'
-    out_abs = os.path.join(root, out_rel)
-    make_a3_sheet(src, safe, out_abs)
-    return '/media/' + out_rel.replace(os.sep, '/')
+    return src
+
+
+def make_a3_into_in_a3(result_url, code):
+    """Bản đồ số -> PDF A3 in sẵn LƯU THẲNG vào kho IN A3 (media/in_a3/<mã>.pdf) để in
+    hàng loạt sau, khỏi tải về rồi upload lại. Trùng mã -> ghi đè. Trả (file_url, name)."""
+    from pha.in_a3 import _a3_dir, _safe_stem
+    src = _src_from_url(result_url)
+    safe = _safe_stem(code) or 'tranh'
+    name = safe + '.pdf'
+    make_a3_sheet(src, safe, os.path.join(_a3_dir(), name))
+    tp = os.path.join(_a3_dir(), '_thumbs', name + '.png')   # xoá thumbnail cũ -> render lại
+    try:
+        os.remove(tp)
+    except OSError:
+        pass
+    return f'/media/in_a3/{name}', name
 
 
 @staff_required
 def anh_a3(request):
-    """BƯỚC TẮT: bản đồ số -> PDF A3 in sẵn (template xưởng + mã). Trả {file_url}."""
+    """BƯỚC TẮT: bản đồ số -> PDF A3 in sẵn LƯU vào kho IN A3. Trả {file_url, name, sel_url}."""
     result_url = request.GET.get('result_url') or request.GET.get('img_output') or ''
     code = request.GET.get('code') or request.GET.get('image_name') or 'tranh'
     if not result_url:
         return JsonResponse({'ok': False, 'error': 'Thiếu bản đồ số.'}, status=400)
     try:
-        return JsonResponse({'ok': True, 'file_url': make_a3_from_result(result_url, code)})
+        from urllib.parse import urlencode
+        file_url, name = make_a3_into_in_a3(result_url, code)
+        return JsonResponse({'ok': True, 'file_url': file_url, 'name': name,
+                             'sel_url': '/in-a3?' + urlencode({'sel': name})})
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)

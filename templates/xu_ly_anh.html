@@ -177,7 +177,7 @@
                 <select id="orient" class="form-select form-select-sm"><option value="auto">Tự động</option><option value="portrait">Dọc</option><option value="landscape">Ngang</option></select></div>
             </div>
             <button id="btnPrint" class="btn btn-success btn-sm mt-3" hidden><i class="bi bi-download"></i> Tải bản in + A3</button>
-            <button id="btnA3" class="btn btn-danger btn-sm mt-3 ms-1" hidden title="Xuất THẲNG PDF A3 in sẵn (template xưởng + footer + mã) từ bản đồ số — thay bước làm tay trong Illustrator"><i class="bi bi-filetype-pdf"></i> Tải A3 in sẵn (PDF)</button>
+            <button id="btnA3" class="btn btn-danger btn-sm mt-3 ms-1" hidden title="Tạo PDF A3 in sẵn (template xưởng + footer + mã) và LƯU THẲNG vào kho In A3 để in hàng loạt — thay bước làm tay Illustrator"><i class="bi bi-printer"></i> Lưu A3 vào In A3</button>
             <a id="btnMat" class="btn btn-outline-success btn-sm mt-3 ms-1" hidden download target="_blank" title="Bản phóng to các vùng mặt (in kèm bản số để thợ đọc số ô nhỏ ở mặt)"><i class="bi bi-person-bounding-box"></i> Tải bản chi tiết mặt</a>
             <button id="btnSaveMa" class="btn btn-info btn-sm mt-3 ms-1 text-white" hidden title="Lưu bản này vào Kho mã tranh (ảnh thiết kế + bảng màu HIỆN TẠI) để sau mở lại sửa màu, khỏi chạy lại AI"><i class="bi bi-bookmark-star"></i> Lưu vào kho mã</button>
             <button id="btnLearn" class="btn btn-outline-primary btn-sm mt-3 ms-1" hidden title="Lưu ca này (ảnh gốc + thông số + thiết kế) vào kho học để hệ thống học dần"><i class="bi bi-mortarboard"></i> Lưu vào kho học</button>
@@ -553,7 +553,7 @@
       [res.origin_result,res.file_paint,res.file_a3].forEach(dl);
     });
   };
-  // BƯỚC TẮT: bản đồ số -> thẳng PDF A3 in sẵn (template xưởng + mã)
+  // BƯỚC TẮT: bản đồ số -> PDF A3 in sẵn LƯU THẲNG vào kho In A3
   document.getElementById('btnA3').onclick=function(){
     var ru=decodeURIComponent(document.getElementById('imgResult').src);
     var code=(document.getElementById('imgName').value||'tranh').trim();
@@ -561,7 +561,9 @@
     $.get('/anh-a3',{result_url:ru,code:code},function(res){
       b.disabled=false; b.innerHTML=old;
       if(!res.ok){ alert('Lỗi A3: '+(res.error||'')); return; }
-      dl(res.file_url); window.open(res.file_url,'_blank');
+      b.innerHTML='<i class="bi bi-check-lg"></i> Đã vào In A3'; setTimeout(function(){b.innerHTML=old;},3000);
+      var e=document.getElementById('err'); e.className='alert alert-success'; e.classList.remove('d-none');
+      e.innerHTML='✅ Đã lưu A3 "<b>'+res.name+'</b>" vào kho In A3. <a href="'+res.sel_url+'" target="_blank">Mở In A3 để đặt số lượng &amp; in »</a>';
     }).fail(function(xhr){ b.disabled=false; b.innerHTML=old;
       alert('Lỗi A3: '+((xhr.responseJSON&&xhr.responseJSON.error)||('máy chủ '+xhr.status))); });
   };
