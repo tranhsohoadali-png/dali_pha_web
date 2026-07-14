@@ -562,7 +562,8 @@
       b.disabled=false; b.innerHTML=old;
       if(!res.ok){ alert('Lỗi A3: '+(res.error||'')); return; }
       dl(res.file_url); window.open(res.file_url,'_blank');
-    }).fail(function(){ b.disabled=false; b.innerHTML=old; alert('Lỗi kết nối'); });
+    }).fail(function(xhr){ b.disabled=false; b.innerHTML=old;
+      alert('Lỗi A3: '+((xhr.responseJSON&&xhr.responseJSON.error)||('máy chủ '+xhr.status))); });
   };
   ['imgDesign','imgEnhanced','imgOrigin'].forEach(function(id){
     var el=document.getElementById(id);

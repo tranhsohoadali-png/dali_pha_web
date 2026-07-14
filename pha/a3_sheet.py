@@ -65,14 +65,19 @@ def make_a3_sheet(number_map_path, code, out_path):
 
 
 def make_a3_from_result(result_url, code):
-    """result_url = /media/..._result.png (bản đồ số) -> PDF A3 trong MEDIA_ROOT.
-    Trả URL /media/... của PDF."""
-    rel = (result_url or '').replace('/media/', '').lstrip('/')
-    src = os.path.join(settings.MEDIA_ROOT, rel)
+    """result_url = URL bản đồ số (tuyệt đối https://.../media/... HOẶC tương đối
+    /media/...) -> PDF A3 trong MEDIA_ROOT. Trả URL /media/... của PDF."""
     import re
+    from urllib.parse import unquote
+    u = unquote(result_url or '').split('?', 1)[0].split('#', 1)[0]
+    rel = (u.split('/media/', 1)[1] if '/media/' in u else u).lstrip('/')
+    root = os.path.normpath(str(settings.MEDIA_ROOT))
+    src = os.path.normpath(os.path.join(root, rel))
+    if not src.startswith(root + os.sep):        # chặn ../ thoát MEDIA_ROOT
+        raise RuntimeError('Đường dẫn ảnh bản đồ số không hợp lệ.')
     safe = re.sub(r'[^A-Za-z0-9._-]', '_', (code or 'tranh').strip()) or 'tranh'
     out_rel = f'{os.path.splitext(rel)[0]}_{safe}_A3.pdf'
-    out_abs = os.path.join(settings.MEDIA_ROOT, out_rel)
+    out_abs = os.path.join(root, out_rel)
     make_a3_sheet(src, safe, out_abs)
     return '/media/' + out_rel.replace(os.sep, '/')
 
