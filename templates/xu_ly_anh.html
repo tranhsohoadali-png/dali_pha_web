@@ -176,6 +176,7 @@
                 <select id="orient" class="form-select form-select-sm"><option value="auto">Tự động</option><option value="portrait">Dọc</option><option value="landscape">Ngang</option></select></div>
             </div>
             <button id="btnPrint" class="btn btn-success btn-sm mt-3" hidden><i class="bi bi-download"></i> Tải bản in + A3</button>
+            <button id="btnA3" class="btn btn-danger btn-sm mt-3 ms-1" hidden title="Xuất THẲNG PDF A3 in sẵn (template xưởng + footer + mã) từ bản đồ số — thay bước làm tay trong Illustrator"><i class="bi bi-filetype-pdf"></i> Tải A3 in sẵn (PDF)</button>
             <a id="btnMat" class="btn btn-outline-success btn-sm mt-3 ms-1" hidden download target="_blank" title="Bản phóng to các vùng mặt (in kèm bản số để thợ đọc số ô nhỏ ở mặt)"><i class="bi bi-person-bounding-box"></i> Tải bản chi tiết mặt</a>
             <button id="btnSaveMa" class="btn btn-info btn-sm mt-3 ms-1 text-white" hidden title="Lưu bản này vào Kho mã tranh (ảnh thiết kế + bảng màu HIỆN TẠI) để sau mở lại sửa màu, khỏi chạy lại AI"><i class="bi bi-bookmark-star"></i> Lưu vào kho mã</button>
             <button id="btnLearn" class="btn btn-outline-primary btn-sm mt-3 ms-1" hidden title="Lưu ca này (ảnh gốc + thông số + thiết kế) vào kho học để hệ thống học dần"><i class="bi bi-mortarboard"></i> Lưu vào kho học</button>
@@ -476,7 +477,7 @@
             +' · AI: '+(p.enhance?'có':'không')+(p.enhance&&p.style_category?(' ('+p.style_category+')'):'');
       pi.innerHTML=t; pi.classList.remove('d-none');
       if(res.warn){ var e=document.getElementById('err'); e.className='alert alert-warning'; e.textContent='⚠️ '+res.warn; }
-      ['btnPrint','dXlsx','dLegend','dCsv','btnLearn','btnSaveMa'].forEach(id=>document.getElementById(id).hidden=false);
+      ['btnPrint','btnA3','dXlsx','dLegend','dCsv','btnLearn','btnSaveMa'].forEach(id=>document.getElementById(id).hidden=false);
       // Tranh khổ TO có mặt -> nút tải BẢN CHI TIẾT MẶT (phóng to vùng mặt + số to đọc rõ)
       var mat=document.getElementById('btnMat');
       if(p.detail_sheet){ mat.href='/media/'+p.detail_sheet; mat.hidden=false; } else { mat.hidden=true; }
@@ -524,6 +525,17 @@
       if(res.error){alert('Lỗi: '+res.error);return;}
       [res.origin_result,res.file_paint,res.file_a3].forEach(dl);
     });
+  };
+  // BƯỚC TẮT: bản đồ số -> thẳng PDF A3 in sẵn (template xưởng + mã)
+  document.getElementById('btnA3').onclick=function(){
+    var ru=decodeURIComponent(document.getElementById('imgResult').src);
+    var code=(document.getElementById('imgName').value||'tranh').trim();
+    var b=this, old=b.innerHTML; b.disabled=true; b.innerHTML='<span class="spinner-border spinner-border-sm"></span> Đang tạo A3…';
+    $.get('/anh-a3',{result_url:ru,code:code},function(res){
+      b.disabled=false; b.innerHTML=old;
+      if(!res.ok){ alert('Lỗi A3: '+(res.error||'')); return; }
+      dl(res.file_url); window.open(res.file_url,'_blank');
+    }).fail(function(){ b.disabled=false; b.innerHTML=old; alert('Lỗi kết nối'); });
   };
   ['imgDesign','imgEnhanced','imgOrigin'].forEach(function(id){
     var el=document.getElementById(id);

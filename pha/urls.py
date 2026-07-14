@@ -18,6 +18,7 @@ from pha import wifi_ip
 from pha import product_studio
 from pha import web_publish
 from pha import kho_ma as kho_ma_views
+from pha import a3_sheet
 
 urlpatterns = [
     path('login', views.login_view, name='login'),
@@ -158,6 +159,7 @@ urlpatterns = [
     path('anh-export-xlsx', views.anh_export_xlsx, name='anh_export_xlsx'),
     path('anh-legend', views.anh_legend, name='anh_legend'),
     path('anh-download', views.anh_download_result, name='anh_download'),
+    path('anh-a3', a3_sheet.anh_a3, name='anh_a3'),   # bước tắt: bản đồ số -> PDF A3 in sẵn
 
     # Kho học (Giai đoạn A): lưu ca xử lý đẹp để hệ thống học dần
     # KHO MÃ TRANH: lưu bản đã số hoá -> mở lại sửa màu (khỏi chạy lại AI)

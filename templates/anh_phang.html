@@ -73,6 +73,7 @@
                 <select id="orient" class="form-select form-select-sm"><option value="auto">Tự động</option><option value="portrait">Dọc</option><option value="landscape">Ngang</option></select></div>
             </div>
             <button id="btnPrint" class="btn btn-success btn-sm mt-3" hidden><i class="bi bi-download"></i> Tải bản in + A3</button>
+            <button id="btnA3" class="btn btn-danger btn-sm mt-3 ms-1" hidden title="Xuất THẲNG PDF A3 in sẵn (template xưởng + footer + mã) từ bản đồ số — thay bước làm tay trong Illustrator"><i class="bi bi-filetype-pdf"></i> Tải A3 in sẵn (PDF)</button>
             <button id="btnLearn" class="btn btn-outline-primary btn-sm mt-3 ms-1" hidden title="Lưu ca này (ảnh gốc + thông số + thiết kế) vào kho học để hệ thống học dần"><i class="bi bi-mortarboard"></i> Lưu vào kho học</button>
             <a href="/kho-hoc" class="btn btn-link btn-sm mt-3" title="Xem kho học">Kho học »</a>
           </div>
@@ -222,7 +223,7 @@
       pi.innerHTML='<i class="bi bi-sliders"></i> Giữ nguyên 100% ảnh đưa vào (không AI, không giảm màu, không gộp mảng)';
       pi.classList.remove('d-none');
       if(res.warn){ var e=document.getElementById('err'); e.className='alert alert-warning'; e.textContent='⚠️ '+res.warn; }
-      ['btnPrint','dXlsx','dLegend','dCsv','btnLearn'].forEach(id=>document.getElementById(id).hidden=false);
+      ['btnPrint','btnA3','dXlsx','dLegend','dCsv','btnLearn'].forEach(id=>document.getElementById(id).hidden=false);
       var bl=document.getElementById('btnLearn'); bl.disabled=false; bl.classList.add('btn-outline-primary'); bl.classList.remove('btn-primary'); bl.innerHTML='<i class="bi bi-mortarboard"></i> Lưu vào kho học';
       showPalette(res.colors||[]); if(onDone)onDone();
     }).fail(function(){ spin(false); document.getElementById('err').textContent='Không kết nối được máy chủ.'; document.getElementById('err').classList.remove('d-none'); if(onDone)onDone(); });
@@ -243,6 +244,17 @@
       if(res.ok){ b.classList.remove('btn-outline-primary'); b.classList.add('btn-primary');
         b.innerHTML='<i class="bi bi-check2"></i> '+(res.dup?'Đã có trong kho':'Đã lưu kho học'); }
     }).catch(function(){ b.disabled=false; alert('Lỗi kết nối'); });
+  };
+  // BƯỚC TẮT: bản đồ số -> thẳng PDF A3 in sẵn (template xưởng + mã)
+  document.getElementById('btnA3').onclick=function(){
+    var ru=decodeURIComponent(document.getElementById('imgResult').src);
+    var code=(document.getElementById('imgName').value||'tranh').trim();
+    var b=this, old=b.innerHTML; b.disabled=true; b.innerHTML='<span class="spinner-border spinner-border-sm"></span> Đang tạo A3…';
+    $.get('/anh-a3',{result_url:ru,code:code},function(res){
+      b.disabled=false; b.innerHTML=old;
+      if(!res.ok){ alert('Lỗi A3: '+(res.error||'')); return; }
+      dl(res.file_url); window.open(res.file_url,'_blank');
+    }).fail(function(){ b.disabled=false; b.innerHTML=old; alert('Lỗi kết nối'); });
   };
   document.getElementById('btnPrint').onclick=function(){
     var ru=decodeURIComponent(document.getElementById('imgResult').src);
