@@ -222,17 +222,19 @@ def _ensure_asset(oid, meta):
         _save_sidecar(oid, meta)
     if not meta.get('agent_asset_approved'):
         # Agent xử lý ảnh BẤT ĐỒNG BỘ sau upload (AI viết title/tags): duyệt ngay
-        # trả ok nhưng KHÔNG DÍNH (status vẫn pending) — đo thật 2026-07-11.
-        # -> duyệt xong phải KIỂM lại status; chưa dính thì chờ 2s duyệt tiếp.
-        for _ in range(5):
+        # trả ok nhưng KHÔNG DÍNH (status vẫn pending) — đo thật 2026-07-11. -> duyệt
+        # xong phải KIỂM lại status; chưa dính thì chờ rồi duyệt tiếp. Chờ tới ~30s
+        # (12×2.5s) để hết cảnh "lúc được lúc không" khi agent đang bận xử lý ảnh.
+        for _ in range(12):
             _request('POST', f'/api/assets/{aid}/approve', json_body={}, timeout=15)
             if _asset_status(aid) == 'approved':
                 meta['agent_asset_approved'] = True
                 _save_sidecar(oid, meta)
                 break
-            time.sleep(2)
+            time.sleep(2.5)
         else:
-            raise _AgentErr('Kho agent đang xử lý ảnh, chưa duyệt được — chờ vài giây rồi bấm lại.')
+            raise _AgentErr('Ảnh gửi lên kho agent đang được xử lý (viết tiêu đề/thẻ), '
+                            'chưa duyệt kịp sau ~30s. Chờ khoảng 1 phút rồi bấm "Đăng web" lại.')
     return aid
 
 

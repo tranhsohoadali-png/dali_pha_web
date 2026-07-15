@@ -282,6 +282,7 @@ function renderOuts(){
       +'<span class="small fw-semibold">'+(o.ma||'—')+' · '+(o.kt||'')+' — '+(o.khung_name||'')+' <span class="text-secondary fw-normal">'+(o.created||'')+'</span></span>'
       +'<span class="text-nowrap">'+pubBadge(o)
       +'<button class="btn btn-outline-danger btn-sm odel"><i class="bi bi-trash"></i></button></span></div>'
+      +'<div class="dwMsg small mb-1 d-none"></div>'
       +'<div class="row g-2">'+outCardHtml(o)+'</div>';
     d.querySelector('.odel').addEventListener('click', function(){
       if(!confirm('Xoá bộ ảnh này?')) return;
@@ -331,19 +332,30 @@ function directPublish(o, btn){
   if(o.published && !confirm('Mã '+(o.ma||'')+' ĐÃ đăng rồi. Đăng thêm một sản phẩm MỚI nữa?')) return;
   var old=btn.innerHTML; btn.disabled=true;
   btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> Đang đăng…';
+  // ô thông báo NGAY TẠI THẺ này (khỏi báo tít đầu trang mà không thấy)
+  var card=btn.closest('.rounded-3')||btn.parentElement.parentElement;
+  var msg=card.querySelector('.dwMsg');
+  function cardMsg(html, kind){ if(!msg)return; msg.className='dwMsg small mb-1 alert py-1 px-2 '+(kind==='ok'?'alert-success':'alert-danger'); msg.innerHTML=html; msg.classList.remove('d-none'); msg.scrollIntoView({block:'nearest'}); }
+  if(msg) msg.classList.add('d-none');
   fetch('/xuong-anh/dang-web/tu-dong',{method:'POST',headers:{'X-CSRFToken':csrf()},
     body:new URLSearchParams({id:o.id, category_id:sel.value})})
-    .then(r=>r.json()).then(function(j){
+    .then(function(r){ return r.json().then(function(j){ j._status=r.status; return j; }); })
+    .then(function(j){
       btn.disabled=false; btn.innerHTML=old;
-      if(j.need_size){ showErr(j.error); openPub(o, btn); return; }  // khổ lạ -> bung bảng chọn khổ tay
-      if(!j.ok){ showErr(j.error||'Đăng lỗi'); return; }
+      if(j.need_size){ cardMsg('⚠️ '+(j.error||'Khổ lạ — chọn khổ tay')); openPub(o, btn); return; }
+      if(!j.ok){ cardMsg('❌ Không đăng được: <b>'+(j.error||('máy chủ '+(j._status||'')))+'</b><br>Bấm "Đăng web" để thử lại.'); return; }
       o.published={admin_url:j.admin_url, at:'vừa xong'};
       localStorage.setItem('pubCat', sel.value);
       renderOuts();
-      var e=document.getElementById('err'); e.className='alert alert-success'; e.classList.remove('d-none');
-      e.innerHTML='✅ Đã đăng "<b>'+(j.name||o.ma||'')+'</b>" lên tranhdali.vn'+(j.admin_url?(' — <a href="'+j.admin_url+'" target="_blank">mở quản trị</a>'):'')+'.';
+      // thẻ vừa render lại -> tìm lại msg của thẻ mới rồi báo thành công
+      setTimeout(function(){
+        var cards=document.querySelectorAll('#outList .rounded-3');
+        cards.forEach(function(cc){ if(cc.querySelector('.badge.text-bg-success') && (cc.textContent||'').indexOf(o.ma||' ')>=0){
+          var m2=cc.querySelector('.dwMsg'); if(m2){ m2.className='dwMsg small mb-1 alert alert-success py-1 px-2'; m2.innerHTML='✅ Đã đăng "<b>'+(j.name||o.ma||'')+'</b>" lên tranhdali.vn'+(j.admin_url?(' — <a href="'+j.admin_url+'" target="_blank">mở quản trị</a>'):'')+'.'; m2.classList.remove('d-none'); }
+        }});
+      }, 30);
     }).catch(function(){ btn.disabled=false; btn.innerHTML=old;
-      showErr('Mất kết nối khi đăng — KIỂM TRA trang quản trị trước khi bấm lại (tránh đăng trùng).'); });
+      cardMsg('❌ Mất kết nối khi đăng. <b>KIỂM TRA trang quản trị</b> xem đã lên chưa TRƯỚC khi bấm lại (tránh đăng trùng).'); });
 }
 
 var PUB = {o:null, sizes:[], userTouched:{}};
