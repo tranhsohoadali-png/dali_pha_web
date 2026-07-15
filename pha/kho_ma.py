@@ -53,14 +53,26 @@ def _write_json(path, obj):
     os.replace(tmp, path)
 
 
-def _register_painting(ma, image_rel, n_colors):
+def _register_painting(ma, mid, colors):
     """Tự khai báo/cập nhật MÃ vào danh mục mã tranh (/ma-tranh) — nối kho mã với
-    khai báo: số hoá + lưu là mã hiện luôn trong danh mục rót màu, ảnh = bản thiết
-    kế, số màu tự điền. Ảnh cũ (nếu là ảnh khai báo tay) được dọn."""
+    khai báo. ẢNH MẪU = ẢNH + CHÚ GIẢI (tranh + bảng mã DALI) DỰNG TỰ ĐỘNG từ bản
+    thiết kế + bảng màu -> khỏi làm "Ảnh + chú giải" tay rồi upload. Lỗi dựng legend
+    thì lùi về bản thiết kế trơn. Ảnh khai-báo-tay cũ (painting_*) được dọn."""
     ma = (ma or '').strip()
     if not ma:
         return
     from pha.models import Painting
+    d = _dir()
+    design = os.path.join(d, mid + '_design.png')
+    # ẢNH + CHÚ GIẢI: tranh + bảng [số · ô màu · mã DALI] (đúng kiểu ảnh mẫu C098/C105)
+    image_rel = f'{_SUB}/{mid}_legend.png'
+    try:
+        from pha.exports import build_legend_image
+        rows = [[r[0], r[1], (r[2] if len(r) > 2 else ''),
+                 (r[3] if len(r) > 3 and r[3] is not None else '')] for r in colors]
+        build_legend_image(design, rows, os.path.join(settings.MEDIA_ROOT, image_rel), title=ma)
+    except Exception:
+        image_rel = f'{_SUB}/{mid}_design.png'          # lỗi -> dùng bản thiết kế trơn
     p = Painting.objects.filter(code__iexact=ma).first()
     if p:
         old = p.image
@@ -69,17 +81,16 @@ def _register_painting(ma, image_rel, n_colors):
                 os.remove(os.path.join(settings.MEDIA_ROOT, old))
             except OSError:
                 pass
-        p.code, p.image, p.color_count = ma, image_rel, int(n_colors)
+        p.code, p.image, p.color_count = ma, image_rel, len(colors)
         p.save()
     else:
-        Painting.objects.create(code=ma, image=image_rel, color_count=int(n_colors))
+        Painting.objects.create(code=ma, image=image_rel, color_count=len(colors))
 
 
 def _unlink_painting(mid):
     """Xoá mã khỏi kho -> gỡ ảnh khỏi thẻ danh mục (khỏi trỏ file đã mất)."""
     from pha.models import Painting
-    rel = f'{_SUB}/{mid}_design.png'
-    for p in Painting.objects.filter(image=rel):
+    for p in Painting.objects.filter(image__startswith=f'{_SUB}/{mid}_'):
         p.image = ''
         p.save()
 
@@ -184,8 +195,8 @@ def kho_ma_luu(request):
             'created': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     _write_json(os.path.join(d, mid + '.json'), meta)
     in_catalog = False
-    if ma:                                   # tự khai báo vào danh mục mã tranh
-        _register_painting(ma, f'{_SUB}/{mid}_design.png', len(colors))
+    if ma:                                   # tự khai báo vào danh mục (ảnh + chú giải)
+        _register_painting(ma, mid, colors)
         in_catalog = True
     return JsonResponse({'ok': True, 'id': mid, 'ma': ma, 'in_catalog': in_catalog,
                          'design': f'/media/{_SUB}/{mid}_design.png'})
