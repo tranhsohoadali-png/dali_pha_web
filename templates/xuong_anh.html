@@ -108,7 +108,8 @@
           <span class="text-secondary">Danh mục khi đăng web:</span>
           <select id="pubCatSel" class="form-select form-select-sm" style="width:auto"></select>
         </span>
-        <button id="btnShopee" class="btn btn-sm" style="background:#ee4d2d;color:#fff" title="Xuất file Đăng hàng loạt Shopee cho TẤT CẢ mã ở đây (mỗi mã lấy ảnh mới nhất) — vào Seller Centre bấm Đăng hàng loạt là xong cả lô"><i class="bi bi-file-earmark-excel"></i> Xuất file Shopee</button>
+        <span class="text-secondary"><a href="#" id="shopAll">Tích hết</a> · <a href="#" id="shopNone">Bỏ tích</a></span>
+        <button id="btnShopee" class="btn btn-sm" style="background:#ee4d2d;color:#fff" title="Xuất file Đăng hàng loạt Shopee cho các mã ĐÃ TÍCH — vào Seller Centre bấm Đăng hàng loạt là xong cả lô"><i class="bi bi-file-earmark-excel"></i> Xuất file Shopee (<span id="shopN">0</span>)</button>
       </span>
     </div>
     <div class="card-body">
@@ -282,7 +283,10 @@ function renderOuts(){
     var d=document.createElement('div');
     d.className='border rounded-3 p-2 mb-2';
     d.innerHTML='<div class="d-flex justify-content-between align-items-center mb-1">'
-      +'<span class="small fw-semibold">'+(o.ma||'—')+' · '+(o.kt||'')+' — '+(o.khung_name||'')+' <span class="text-secondary fw-normal">'+(o.created||'')+'</span></span>'
+      +'<span class="small fw-semibold d-flex align-items-center gap-2">'
+      +'<input type="checkbox" class="form-check-input oshop m-0" data-id="'+o.id+'"'
+        +(o.ma?'':' disabled')+' title="'+(o.ma?'Tích để xuất file Shopee':'Ảnh chưa có MÃ — không xuất Shopee được')+'" style="cursor:pointer">'
+      +'<span>'+(o.ma||'—')+' · '+(o.kt||'')+' — '+(o.khung_name||'')+' <span class="text-secondary fw-normal">'+(o.created||'')+'</span></span></span>'
       +'<span class="text-nowrap">'+pubBadge(o)
       +'<button class="btn btn-outline-danger btn-sm odel"><i class="bi bi-trash"></i></button></span></div>'
       +'<div class="dwMsg small mb-1 d-none"></div>'
@@ -304,6 +308,7 @@ function renderOuts(){
     });
     w.appendChild(d);
   });
+  updShopN();          // render lại -> ô tích reset -> cập nhật số trên nút Shopee
 }
 renderKhung(); renderOuts();
 
@@ -327,12 +332,27 @@ function loadCategories(){
 }
 loadCategories();
 
-// XUẤT FILE SHOPEE: điền sẵn mẫu Đăng hàng loạt cho mọi mã ở "Ảnh đã ghép"
+// XUẤT FILE SHOPEE: tích mã nào xuất mã đó (mỗi mã = 1 SP × 2 khổ)
+function updShopN(){
+  var n=document.querySelectorAll('#outList .oshop:checked').length;
+  var el=document.getElementById('shopN'); if(el) el.textContent=n;
+}
+document.getElementById('outList').addEventListener('change', function(e){
+  if(e.target && e.target.classList.contains('oshop')) updShopN();
+});
+document.getElementById('shopAll').addEventListener('click', function(e){ e.preventDefault();
+  document.querySelectorAll('#outList .oshop:not(:disabled)').forEach(function(c){ c.checked=true; }); updShopN(); });
+document.getElementById('shopNone').addEventListener('click', function(e){ e.preventDefault();
+  document.querySelectorAll('#outList .oshop').forEach(function(c){ c.checked=false; }); updShopN(); });
+
 document.getElementById('btnShopee').addEventListener('click', function(){
   showErr('');
+  var ids=[...document.querySelectorAll('#outList .oshop:checked')].map(function(c){ return c.dataset.id; });
+  if(!ids.length){ showErr('Tích chọn mã cần xuất Shopee trước (ô vuông bên trái mỗi mã), hoặc bấm "Tích hết".'); return; }
   var b=this, old=b.innerHTML; b.disabled=true;
   b.innerHTML='<span class="spinner-border spinner-border-sm"></span> Đang tạo file…';
-  fetch('/xuong-anh/xuat-shopee').then(function(r){ return r.json().then(function(j){ j._s=r.status; return j; }); })
+  fetch('/xuong-anh/xuat-shopee?ids='+encodeURIComponent(ids.join(',')))
+    .then(function(r){ return r.json().then(function(j){ j._s=r.status; return j; }); })
     .then(function(j){
       b.disabled=false; b.innerHTML=old;
       if(!j.ok){ showErr('Xuất Shopee lỗi: '+(j.error||('máy chủ '+j._s))); return; }

@@ -91,11 +91,17 @@ def _ten_sp(ma, ten_ai):
     return name[:120]
 
 
-def _outs_for_shopee():
-    """Ảnh đã ghép -> mỗi MÃ 1 sản phẩm (lấy ảnh MỚI NHẤT của mã đó)."""
+def _outs_for_shopee(ids=None):
+    """Ảnh đã ghép -> mỗi MÃ 1 sản phẩm. ids = các bản ghi user TÍCH CHỌN (lọc TRƯỚC
+    rồi mới gộp theo mã) -> tích đúng ảnh nào thì lấy ảnh đó; không tích = lấy tất cả
+    mã (ảnh mới nhất). Cùng 1 mã tích nhiều ảnh -> lấy ảnh MỚI NHẤT."""
     from pha.product_studio import _out_list
+    rows = _out_list()                        # đã sắp mới nhất trước
+    if ids:
+        want = set(ids)
+        rows = [o for o in rows if o.get('id') in want]
     seen, items = set(), []
-    for o in _out_list():                     # đã sắp mới nhất trước
+    for o in rows:
         ma = (o.get('ma') or '').strip()
         img = o.get('img') or o.get('web') or ''
         if not ma or not img or ma.lower() in seen:
@@ -163,12 +169,11 @@ def xuat_shopee(request):
     """Xuất file đăng hàng loạt Shopee cho các mã trong 'Ảnh đã ghép'.
     ?ids=out-a,out-b (chọn) hoặc bỏ trống = TẤT CẢ mã (mỗi mã lấy ảnh mới nhất)."""
     try:
-        ids = [i for i in (request.GET.get('ids') or '').split(',') if i.strip()]
-        outs = _outs_for_shopee()
-        if ids:
-            outs = [o for o in outs if o['id'] in ids]
+        ids = [i.strip() for i in (request.GET.get('ids') or '').split(',') if i.strip()]
+        outs = _outs_for_shopee(ids)
         if not outs:
-            return JsonResponse({'ok': False, 'error': 'Chưa có ảnh đã ghép nào có MÃ để xuất.'})
+            return JsonResponse({'ok': False, 'error': 'Không có mã nào để xuất '
+                                 '(ảnh phải có MÃ mới xuất được).'})
         file_url, n = build_shopee_file(request, outs)
         return JsonResponse({'ok': True, 'file_url': file_url, 'n': n,
                              'rows': n * len(_SIZES)})
