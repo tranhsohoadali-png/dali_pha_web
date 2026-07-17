@@ -26,8 +26,14 @@ _OUT_SUB = 'shopee'
 
 # Giá trị cố định — lấy từ listing thật của shop
 _CATEGORY = '101156-Nhà cửa & Đời sống/Trang trí nhà cửa/Khung ảnh & vật trang trí tường'
-_BRAND = 'DALI'
 _VAR_NAME = 'kích thước'     # tên nhóm phân loại 1 (<=14 ký tự)
+
+# ⚠️ THƯƠNG HIỆU: Shopee đòi **MÃ SỐ** thương hiệu, KHÔNG nhận chữ "DALI"
+# (upload lỗi "Row 7: Thương hiệu should be valid number"). Sheet tra ID trong file
+# mẫu (HiddenShopBrand) RỖNG nên không có ID. Shopee cho phép ĐỂ TRỐNG rồi đặt
+# thương hiệu sau bằng công cụ thuộc tính -> để trống cho upload chạy.
+# Có ID rồi thì điền vào đây (chỉ SỐ), vd _BRAND_ID = '1234567'.
+_BRAND_ID = ''
 
 # CHỈ bán 2 khổ trên Shopee (user chốt). Giá Shopee = giá web + 100k (rồi Chương
 # trình Shop giảm về đúng giá web: 299->199, 399->299 — mass upload chỉ đặt giá gốc).
@@ -151,7 +157,9 @@ def build_shopee_file(request, outs):
             ws.cell(r, C_SMARTBOX, 'Tắt')     # quá chiều rộng
             ws.cell(r, C_SPX, 'Tắt')          # quá chiều dài
             ws.cell(r, C_DIEMNHAN, 'Mở')
-            ws.cell(r, C_BRAND, _BRAND)
+            if _BRAND_ID:                 # để trống nếu chưa có MÃ SỐ thương hiệu
+                ws.cell(r, C_BRAND, _BRAND_ID)
+            # 3 thuộc tính này Shopee nhận CHUỖI ("giá trị đề xuất hoặc chuỗi ký tự")
             ws.cell(r, C_XUATXU, 'Trong nước')
             ws.cell(r, C_CHATLIEU, 'Gỗ')
             ws.cell(r, C_PHONGCACH, 'Retro')
