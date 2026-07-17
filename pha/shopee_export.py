@@ -89,6 +89,12 @@ def _ten_sp(ma, ten_ai):
         # 2 lối viết 'hóa' và 'hoá' -> phải bắt cả hai.
         lo = re.sub(r'^\s*tranh\s+t[ôo]\s+m[àa]u\s+s[ốo]\s+h(?:óa|oá|oa)\s*',
                     '', lo, flags=re.I | re.UNICODE).strip(' -–—:')
+        # Tên AI CÒN hay kèm sẵn 'DALI' và/hoặc MÃ -> bỏ hết rồi mới ghép lại 1 lần
+        # (không thì ra 'số hóa DALI ... DALI P123 P123' — lỗi thật đã dính).
+        if ma:
+            lo = re.sub(r'\b' + re.escape(ma) + r'\b', '', lo, flags=re.I)
+        lo = re.sub(r'\bDALI\b', '', lo, flags=re.I)
+        lo = re.sub(r'\s{2,}', ' ', lo).strip(' -–—:,')
     base = f'{_NAME_PREFIX} {lo}'.strip() if lo else _NAME_PREFIX
     name = f'{base} {ma}'.strip()
     if len(name) > 120:                       # cắt phần tên tranh, GIỮ mã ở cuối
@@ -156,7 +162,9 @@ def build_shopee_file(request, outs):
             ws.cell(r, C_TRONGNGAY, 'Mở')
             ws.cell(r, C_SMARTBOX, 'Tắt')     # quá chiều rộng
             ws.cell(r, C_SPX, 'Tắt')          # quá chiều dài
-            ws.cell(r, C_DIEMNHAN, 'Mở')
+            # ⚠️ KHÔNG đụng 50053 "Điểm nhận hàng": Shopee từ chối
+            # "ID[50053] channelToggleStr[Mở]" — kênh 'Lấy hàng chủ động' này không
+            # bật/tắt được theo từng SP qua file; để trống -> theo cài đặt của shop.
             if _BRAND_ID:                 # để trống nếu chưa có MÃ SỐ thương hiệu
                 ws.cell(r, C_BRAND, _BRAND_ID)
             # 3 thuộc tính này Shopee nhận CHUỖI ("giá trị đề xuất hoặc chuỗi ký tự")
