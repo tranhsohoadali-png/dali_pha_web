@@ -19,6 +19,7 @@ from pha import product_studio
 from pha import web_publish
 from pha import kho_ma as kho_ma_views
 from pha import a3_sheet
+from pha import shopee_export
 
 urlpatterns = [
     path('login', views.login_view, name='login'),
@@ -114,6 +115,7 @@ urlpatterns = [
     path('xuong-anh/dang-web/danh-muc', web_publish.dang_web_danh_muc, name='dang_web_danh_muc'),
     path('xuong-anh/dang-web/tu-dong', web_publish.dang_web_tu_dong, name='dang_web_tu_dong'),
     path('xuong-anh/dang-web/cai-dat', web_publish.dang_web_cai_dat, name='dang_web_cai_dat'),
+    path('xuong-anh/xuat-shopee', shopee_export.xuat_shopee, name='xuat_shopee'),
     # Hàng đợi RIP (web <-> DALI Print Agent <-> Flexi)
     path('api/rip-queue', rip_views.rip_queue, name='rip_queue'),
     # IP WiFi xưởng tự cập nhật (chấm công) — chỉ quản lý

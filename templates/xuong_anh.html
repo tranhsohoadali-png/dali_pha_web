@@ -103,9 +103,12 @@
   <div class="card mb-4">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
       <span><i class="bi bi-collection text-success"></i> Ảnh đã ghép <span class="text-secondary fw-normal small">— kho ảnh sản phẩm hoàn chỉnh</span></span>
-      <span id="catWrap" class="d-flex align-items-center gap-1 small d-none">
-        <span class="text-secondary">Danh mục khi đăng web:</span>
-        <select id="pubCatSel" class="form-select form-select-sm" style="width:auto"></select>
+      <span class="d-flex align-items-center gap-2 small">
+        <span id="catWrap" class="d-flex align-items-center gap-1 d-none">
+          <span class="text-secondary">Danh mục khi đăng web:</span>
+          <select id="pubCatSel" class="form-select form-select-sm" style="width:auto"></select>
+        </span>
+        <button id="btnShopee" class="btn btn-sm" style="background:#ee4d2d;color:#fff" title="Xuất file Đăng hàng loạt Shopee cho TẤT CẢ mã ở đây (mỗi mã lấy ảnh mới nhất) — vào Seller Centre bấm Đăng hàng loạt là xong cả lô"><i class="bi bi-file-earmark-excel"></i> Xuất file Shopee</button>
       </span>
     </div>
     <div class="card-body">
@@ -323,6 +326,24 @@ function loadCategories(){
     }).catch(function(){});
 }
 loadCategories();
+
+// XUẤT FILE SHOPEE: điền sẵn mẫu Đăng hàng loạt cho mọi mã ở "Ảnh đã ghép"
+document.getElementById('btnShopee').addEventListener('click', function(){
+  showErr('');
+  var b=this, old=b.innerHTML; b.disabled=true;
+  b.innerHTML='<span class="spinner-border spinner-border-sm"></span> Đang tạo file…';
+  fetch('/xuong-anh/xuat-shopee').then(function(r){ return r.json().then(function(j){ j._s=r.status; return j; }); })
+    .then(function(j){
+      b.disabled=false; b.innerHTML=old;
+      if(!j.ok){ showErr('Xuất Shopee lỗi: '+(j.error||('máy chủ '+j._s))); return; }
+      var e=document.getElementById('err'); e.className='alert alert-success'; e.classList.remove('d-none');
+      e.innerHTML='✅ Đã tạo file Shopee cho <b>'+j.n+'</b> mã ('+j.rows+' dòng = mỗi mã 2 khổ). '
+        +'<a href="'+j.file_url+'" download>Tải file »</a><br>'
+        +'<span class="small">Vào Shopee Seller Centre → Quản lý sản phẩm → <b>Đăng hàng loạt</b> → tải file này lên. '
+        +'Ảnh mô tả (2–8) anh thêm sau bằng album như thường lệ.</span>';
+      var a=document.createElement('a'); a.href=j.file_url; a.download=''; a.click();
+    }).catch(function(){ b.disabled=false; b.innerHTML=old; showErr('Không kết nối được máy chủ.'); });
+});
 
 // 1 CHẠM ĐĂNG THẲNG: AI viết nội dung + đăng luôn lên tranhdali.vn (không bảng duyệt).
 function directPublish(o, btn){
