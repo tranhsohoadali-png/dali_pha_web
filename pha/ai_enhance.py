@@ -117,6 +117,19 @@ PRESETS = {
         'color_limit': 12, 'smooth': 1, 'min_area': 60, 'enhance': False,
         'use_refs': False, 'face_priority': False, 'prompt': DEFAULT_ENHANCE_PROMPT,
     },
+    # Ảnh anime/chibi/AI CÓ KHUÔN MẶT: các preset chi tiết (design/cayhoa) KHÔNG bảo
+    # vệ ngũ quan -> mắt/lông mày bị gộp mất (đo thật: 21 lẫn 40 màu, khổ 20 lẫn 50
+    # đều mất; ép face_priority kèm detail=True cũng VẪN mất vì nhánh detail bỏ qua).
+    # Cấu hình dưới là bản DUY NHẤT giữ được ngũ quan trong 6 biến thể đã thử.
+    'anime_face': {
+        'label': 'Anime / chibi CÓ MẶT NGƯỜI (giữ ngũ quan)',
+        'desc': 'Tranh anime/chibi/AI có KHUÔN MẶT: dò mặt rồi tách màu RIÊNG cho vùng '
+                'mặt nên GIỮ được mắt/lông mày/miệng — các preset "chi tiết" làm mất sạch '
+                'ngũ quan. Để AI TẮT (ảnh vẽ sẵn đã đẹp, bật AI sẽ vẽ lại thành người '
+                'khác). Đơn giản hoá "Vừa" là BẮT BUỘC — để "Không" là hỏng mắt.',
+        'color_limit': 40, 'smooth': 2, 'min_area': 30, 'enhance': False,
+        'use_refs': False, 'face_priority': True, 'prompt': DEFAULT_ENHANCE_PROMPT,
+    },
     'photo': {
         'label': 'Ảnh thật khách hàng (chân dung, 30–48 màu)',
         'desc': 'Giữ NGUYÊN ảnh thật (đúng người/màu/mặt), chỉ giản lược thành tranh '
