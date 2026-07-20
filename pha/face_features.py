@@ -285,7 +285,42 @@ def detect_faces(rgb):
         # GIỚI HẠN số mặt: Haar dễ báo NHẦM trên ảnh nhiều texture (lá, vải, đám đông)
         # -> mỗi bbox kéo theo 1 lần lượng tử cục bộ (nặng). Giữ tối đa 4 mặt TO nhất.
         boxes.sort(key=lambda b: -b[2] * b[3])
-        return [{'box': b, 'lms': None, 'score': 0.0} for b in boxes[:4]]
+        haar = [{'box': b, 'lms': None, 'score': 0.0} for b in boxes[:4]]
+        if not haar:
+            return []
+        # MẶT ANIME/CHIBI (mắt to, tỉ lệ khác người thật): YuNet ở ngưỡng 0.7 hay BỎ SÓT
+        # -> rơi xuống Haar, mà Haar bắt LỆCH/NHỎ (đo thật: box 269px trong khi mặt
+        # 680px, trùm mắt trái nhưng HỤT mắt phải -> chỉ 1 mắt được bảo vệ -> 2 mắt
+        # LỆCH NHAU). Haar đã thấy mặt = có tín hiệu thật -> thử LẠI YuNet ở ngưỡng
+        # THẤP để lấy box chuẩn + 5 điểm mốc. CHỈ nhận khi box YuNet TRÙM/ĐÈ box Haar
+        # (chống nhận nhầm — hạ ngưỡng vô điều kiện sẽ bắt bừa cả vùng sàn/nền).
+        try:
+            lo = [d for d in _yunet_faces(rgb, conf=0.3) if d.get('lms') is not None]
+        except Exception:
+            lo = []
+        if lo:
+            hx, hy, hw, hh = haar[0]['box']
+            keep = []
+            for d in lo:
+                x, y, w, h = d['box']
+                ox = max(0, min(x + w, hx + hw) - max(x, hx))
+                oy = max(0, min(y + h, hy + hh) - max(y, hy))
+                if ox * oy >= 0.5 * hw * hh:      # trùm >=50% box Haar -> cùng 1 mặt
+                    # Ở ngưỡng thấp YuNet định vị THÔ: đo thật trên ảnh chibi thì box
+                    # CẮT MẤT mắt trái, còn 5 điểm mốc LỆCH (điểm "mắt trái" rơi vào
+                    # sống mũi). Mắt anime to hơn người thật nhiều -> NỚI box 40% cho
+                    # trùm đủ CẢ HAI mắt (4.5% -> ~8.8% khung, vẫn dưới ngưỡng 13% nên
+                    # refine vẫn chạy), và BỎ điểm mốc để mask bảo vệ ngũ quan không bị
+                    # đánh lạc hướng — thà không bảo vệ còn hơn bảo vệ nhầm 1 bên.
+                    cx, cy = x + w / 2.0, y + h / 2.0
+                    w2, h2 = w * 1.4, h * 1.4
+                    nx, ny = max(0, int(cx - w2 / 2)), max(0, int(cy - h2 / 2))
+                    keep.append({'box': (nx, ny,
+                                         int(min(W - nx, w2)), int(min(H - ny, h2))),
+                                 'lms': None, 'score': d.get('score') or 0.0})
+            if keep:
+                return keep
+        return haar
     except Exception:
         return []
 
