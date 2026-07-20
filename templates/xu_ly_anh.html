@@ -65,6 +65,9 @@
                     <option value="2" selected>Vừa (khuyên dùng)</option>
                     <option value="3">Mạnh (ảnh màu nước/ảnh chụp)</option>
                   </select>
+                  <div id="smWarn" class="alert alert-warning py-1 px-2 small mt-1 d-none">
+                    ⚠️ Tranh CÓ MẶT NGƯỜI để <b>"Không"</b> sẽ <b>mất mắt/lông mày</b> (viền mắt vỡ vụn rồi bị gộp vào màu da). Nên để <b>"Vừa"</b>.
+                  </div>
                 </div>
                 <div class="col-12" id="ndWrap">
                   <label class="form-label small mb-1">Độ chi tiết đánh số <span class="text-secondary fw-normal" id="ndHint">— chỉ áp cho Tranh thiết kế / Cây–Hoa</span></label>
@@ -344,12 +347,26 @@
       if(k===selKey) o.selected=true; sel.appendChild(o);
     });
   }
+  // Tranh CÓ MẶT NGƯỜI + Đơn giản hoá "Không" = mất mắt/lông mày (đo thật trên ảnh
+  // chibi: smooth=0 hỏng 1 mắt dù đã bật bảo vệ ngũ quan) -> cảnh báo ngay tại ô.
+  function updSmWarn(){
+    var w=document.getElementById('smWarn'); if(!w) return;
+    var sm=document.querySelector('[name="smooth"]');
+    var k=document.getElementById('presetSel');
+    var p=(k && PRESETS[k.value])||{};
+    w.classList.toggle('d-none', !(p.face && sm && sm.value==='0'));
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    var sm=document.querySelector('[name="smooth"]');
+    if(sm) sm.addEventListener('change', updSmWarn);
+  });
   function applyPreset(k){
     var p=PRESETS[k]; if(!p) return;
     document.getElementById('presetDesc').textContent=p.desc||'';
     var cl=document.querySelector('[name="color_limit"]'); if(cl) cl.value=p.color_limit||'';
     var ma=document.querySelector('[name="min_area"]'); if(ma) ma.value=p.min_area||'';
     var sm=document.querySelector('[name="smooth"]'); if(sm) sm.value=String(p.smooth||0);
+    updSmWarn();          // preset có bảo vệ mặt + Đơn giản "Không" -> cảnh báo mất mắt
     var ps=document.querySelector('[name="print_size"]');
     if(ps && (k==='kholon'||p.large)) ps.value='120x200';
     // "Độ chi tiết đánh số" chỉ ăn vào preset chi tiết (Tranh thiết kế / Cây-Hoa).

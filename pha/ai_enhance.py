@@ -180,7 +180,10 @@ def presets_for_ui():
                 'color_limit': v['color_limit'], 'smooth': v['smooth'],
                 'min_area': v['min_area'], 'enhance': v['enhance'],
                 # 'detail' -> web bật/tắt nút "Độ chi tiết đánh số"; 'large' -> khổ TO.
-                'detail': bool(v.get('detail')), 'large': bool(v.get('large'))}
+                # 'face' -> web CẢNH BÁO nếu để Đơn giản hoá = Không (đo thật: smooth=0
+                # làm mất 1 mắt dù đã bật bảo vệ ngũ quan).
+                'detail': bool(v.get('detail')), 'large': bool(v.get('large')),
+                'face': bool(v.get('face_priority'))}
             for k, v in PRESETS.items()}
 
 
