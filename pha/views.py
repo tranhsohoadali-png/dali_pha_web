@@ -2950,16 +2950,20 @@ def xu_ly_anh(request):
         from pha.color_index_lib import detail_scale as _dscale
         num_detail_key = (request.POST.get('num_detail') or 'chuan').strip()
         num_detail = _dscale(num_detail_key)
+        # "Tự cắt/zoom vào người" (chỉ preset chân dung). Mặc định BẬT (giữ như cũ);
+        # bỏ tích -> GIỮ NGUYÊN KHUNG, không cắt mất phần dưới (bánh, phông...).
+        auto_crop = request.POST.get('auto_crop', 'on') in ('1', 'on', 'true')
         rec = ImageResult.objects.create(
             name=name, status=ImageResult.STATUS_PROCESSING, user=request.user.username,
             params={'enhance': enhance, 'color_limit': color_limit, 'min_area': min_area,
                     'smooth': smooth, 'style_category': style_category or '',
                     'preset': preset_key, 'print_size': size_str, 'ai_level': ai_level,
                     'detail': detail, 'face_priority': face_priority, 'large': large,
-                    'num_detail': num_detail_key})
+                    'num_detail': num_detail_key, 'auto_crop': auto_crop})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
                              color_limit, min_area, smooth, ai_prompt, use_refs,
-                             print_long_cm, detail, face_priority, large, num_detail)
+                             print_long_cm, detail, face_priority, large, num_detail,
+                             auto_crop)
         _prune_image_results()                 # giữ 10 kết quả gần nhất (bộ nhớ tạm)
         ctx = build_ctx()
         ctx['file_url'] = '/media/' + name

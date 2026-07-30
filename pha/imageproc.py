@@ -225,7 +225,8 @@ def _process_large_into(obj, name, long_cm, color_limit):
 
 def process_image(rec_id, name, enhance=False, style_category=None, color_limit=0,
                   min_area=0, smooth=0, ai_prompt=None, use_refs=False, print_long_cm=0,
-                  detail=False, face_priority=False, large=False, num_detail=1.0):
+                  detail=False, face_priority=False, large=False, num_detail=1.0,
+                  auto_crop=True):
     """Chạy nền: (tùy chọn) tăng cường ảnh bằng AI, rồi xử lý + cập nhật ImageResult.
 
     enhance=True: gọi Google AI làm sạch/nâng cấp ảnh khách trước khi đánh số.
@@ -236,6 +237,10 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
     (mắt/mũi/miệng) khi tách màu + đánh số. CHỈ bật cho preset chân dung.
     num_detail: nút "Độ chi tiết đánh số" của web (1.0 = chuẩn, <1 = ô nhỏ hơn/nhiều ô
     hơn). Chỉ ăn vào preset chi tiết (Tranh thiết kế, Cây/Hoa); mặc định giữ nguyên cũ.
+    auto_crop=True (mặc định): với preset CHÂN DUNG, TỰ ZOOM/CẮT vào người khi mặt nhỏ
+    trong ảnh rộng. Đặt False để GIỮ NGUYÊN KHUNG (không cắt) — cho ảnh nền/toàn thân
+    (vd bánh sinh nhật, phông) không muốn mất phần dưới. Chỉ preset chân dung mới có tác
+    dụng; các preset khác vốn không zoom nên cờ này không đổi gì.
     (Cứu màu môi _boost_lip_color vẫn chạy cho MỌI ảnh enhance như cũ — tự no-op
     nếu không có mặt — nên luồng API bán hàng không đổi.)
     Khâu đánh số + khớp mã DALI luôn chạy như cũ trên ảnh (đã hoặc chưa tăng cường).
@@ -258,7 +263,7 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
         # đều nhận mặt to). Chỉ preset 'photo' (face_priority); ảnh đã cận / nhiều mặt /
         # ảnh GỐC nhỏ (zoom vô ích) -> tự bỏ qua. Mọi lỗi nuốt êm (giữ ảnh gốc). KHÔNG
         # đụng luồng API bán hàng (nó không truyền face_priority -> nhánh này không chạy).
-        if face_priority and not detail:
+        if face_priority and not detail and auto_crop:
             try:
                 from pha.color_index_lib import WORK_MAX_SIDE
                 with Image.open(path) as _im:          # đọc CỠ, không giải mã pixel
