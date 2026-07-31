@@ -598,7 +598,7 @@ FEATURE_CAP_PER_COLOR = config("FEATURE_CAP_PER_COLOR", default=10, cast=int)
 
 
 def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4, feature_cap=None,
-                         protect=None):
+                         protect=None, keep_holes=False):
     """Gộp mảng nhỏ vào hàng xóm NHƯNG GIỮ chi tiết ngũ quan: đốm nhỏ TRÒN có màu
     TƯƠNG PHẢN CAO với xung quanh (lòng trắng mắt, lỗ mũi, viền môi) được GIỮ;
     chỉ gộp bụi thật (rad<1), sliver dẹt (thon dài sát biên) và mảng màu GẦN GIỐNG
@@ -617,6 +617,11 @@ def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4, feature_c
     # phản cao), không giữ làm 'feature' rồi bỏ trống. Khớp ngưỡng đánh số -> bản
     # đồ không còn ô không-có-số. (Giữ ngũ quan TO hơn: iris/môi rad lớn vẫn sống.)
     r_num = max(3.0, r_keep * 0.75)
+    # GIỮ RUỘT CHỮ / LỖ LOGO (keep_holes): lỗ kín bao quanh bởi DUY NHẤT 1 màu tương
+    # phản cao (ruột A/P/O, dấu mũ Ô...) được giữ tới bán kính NHỎ hơn r_num nhiều
+    # (vẫn nhét nổi số bé) thay vì bị gộp lấp. Sàn r_hole đủ để in/tô được, không giữ
+    # bụi li ti. Chỉ bật cho ảnh có chữ/logo -> không đụng luồng chân dung thường.
+    r_hole = max(2.5, r_keep * 0.42)
     for _ in range(max_pass):
         flat = img.reshape(-1, 3)
         colors, inv = np.unique(flat, axis=0, return_inverse=True)
@@ -676,6 +681,16 @@ def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4, feature_c
                 # rad < 2.4 nên chừa ngũ quan to hơn (iris/môi rad >= 3).
                 thin_streak = (rad < 2.4) and (elong > 6.0)
                 too_small_to_number = rad < r_num         # không đủ chỗ đặt số -> gộp
+                # RUỘT CHỮ / LỖ LOGO: ô bao quanh bởi DUY NHẤT 1 màu (lỗ kín), tương phản
+                # CAO, còn đủ to (rad>=r_hole) và không dẹt -> GIỮ (gộp = lấp lỗ, hỏng
+                # chữ). Đặt TRƯỚC nhánh gộp nên thắng cả 'too_small_to_number'. Không giữ
+                # bụi (rad<r_hole) hay sliver/dải mảnh (elong lớn) -> vẫn gộp như cũ.
+                if (keep_holes and rad >= r_hole and de >= max(de_keep, 30.0)
+                        and elong < 12.0 and not (true_dust or sliver or thin_streak)
+                        and np.unique(nb).size == 1):
+                    yy, xx = np.where(sub)
+                    feature[y0 + yy, x0 + xx] = 255        # lỗ kín: GIỮ + chừa làm mượt
+                    continue
                 if (true_dust or sliver or crumb or thin_streak
                         or too_small_to_number or de < de_keep):
                     yy, xx = np.where(sub)
@@ -776,7 +791,8 @@ def _refine_faces(arr, im_pre, boxes, s, k_face=24):
 
 
 def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=None,
-                   detail=False, face_priority=False, size_scale=1.0, num_detail=1.0):
+                   detail=False, face_priority=False, size_scale=1.0, num_detail=1.0,
+                   keep_holes=False):
     """Tạo ảnh THIẾT KẾ chất lượng Illustrator-trace rồi lưu file LÀM VIỆC tạm (1x)
     cho khâu đánh số. Trả đường_dẫn_tạm.
 
@@ -887,7 +903,7 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s * size_scale
         arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=18.0,
                                          min_area=int(min_area * s * s), max_pass=4,
-                                         protect=face_protect)
+                                         protect=face_protect, keep_holes=keep_holes)
         # LÀM MƯỢT BIÊN 2 lớp: voting (cong mượt) + MEDIAN trên nhãn (nắn thẳng bậc
         # thang răng cưa còn sót). Cả hai CHỪA ngũ quan (feat) -> không mất mắt/môi.
         arr = _smooth_labels_voting(arr, sigma=2.8 * s, protect=feat)
@@ -895,7 +911,7 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         arr = _smooth_boundaries(arr, ksize=max(3, ks), protect_mask=feat)
         arr = _smooth_labels_voting(arr, sigma=1.6 * s, protect=feat)
         arr, _ = _merge_keep_features(arr, r_keep=1.8 * s * size_scale, de_keep=10.0,
-                                      max_pass=2, protect=face_protect)
+                                      max_pass=2, protect=face_protect, keep_holes=keep_holes)
     # CHÂN DUNG: dán vùng mặt CHI TIẾT (lượng tử cục bộ) đè lên kết quả gộp -> mặt nhỏ
     # hết chảy. Làm TRƯỚC _smooth_fill để vệt oval được làm mượt cùng các biên khác.
     if im_pre is not None and face_boxes:
@@ -1610,7 +1626,8 @@ def _number_work_image(work_path, design_out=None, debug=False,
 
 
 def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_out=None,
-                print_long_cm=0, detail=False, face_priority=False, num_detail=1.0):
+                print_long_cm=0, detail=False, face_priority=False, num_detail=1.0,
+                keep_holes=False):
     """num_colors > 0: gom ảnh về tối đa N màu (để trống = DEFAULT_NUM_COLORS).
     min_area > 0: gộp các mảng màu nhỏ hơn N pixel vào hàng xóm (đỡ lấm tấm).
     smooth (0..3): làm phẳng vùng (mean-shift) trước khi gom — dọn ảnh màu nước/chụp.
@@ -1636,7 +1653,8 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
                                          design_out=design_out, detail=detail,
                                          face_priority=face_priority,
                                          size_scale=size_scale,
-                                         num_detail=num_detail)
+                                         num_detail=num_detail,
+                                         keep_holes=keep_holes)
     return _number_work_image(work_path, design_out=None, debug=debug,
                               render_arr=arr2x, render_scale=s, keep_all=detail,
                               size_scale=size_scale)
