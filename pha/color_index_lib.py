@@ -597,8 +597,87 @@ def _sweep_dust(lbl, n_colors, dust_area=4):
 FEATURE_CAP_PER_COLOR = config("FEATURE_CAP_PER_COLOR", default=10, cast=int)
 
 
+def _restore_letter_counters(arr, orig_rgb, face_protect=None):
+    """ĐỤC LẠI RUỘT CHỮ / LỖ LOGO đã bị mean-shift lấp trước k-means.
+
+    'orig_rgb' = ảnh GỐC (trước mean-shift) CÙNG CỠ arr. Ruột chữ = vùng nền SÁNG/nhạt
+    bị BAO KÍN bởi nét chữ ĐẬM/RỰC. Dò trên ảnh gốc (còn sắc) -> đặt lại pixel ruột
+    trong arr về màu bảng-màu GẦN NHẤT với màu gốc (thường là nền sáng) -> lỗ hiện lại.
+    Chỉ đục lỗ VỪA (bán kính trong [r_min, r_max]) tương phản CAO -> không đụng nền/ảnh.
+    """
+    H, W = arr.shape[:2]
+    hsv = cv2.cvtColor(orig_rgb, cv2.COLOR_RGB2HSV)
+    S, V = hsv[:, :, 1], hsv[:, :, 2]
+    # "NÉT CHỮ" (ink) = rực (S cao) HOẶC đậm (V thấp). Nền/ruột = nhạt + ít rực.
+    ink = ((S >= 90) | (V <= 90)).astype(np.uint8)
+    ink = cv2.morphologyEx(ink, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    # LỖ KÍN = vùng nền (không-ink) KHÔNG nối ra ngoài biên. Flood nền từ viền -> phần
+    # nền còn lại = ruột chữ. Đệm viền nền để mọi vùng ngoài chắc chắn nối tới góc.
+    paper = 1 - ink
+    p = cv2.copyMakeBorder(paper, 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=1).astype(np.uint8)
+    ff = (p * 255).astype(np.uint8)
+    m = np.zeros((ff.shape[0] + 2, ff.shape[1] + 2), np.uint8)
+    cv2.floodFill(ff, m, (0, 0), 0)                     # nền NGOÀI -> 0; ruột kín còn 255
+    holes = (ff[1:-1, 1:-1] > 0).astype(np.uint8)
+    if not holes.any():
+        return arr
+    # Bảng màu hiện có của arr (để gán màu ruột = màu gần nhất, thường là nền sáng).
+    pal = np.unique(arr.reshape(-1, 3), axis=0)
+    pal_lab = cv2.cvtColor(pal.reshape(-1, 1, 3).astype(np.uint8),
+                           cv2.COLOR_RGB2LAB).reshape(-1, 3).astype(np.float32)
+    orig_lab = cv2.cvtColor(orig_rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
+    arr_lab = cv2.cvtColor(arr, cv2.COLOR_RGB2LAB).astype(np.float32)
+    r_min = 2.0                                        # nhỏ hơn = bụi (bỏ)
+    r_max = max(24.0, 0.02 * max(H, W))                # to hơn = khe nền lớn, không phải ruột
+    k3 = np.ones((3, 3), np.uint8)
+    nc, comp, stats, _ = cv2.connectedComponentsWithStats(holes, connectivity=8)
+    out = arr.copy()
+    kept = np.zeros((H, W), np.uint8)                  # mask ruột đã đục -> bảo vệ CỨNG
+    n_open = 0
+    for k in range(1, nc):
+        x, y = int(stats[k, cv2.CC_STAT_LEFT]), int(stats[k, cv2.CC_STAT_TOP])
+        w, h = int(stats[k, cv2.CC_STAT_WIDTH]), int(stats[k, cv2.CC_STAT_HEIGHT])
+        x0, y0 = max(x - 2, 0), max(y - 2, 0)
+        x1, y1 = min(x + w + 2, W), min(y + h + 2, H)
+        sub = (comp[y0:y1, x0:x1] == k)
+        subp = cv2.copyMakeBorder(sub.astype(np.uint8), 1, 1, 1, 1,
+                                  cv2.BORDER_CONSTANT, value=0)
+        rad = float(cv2.distanceTransform(subp, cv2.DIST_L2, 3).max())
+        if rad < r_min or rad > r_max:
+            continue
+        # KHÔNG đục trong vùng MẶT (ngũ quan) -> tránh khoét mắt/lỗ mũi thành lỗ chữ.
+        if face_protect is not None:
+            if float((face_protect[y0:y1, x0:x1][sub] > 0).mean()) > 0.3:
+                continue
+        # NÉT chữ bao quanh = ring quanh lỗ. Ruột phải TƯƠNG PHẢN CAO với nét (paper vs ink)
+        # -> tránh đục nhầm mảng nền cùng tông. Đo trên ảnh GỐC.
+        ring = (cv2.dilate(sub.astype(np.uint8), k3, iterations=2) > 0) & (~sub)
+        if ring.sum() < 4:
+            continue
+        ring_lab = orig_lab[y0:y1, x0:x1][ring]
+        hole_c = orig_lab[y0:y1, x0:x1][sub].mean(axis=0)
+        ring_c = ring_lab.mean(axis=0)
+        de = float(np.sqrt(((hole_c - ring_c) ** 2).sum()))
+        if de < 26.0:
+            continue
+        # VIỀN QUANH LỖ phải ĐỒNG MÀU (1 nét chữ/logo) -> loại lá cây/hạt kim tuyến
+        # (viền NHIỀU màu, std cao) để KHÔNG đục lỗ lấm tấm trên nền tự nhiên.
+        if float(np.sqrt(ring_lab.var(axis=0).sum())) > 26.0:
+            continue
+        # Gán ruột 1 MÀU ĐỒNG NHẤT = màu bảng-màu gần MÀU GỐC TRUNG BÌNH của ruột nhất
+        # (thường là nền sáng). Đục theo TỪNG pixel sẽ sinh nhiều sắc nhạt li ti -> bước
+        # gộp coi là bụi và LẤP LẠI; 1 màu = 1 vùng sạch, keep_holes mới giữ nổi.
+        yy, xx = np.where(sub)
+        d2 = ((hole_c[None, :] - pal_lab) ** 2).sum(axis=1)
+        fill_c = pal[int(d2.argmin())]
+        out[y0 + yy, x0 + xx] = fill_c                 # ĐỤC CẢ ruột về 1 màu nền
+        kept[y0 + yy, x0 + xx] = 255                   # -> bảo vệ CỨNG khỏi gộp/làm mượt
+        n_open += 1
+    return out, kept
+
+
 def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4, feature_cap=None,
-                         protect=None, keep_holes=False):
+                         protect=None, keep_holes=False, hard_keep=None):
     """Gộp mảng nhỏ vào hàng xóm NHƯNG GIỮ chi tiết ngũ quan: đốm nhỏ TRÒN có màu
     TƯƠNG PHẢN CAO với xung quanh (lòng trắng mắt, lỗ mũi, viền môi) được GIỮ;
     chỉ gộp bụi thật (rad<1), sliver dẹt (thon dài sát biên) và mảng màu GẦN GIỐNG
@@ -648,6 +727,15 @@ def _merge_keep_features(arr, r_keep, de_keep, min_area=0, max_pass=4, feature_c
                 x1, y1 = min(x + w + 1, W), min(y + h + 1, H)
                 sub = comp[y0:y1, x0:x1] == kk
                 rad = float(dist[y0:y1, x0:x1][sub].max())
+                # RUỘT CHỮ đã đục (hard_keep): GIỮ VÔ ĐIỀU KIỆN — bất kể bán kính/tương
+                # phản/số hàng xóm. Ruột đã được _restore_letter_counters xác nhận là lỗ
+                # kín thật (dò topo trên ảnh gốc) nên không cần heuristic nữa.
+                if hard_keep is not None:
+                    ov = hard_keep[y0:y1, x0:x1][sub]
+                    if ov.size and float((ov > 0).mean()) > 0.5:
+                        yy, xx = np.where(sub)
+                        feature[y0 + yy, x0 + xx] = 255
+                        continue
                 # CHÂN DUNG: đốm nằm CHỦ YẾU trong vùng ngũ quan VÀ đủ to để đánh số
                 # -> LUÔN GIỮ (không gộp, kể cả vượt trần). Đốm < r_num vẫn rơi xuống
                 # nhánh gộp bên dưới (giữ luật "mọi ô đều có số" — không tạo ô trống).
@@ -843,6 +931,10 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     # thành mảng phẳng biên mượt mà vẫn giữ cạnh thật. smooth cao -> phẳng mạnh hơn.
     # CHẾ ĐỘ CHI TIẾT (cây/hoa): KHÔNG mean-shift nền nhẹ (giữ từng cánh hoa/lá);
     # chỉ làm phẳng khi user chủ động chọn smooth>=2.
+    # Ảnh GỐC (trước mean-shift, còn sắc nét ruột chữ) -> dò ruột chữ/logo để ĐỤC LẠI
+    # sau k-means. Chỉ giữ khi keep_holes để khỏi tốn RAM ảnh không cần.
+    pre_ms_1x = np.array(im) if keep_holes else None
+
     if (not detail) or sm_level >= 2:
         sp, sr = {0: (11, 20), 1: (15, 28), 2: (20, 38), 3: (28, 55)}.get(sm_level, (15, 28))
         a = np.array(im)[:, :, ::-1].copy()                # RGB -> BGR
@@ -866,6 +958,11 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     # lông mày/mũi/miệng. Chỉ áp cho ảnh thật khách hàng (preset 'photo'); lỗi/không
     # thấy mặt -> None (chạy như cũ bằng heuristic hình học sẵn có).
     src2x = np.array(im2)                            # 1 bản uint8 (tránh cấp phát đôi)
+    # Ảnh gốc (trước mean-shift) đưa về ĐÚNG cỡ arr/2x -> dò ruột chữ khớp toạ độ.
+    pre_ms = None
+    if pre_ms_1x is not None:
+        pre_ms = cv2.resize(pre_ms_1x, (src2x.shape[1], src2x.shape[0]),
+                            interpolation=cv2.INTER_LINEAR)
     face_protect = None
     if face_priority and not detail:
         try:
@@ -880,6 +977,20 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     # face_mask: chân dung -> ép pixel ngũ quan vào mẫu chọn bảng màu (mắt/môi/mũi
     # chắc chắn có cụm màu riêng, không bị nuốt ngay ở bước k-means).
     arr = _quantize_rarity(src2x, k=target, face_mask=face_protect)
+    # ĐỤC LẠI RUỘT CHỮ/LOGO: mean-shift (chạy cả khi smooth=0) trộn ruột nhỏ (A/R/D/Ô)
+    # vào màu chữ NGAY TRƯỚC k-means -> keep_holes ở bước gộp không cứu được (ruột đã
+    # mất). Dò ruột trên ảnh GỐC còn sắc (pre_ms, trước mean-shift) rồi đặt lại màu nền
+    # cho đúng vị trí ruột. Chỉ khi keep_holes (ảnh có chữ/logo).
+    counter_mask, counter_src = None, None
+    if keep_holes and pre_ms is not None:
+        try:
+            arr, counter_mask = _restore_letter_counters(arr, pre_ms, face_protect)
+            if counter_mask is not None and counter_mask.any():
+                counter_src = arr.copy()          # ruột-đã-đục -> đóng dấu lại ở BƯỚC CUỐI
+            else:
+                counter_mask = None
+        except Exception:
+            counter_mask, counter_src = None, None
     if detail:
         # CHI TIẾT (cây/hoa): giữ NHIỀU ô nhỏ (cánh hoa/lá) -> nhiều số nhỏ. Chỉ dọn
         # bụi/đốm gần-trùng-màu, KHÔNG gộp theo trần (feature_cap vô hạn), bán kính
@@ -903,7 +1014,12 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s * size_scale
         arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=18.0,
                                          min_area=int(min_area * s * s), max_pass=4,
-                                         protect=face_protect, keep_holes=keep_holes)
+                                         protect=face_protect, keep_holes=keep_holes,
+                                         hard_keep=counter_mask)
+        # RUỘT CHỮ đã đục (counter_mask): CHỪA khỏi MỌI bước làm mượt/median (như ngũ
+        # quan) -> lỗ không bị nắn/lấp lại. Gộp vào feat sau lần merge đầu.
+        if counter_mask is not None:
+            feat = cv2.bitwise_or(feat, counter_mask)
         # LÀM MƯỢT BIÊN 2 lớp: voting (cong mượt) + MEDIAN trên nhãn (nắn thẳng bậc
         # thang răng cưa còn sót). Cả hai CHỪA ngũ quan (feat) -> không mất mắt/môi.
         arr = _smooth_labels_voting(arr, sigma=2.8 * s, protect=feat)
@@ -911,7 +1027,8 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         arr = _smooth_boundaries(arr, ksize=max(3, ks), protect_mask=feat)
         arr = _smooth_labels_voting(arr, sigma=1.6 * s, protect=feat)
         arr, _ = _merge_keep_features(arr, r_keep=1.8 * s * size_scale, de_keep=10.0,
-                                      max_pass=2, protect=face_protect, keep_holes=keep_holes)
+                                      max_pass=2, protect=face_protect, keep_holes=keep_holes,
+                                      hard_keep=counter_mask)
     # CHÂN DUNG: dán vùng mặt CHI TIẾT (lượng tử cục bộ) đè lên kết quả gộp -> mặt nhỏ
     # hết chảy. Làm TRƯỚC _smooth_fill để vệt oval được làm mượt cùng các biên khác.
     if im_pre is not None and face_boxes:
@@ -929,6 +1046,12 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     # THIẾT KẾ cong mềm (hết bậc thang); bản đồ số lấy contour từ chính arr này nên
     # nét số khớp y biên thiết kế.
     arr = _smooth_fill(arr, iters=2)
+    # ĐÓNG DẤU RUỘT CHỮ LẦN CUỐI: dù các bước gộp/làm mượt/smooth_fill có lấp lại ruột,
+    # ở đây ép lại đúng màu nền đã đục (counter_src) trên mask ruột -> lỗ CHẮC CHẮN còn.
+    # Chỉ đụng vùng ruột (nhỏ), phần còn lại giữ nguyên biên mượt vector.
+    if counter_mask is not None and counter_src is not None:
+        m = counter_mask > 0
+        arr[m] = counter_src[m]
 
     if detail:
         # HOA/CẢNH: gộp ô không đặt nổi SỐ NGANG vào hàng xóm (sau khi mượt biên) ->
