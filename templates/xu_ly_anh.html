@@ -538,6 +538,7 @@
             +(p.print_size?(' · Khổ '+p.print_size):'')
             +(p.detail?(' · Chi tiết: '+(ND[p.num_detail]||'Chuẩn')):'')
             +' · Đơn giản: '+sm
+            +(p.keep_holes?' · 🔠 Đục lỗ chữ: CÓ':' · Đục lỗ chữ: không')
             +' · AI: '+(p.enhance?'có':'không')+(p.enhance&&p.style_category?(' ('+p.style_category+')'):'');
       pi.innerHTML=t; pi.classList.remove('d-none');
       if(res.warn){ var e=document.getElementById('err'); e.className='alert alert-warning'; e.textContent='⚠️ '+res.warn; }
