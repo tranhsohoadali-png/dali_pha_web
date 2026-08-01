@@ -660,9 +660,18 @@ def _restore_letter_counters(arr, orig_rgb, face_protect=None):
         de = float(np.sqrt(((hole_c - ring_c) ** 2).sum()))
         if de < 26.0:
             continue
+        # RUỘT phải SÁNG + ÍT MÀU (giấy/nền trắng sau chữ, mây trắng logo). Đây là đặc
+        # trưng chắc chắn của lỗ chữ/logo -> loại KHE nền tự nhiên (lá tối, kẽ hở màu).
+        # LAB opencv: L 0..255, a/b tâm 128. Sáng L>170, chroma thấp <32.
+        hole_chroma = float(np.sqrt((hole_c[1] - 128) ** 2 + (hole_c[2] - 128) ** 2))
+        if hole_c[0] < 170.0 or hole_chroma > 32.0:
+            continue
         # VIỀN QUANH LỖ phải ĐỒNG MÀU (1 nét chữ/logo) -> loại lá cây/hạt kim tuyến
         # (viền NHIỀU màu, std cao) để KHÔNG đục lỗ lấm tấm trên nền tự nhiên.
-        if float(np.sqrt(ring_lab.var(axis=0).sum())) > 26.0:
+        # Logo/chữ BÓNG có chút chuyển sắc (ring_std ~28-35); lá cây/kim tuyến viền
+        # NHIỀU màu khác hẳn (ring_std thường >45) -> ngưỡng 42 tách được, không chặn
+        # nhầm ruột O của GÔN (đo thật ring_std=28).
+        if float(np.sqrt(ring_lab.var(axis=0).sum())) > 42.0:
             continue
         # Gán ruột 1 MÀU ĐỒNG NHẤT = màu bảng-màu gần MÀU GỐC TRUNG BÌNH của ruột nhất
         # (thường là nền sáng). Đục theo TỪNG pixel sẽ sinh nhiều sắc nhạt li ti -> bước
