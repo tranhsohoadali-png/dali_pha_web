@@ -2953,9 +2953,10 @@ def xu_ly_anh(request):
         # "Tự cắt/zoom vào người" (chỉ preset chân dung). Mặc định BẬT (giữ như cũ);
         # bỏ tích -> GIỮ NGUYÊN KHUNG, không cắt mất phần dưới (bánh, phông...).
         auto_crop = request.POST.get('auto_crop', 'on') in ('1', 'on', 'true')
-        # "Đục lỗ ruột chữ/logo": giữ ô kín trong chữ (HAPPY/GÔN...) không bị lấp. Mặc
-        # định TẮT (giữ như cũ cho ảnh chân dung thuần); bật khi ảnh có chữ/logo.
-        keep_holes = request.POST.get('keep_holes') in ('1', 'on', 'true')
+        # "Đục lỗ ruột chữ/logo": giữ ô kín trong chữ (HAPPY/GÔN...) không bị lấp. LUÔN
+        # BẬT trong code (không cần tích) — chỉ đục lỗ SÁNG bao kín bởi nét đồng màu nên
+        # an toàn cho cả ảnh chân dung (tự no-op nếu không có chữ/logo).
+        keep_holes = True
         rec = ImageResult.objects.create(
             name=name, status=ImageResult.STATUS_PROCESSING, user=request.user.username,
             params={'enhance': enhance, 'color_limit': color_limit, 'min_area': min_area,
