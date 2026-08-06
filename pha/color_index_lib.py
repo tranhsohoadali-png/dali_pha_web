@@ -1072,13 +1072,6 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         nd = min(2.0, max(0.4, float(num_detail or 1.0)))
         arr = _merge_unnumberable(arr, _DETAIL_NUM_MIN_H * size_scale * nd, s,
                                   n_colors=target, size_scale=size_scale)
-    else:
-        # CHÂN DUNG/THƯỜNG: cũng gộp ô KHÔNG nhét nổi số vào hàng xóm -> KHÔNG còn ô
-        # trống (bắt-sáng mắt, đốm nhỏ _merge_keep_features cố GIỮ nhưng quá bé để đánh
-        # số). Giữ LỖ KÍN (ruột chữ) như thường. Sàn số bằng _DETAIL_NUM_MIN_H (quy về
-        # khung 1400 của path này) -> số còn lại đủ to đọc, đều.
-        floor = _DETAIL_NUM_MIN_H * (WORK_MAX_SIDE / float(_DETAIL_WORK_MAX)) * size_scale
-        arr = _merge_unnumberable(arr, floor, s, n_colors=target, size_scale=size_scale)
 
     if design_out:
         try:
