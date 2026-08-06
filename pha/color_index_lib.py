@@ -1700,25 +1700,14 @@ def _number_work_image(work_path, design_out=None, debug=False,
         else:
             _draw_smooth_contours(img_white, contours)
 
-        if keep_all:
-            # HOA/CẢNH: đánh số trên MASK ở ĐỘ PHÂN GIẢI thiết kế (2x = ĐÚNG vùng
-            # _merge_unnumberable đã quyết, không lệch 2x<->1x) -> ô merge giữ thì CHẮC
-            # CHẮN có số -> KHÔNG để sót ô.
-            num_src = big_rgb if (rs > 1.0 and big_rgb is not None) else img_rgb
-            count_number = _place_detail_numbers(img_white, cv2.inRange(num_src, color, color),
-                                                 f'{len(color_mapping) + 1}', draws, rs,
-                                                 size_scale=ss)
-        else:
-            centers, dists = get_center_poly_from_contours(contours, hierarchy, range_img, np.array(img), debug=debug)
-            count_number = 0
-            for c, d in zip(centers, dists):
-                d = d * 2 * rs
-                draw = get_draw_number(img_white, (int(c[0] * rs), int(c[1] * rs)), d,
-                                       f'{len(color_mapping) + 1}',
-                                       debug=debug, min_t=num_min_t, mean_t=mean_t, max_t=max_t)
-                if draw is not None:
-                    count_number += 1
-                    draws.append(draw)
+        # ĐÁNH SỐ CHUẨN (học của siêu chi tiết): mỗi MẢNH (connected component) đúng 1
+        # số, đặt tại TÂM NỘI TIẾP (distanceTransform), cỡ kẹp [min,mean,max] -> đều,
+        # không lộn xộn, không đè biên. Áp cho CẢ chân dung lẫn hoa/cảnh. (Trước đây
+        # chân dung dùng get_center_poly đặt nhiều số/vùng theo polylabel -> cỡ nhảy loạn.)
+        num_src = big_rgb if (rs > 1.0 and big_rgb is not None) else img_rgb
+        count_number = _place_detail_numbers(img_white, cv2.inRange(num_src, color, color),
+                                             f'{len(color_mapping) + 1}', draws, rs,
+                                             size_scale=ss)
         # Màu nào (hiếm) không còn ô đánh số được -> BỎ khỏi bảng (ưu tiên SẠCH).
         if count_number > 0:
             color_mapping.append(color)
