@@ -440,7 +440,8 @@ def _merge_small_regions(img_rgb, min_area=0, min_radius=5.5, max_pass=6,
 
 
 def _quantize_rarity(src_rgb, k, rar_pow=0.5, vivid_chroma=48, vivid_boost=0.02,
-                     seed=7, face_mask=None, face_boost=0.05):
+                     seed=7, face_mask=None, face_boost=0.05,
+                     people_mask=None, people_boost=0.0):
     """Chọn bảng màu bằng K-MEANS LAB CÓ TRỌNG SỐ ĐỘ HIẾM: pixel màu hiếm (môi đỏ,
     bóng mũi, má hồng — nhỏ nhưng quan trọng) được lấy mẫu nhiều hơn -> CÓ CỤM RIÊNG.
     Median-cut chia ô theo SỐ LƯỢNG pixel nên tông hiếm bị nuốt (môi đỏ 0.14% ảnh
@@ -482,6 +483,15 @@ def _quantize_rarity(src_rgb, k, rar_pow=0.5, vivid_chroma=48, vivid_boost=0.02,
             rep = fidx[rng.integers(0, fidx.size, size=int(N * face_boost))]
             samples = np.vstack([samples, flat8[rep].astype(np.float32)])
         del fidx
+    # DỒN MÀU VÀO NGƯỜI: bơm thêm mẫu vùng NGƯỜI (mặt + thân) -> bảng màu cấp nhiều
+    # cụm hơn cho người, ít hơn cho nền. CỘNG THÊM (không xoá nền) nên nhẹ: nền vẫn
+    # có màu, chỉ nhường bớt suất. Chỉ bật khi có people_mask (preset chân dung).
+    if people_mask is not None and people_boost > 0:
+        pidx = np.where(people_mask.reshape(-1) > 0)[0]
+        if pidx.size:
+            rep = pidx[rng.integers(0, pidx.size, size=int(N * people_boost))]
+            samples = np.vstack([samples, flat8[rep].astype(np.float32)])
+        del pidx
     k = max(2, min(int(k), len(np.unique(samples, axis=0))))
     crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 25, 0.5)
     _, _, centers = cv2.kmeans(samples, k, None, crit, 2, cv2.KMEANS_PP_CENTERS)
@@ -1032,9 +1042,32 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         except Exception:
             pass
 
+    # DỒN MÀU VÀO NGƯỜI: từ các mặt đã dò -> dựng mask VÙNG NGƯỜI (mặt + thân nở
+    # xuống dưới ~ chiều cao thân) -> bơm thêm mẫu vùng này ở k-means (nền tối nhường
+    # bớt suất màu cho người). Chỉ chân dung; nhẹ (không xoá nền).
+    people_mask, people_boost = None, 0.0
+    if face_priority and not detail:
+        try:
+            from pha.face_features import scale_faces as _scf2
+            pf = _scf2(faces1x, s) if faces1x else None
+            if pf:
+                pm = np.zeros(src2x.shape[:2], np.uint8)
+                Hh, Ww = pm.shape
+                for f in pf:
+                    x, y, w, h = f['box']
+                    # thân: rộng ~2.4× mặt, cao xuống ~4.5× mặt (kể cả vai/áo).
+                    bx0 = max(0, int(x - 0.7 * w)); bx1 = min(Ww, int(x + 1.7 * w))
+                    by0 = max(0, int(y - 0.3 * h)); by1 = min(Hh, int(y + 4.5 * h))
+                    pm[by0:by1, bx0:bx1] = 255
+                if pm.any():
+                    people_mask, people_boost = pm, 0.18
+        except Exception:
+            people_mask = None
+
     # face_mask: chân dung -> ép pixel ngũ quan vào mẫu chọn bảng màu (mắt/môi/mũi
     # chắc chắn có cụm màu riêng, không bị nuốt ngay ở bước k-means).
-    arr = _quantize_rarity(src2x, k=target, face_mask=face_protect)
+    arr = _quantize_rarity(src2x, k=target, face_mask=face_protect,
+                           people_mask=people_mask, people_boost=people_boost)
     # ĐỤC LẠI RUỘT CHỮ/LOGO: mean-shift (chạy cả khi smooth=0) trộn ruột nhỏ (A/R/D/Ô)
     # vào màu chữ NGAY TRƯỚC k-means -> keep_holes ở bước gộp không cứu được (ruột đã
     # mất). Dò ruột trên ảnh GỐC còn sắc (pre_ms, trước mean-shift) rồi đặt lại màu nền
