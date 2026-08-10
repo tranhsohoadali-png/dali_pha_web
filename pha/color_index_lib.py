@@ -607,11 +607,12 @@ def _sweep_dust(lbl, n_colors, dust_area=4):
 FEATURE_CAP_PER_COLOR = config("FEATURE_CAP_PER_COLOR", default=10, cast=int)
 
 
-def _boost_lips(src_rgb, faces, strength=22):
-    """TẠO SỨC SỐNG CHO MÔI: đẩy pixel môi (vùng miệng, sắc ĐỎ hơn da) HỒNG/ĐỎ hơn
+def _boost_lips(src_rgb, faces, da=34, db=-6, dL=6):
+    """TẠO SỨC SỐNG CHO MÔI: đẩy pixel môi (vùng miệng, sắc ĐỎ hơn da) sang ĐỎ TƯƠI
     TRƯỚC khi tách màu -> bảng màu chắc chắn có tông môi riêng, không bị gộp vào da
-    (ảnh chụp tối môi hay chìm thành nâu xám). Dùng điểm mốc miệng (2 khoé, YuNet).
-    Sửa TẠI CHỖ trên src_rgb (uint8). No-op nếu không có điểm mốc.
+    (ảnh chụp tối môi hay chìm thành nâu xám). Gu người Việt thích môi ĐỎ TƯƠI nên:
+    a* +da (đỏ mạnh), b* GIẢM db (bớt vàng -> đỏ/hồng thay vì cam), L* +dL (sáng, tươi).
+    Dùng điểm mốc miệng (2 khoé, YuNet). Sửa TẠI CHỖ trên src_rgb. No-op nếu thiếu mốc.
     """
     if not faces:
         return
@@ -641,8 +642,9 @@ def _boost_lips(src_rgb, faces, strength=22):
         lip = reg & (aC > med + 3)
         if lip.sum() < 8:
             continue
-        lab[:, :, 1][lip] = np.clip(aC[lip] + strength, 0, 255)      # đỏ hơn
-        lab[:, :, 2][lip] = np.clip(lab[:, :, 2][lip] + strength // 4, 0, 255)
+        lab[:, :, 1][lip] = np.clip(aC[lip] + da, 0, 255)            # đỏ MẠNH hơn
+        lab[:, :, 2][lip] = np.clip(lab[:, :, 2][lip] + db, 0, 255)  # bớt vàng -> đỏ/hồng
+        lab[:, :, 0][lip] = np.clip(lab[:, :, 0][lip] + dL, 0, 255)  # sáng nhẹ -> tươi
         touched = True
     if touched:
         src_rgb[:] = cv2.cvtColor(lab.astype(np.uint8), cv2.COLOR_LAB2RGB)
