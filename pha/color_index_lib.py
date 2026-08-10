@@ -597,6 +597,47 @@ def _sweep_dust(lbl, n_colors, dust_area=4):
 FEATURE_CAP_PER_COLOR = config("FEATURE_CAP_PER_COLOR", default=10, cast=int)
 
 
+def _boost_lips(src_rgb, faces, strength=22):
+    """TẠO SỨC SỐNG CHO MÔI: đẩy pixel môi (vùng miệng, sắc ĐỎ hơn da) HỒNG/ĐỎ hơn
+    TRƯỚC khi tách màu -> bảng màu chắc chắn có tông môi riêng, không bị gộp vào da
+    (ảnh chụp tối môi hay chìm thành nâu xám). Dùng điểm mốc miệng (2 khoé, YuNet).
+    Sửa TẠI CHỖ trên src_rgb (uint8). No-op nếu không có điểm mốc.
+    """
+    if not faces:
+        return
+    lab = cv2.cvtColor(src_rgb, cv2.COLOR_RGB2LAB).astype(np.int16)
+    H, W = src_rgb.shape[:2]
+    aC = lab[:, :, 1]
+    touched = False
+    for f in faces:
+        lms = f.get('lms')
+        if lms is None:
+            continue
+        P = np.asarray(lms, np.float32).reshape(-1, 2)
+        (mrx, mry), (mlx, mly) = P[3], P[4]              # 2 khoé miệng
+        cx, cy = (mrx + mlx) / 2.0, (mry + mly) / 2.0
+        mw = float(np.hypot(mlx - mrx, mly - mry))
+        if mw < 4:
+            continue
+        ax, ay = int(mw * 0.85), int(mw * 0.5)           # ellipse ôm cả môi trên/dưới
+        mask = np.zeros((H, W), np.uint8)
+        cv2.ellipse(mask, (int(cx), int(cy)), (max(3, ax), max(3, ay)), 0, 0, 360, 255, -1)
+        reg = mask > 0
+        if not reg.any():
+            continue
+        # MÔI = a* CAO hơn nền da quanh miệng (đỏ hơn). Ngưỡng theo trung vị vùng ->
+        # tự thích nghi từng người/ánh sáng, không đụng da/răng (a* thấp/trung tính).
+        med = float(np.median(aC[reg]))
+        lip = reg & (aC > med + 3)
+        if lip.sum() < 8:
+            continue
+        lab[:, :, 1][lip] = np.clip(aC[lip] + strength, 0, 255)      # đỏ hơn
+        lab[:, :, 2][lip] = np.clip(lab[:, :, 2][lip] + strength // 4, 0, 255)
+        touched = True
+    if touched:
+        src_rgb[:] = cv2.cvtColor(lab.astype(np.uint8), cv2.COLOR_LAB2RGB)
+
+
 def _restore_letter_counters(arr, orig_rgb, face_protect=None):
     """ĐỤC LẠI RUỘT CHỮ / LỖ LOGO đã bị mean-shift lấp trước k-means.
 
@@ -982,6 +1023,14 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
             face_protect = feature_protect_mask(src2x, faces=pre)
         except Exception:
             face_protect = None
+        # SỨC SỐNG CHO MÔI: đẩy môi hồng/đỏ TRƯỚC k-means -> có tông môi riêng, không
+        # bị gộp thành nâu xám (nhất là ảnh chụp tối). Try riêng: lỗi môi KHÔNG xoá
+        # face_protect đã tính. Điểm mốc phải khớp 2x (scale theo s).
+        try:
+            from pha.face_features import scale_faces as _scf
+            _boost_lips(src2x, _scf(faces1x, s) if faces1x else None)
+        except Exception:
+            pass
 
     # face_mask: chân dung -> ép pixel ngũ quan vào mẫu chọn bảng màu (mắt/môi/mũi
     # chắc chắn có cụm màu riêng, không bị nuốt ngay ở bước k-means).
