@@ -70,7 +70,7 @@
                   </div>
                 </div>
                 <div class="col-12" id="ndWrap">
-                  <label class="form-label small mb-1">Độ chi tiết đánh số <span class="text-secondary fw-normal" id="ndHint">— chỉ áp cho Tranh thiết kế / Cây–Hoa</span></label>
+                  <label class="form-label small mb-1">Độ chi tiết đánh số <span class="text-secondary fw-normal" id="ndHint">— áp cho Chân dung / Tranh thiết kế / Cây–Hoa</span></label>
                   <select name="num_detail" class="form-select form-select-sm">
                     <option value="tho">Thô — ô to hơn ~50%, số to nhất, dễ tô</option>
                     <option value="chuan" selected>Chuẩn (như trước giờ)</option>
@@ -382,9 +382,9 @@
     // Giữ nguyên lựa chọn khi đổi qua-lại preset: select disabled không được gửi lên,
     // backend tự về 'chuan' -> không cần reset value (đổi lại preset chi tiết thì còn).
     var nd=document.querySelector('[name="num_detail"]'), ndh=document.getElementById('ndHint');
-    var ndOn=!!p.detail && !p.large && k!=='kholon';
+    var ndOn=(!!p.detail || !!p.face) && !p.large && k!=='kholon';
     if(nd) nd.disabled=!ndOn;
-    if(ndh) ndh.textContent=ndOn?'— giữ ô nhỏ tới cỡ nào':'— không áp cho loại tranh này';
+    if(ndh) ndh.textContent=ndOn?'— chi tiết hơn = ô nhỏ hơn, khó tô hơn':'— không áp cho loại tranh này';
     // Nút "Tự cắt/zoom vào người" chỉ có tác dụng với preset CHÂN DUNG (face) -> chỉ hiện khi đó.
     var cw=document.getElementById('cropWrap');
     if(cw) cw.classList.toggle('d-none', !p.face);

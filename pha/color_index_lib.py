@@ -1104,9 +1104,13 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         # gộp ô cũng PHÓNG theo, kẻo ô giữ lại mà không nhét nổi số (ô-trống). Phải phóng
         # CẢ bán kính (·size_scale ngoài cùng): chỉ phóng phần chữ thì bán kính tăng chậm
         # hơn cỡ số -> khổ 20cm bỏ qua 34% vùng thay vì 15% (đo trên portrait_src.png).
-        r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s * size_scale
-        arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=18.0,
-                                         min_area=int(min_area * s * s), max_pass=4,
+        # "Độ chi tiết đánh số" (nút web) áp cho CẢ chân dung: nd<1 -> ô nhỏ hơn, giữ
+        # nhiều chi tiết hơn (khách muốn khó hơn). Giảm bán kính gộp + ngưỡng gộp-màu +
+        # độ mượt theo nd. Kẹp [0.5,1.5] để không vỡ vụn / không quá bệt.
+        nd = min(1.5, max(0.5, float(num_detail or 1.0)))
+        r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s * size_scale * nd
+        arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=18.0 * nd,
+                                         min_area=int(min_area * s * s * nd), max_pass=4,
                                          protect=face_protect, keep_holes=keep_holes,
                                          hard_keep=counter_mask)
         # RUỘT CHỮ đã đục (counter_mask): CHỪA khỏi MỌI bước làm mượt/median (như ngũ
@@ -1115,11 +1119,12 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
             feat = cv2.bitwise_or(feat, counter_mask)
         # LÀM MƯỢT BIÊN 2 lớp: voting (cong mượt) + MEDIAN trên nhãn (nắn thẳng bậc
         # thang răng cưa còn sót). Cả hai CHỪA ngũ quan (feat) -> không mất mắt/môi.
-        arr = _smooth_labels_voting(arr, sigma=2.8 * s, protect=feat)
-        ks = int(round(3 * s)) | 1                      # ksize lẻ (3 ở 1x, 7 ở 2x)
+        # nd<1 -> mượt NHẸ hơn để giữ chi tiết nhỏ.
+        arr = _smooth_labels_voting(arr, sigma=2.8 * s * nd, protect=feat)
+        ks = int(round(3 * s * nd)) | 1                 # ksize lẻ (nhỏ hơn khi chi tiết cao)
         arr = _smooth_boundaries(arr, ksize=max(3, ks), protect_mask=feat)
-        arr = _smooth_labels_voting(arr, sigma=1.6 * s, protect=feat)
-        arr, _ = _merge_keep_features(arr, r_keep=1.8 * s * size_scale, de_keep=10.0,
+        arr = _smooth_labels_voting(arr, sigma=1.6 * s * nd, protect=feat)
+        arr, _ = _merge_keep_features(arr, r_keep=1.8 * s * size_scale * nd, de_keep=10.0 * nd,
                                       max_pass=2, protect=face_protect, keep_holes=keep_holes,
                                       hard_keep=counter_mask)
     # CHÂN DUNG: dán vùng mặt CHI TIẾT (lượng tử cục bộ) đè lên kết quả gộp -> mặt nhỏ
