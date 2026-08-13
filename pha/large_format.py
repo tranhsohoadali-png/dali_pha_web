@@ -550,6 +550,14 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
         tW, tH = max(1, int(tW * s2)), max(1, int(tH * s2))
     interp = cv2.INTER_AREA if (tW < W0) else cv2.INTER_LANCZOS4
     img = cv2.resize(img, (tW, tH), interpolation=interp)
+    # ẢNH CHỤP (không phẳng) & TỐI: nâng sáng vùng tối + tươi hơn -> tranh khổ to bớt
+    # gloomy, mặt/nền lộ chi tiết (ảnh nhà hàng đêm). Bản PHẲNG (Illustrator) giữ nguyên.
+    if not flat_mode:
+        try:
+            from pha.color_index_lib import _auto_tone_dark
+            img = np.ascontiguousarray(_auto_tone_dark(img))
+        except Exception:
+            pass
     H, W = img.shape[:2]
     px_per_mm = max(H, W) / (float(long_cm) * 10.0)
     # SỐ theo MM @ KHỔ THẬT: min/chuẩn/to-nhất là HẰNG mm (KHÔNG nhân min_h) -> ở 1.2×2m
