@@ -607,6 +607,25 @@ def _sweep_dust(lbl, n_colors, dust_area=4):
 FEATURE_CAP_PER_COLOR = config("FEATURE_CAP_PER_COLOR", default=10, cast=int)
 
 
+def _auto_tone_dark(rgb):
+    """NÂNG SÁNG ẢNH TỐI (chụp đêm/nhà hàng) cho tranh chân dung: nâng VÙNG TỐI, GIỮ
+    vùng sáng (không cháy), tăng nhẹ độ rực -> bản thiết kế bớt gloomy, tươi, dễ tô.
+    CHỈ chạy khi ảnh THỰC SỰ tối (>=25% pixel tối) -> ảnh sáng/high-key không đụng.
+    Trả ảnh RGB đã chỉnh (hoặc ảnh gốc nếu không cần)."""
+    lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)
+    Lp = lab[:, :, 0].astype(np.float32) / 255.0
+    if float((Lp < 60 / 255.0).mean()) < 0.25:          # ít vùng tối -> khỏi nâng
+        return rgb
+    Lg = np.power(Lp, 0.60)                              # gamma<1: nâng bóng (mạnh)
+    w = np.clip((0.75 - Lp) / 0.75, 0, 1)                # tối lift nhiều, sáng giữ nguyên
+    Lf = Lp * (1 - w) + Lg * w
+    lab[:, :, 0] = np.clip(Lf * 255.0, 0, 255).astype(np.uint8)
+    out = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+    hsv = cv2.cvtColor(out, cv2.COLOR_RGB2HSV).astype(np.float32)
+    hsv[:, :, 1] = np.clip(hsv[:, :, 1] * 1.20, 0, 255)  # rực hơn -> có sức sống
+    return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB)
+
+
 def _boost_lips(src_rgb, faces, da=34, db=-6, dL=6):
     """TẠO SỨC SỐNG CHO MÔI: đẩy pixel môi (vùng miệng, sắc ĐỎ hơn da) sang ĐỎ TƯƠI
     TRƯỚC khi tách màu -> bảng màu chắc chắn có tông môi riêng, không bị gộp vào da
@@ -973,6 +992,13 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         im = im.copy()
         im.thumbnail((wmax, wmax), Resampling.LANCZOS)
     target = max(2, n)
+    # CHÂN DUNG ẢNH TỐI: nâng sáng vùng tối + tươi hơn TRƯỚC mọi bước (dò mặt, tách
+    # màu) -> mặt nét hơn, nền bớt gloomy. Tự bỏ qua nếu ảnh không tối.
+    if face_priority and not detail:
+        try:
+            im = Image.fromarray(_auto_tone_dark(np.array(im)))
+        except Exception:
+            pass
     W1, H1 = im.size
     sm_level = int(smooth) if (smooth and int(smooth) > 0) else 0
 
