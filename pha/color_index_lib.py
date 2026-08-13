@@ -892,7 +892,7 @@ def _smooth_labels_voting(arr, sigma, protect=None):
     return colors[best_l.reshape(-1)].reshape(arr.shape)
 
 
-def _refine_faces(arr, im_pre, boxes, s, k_face=24):
+def _refine_faces(arr, im_pre, boxes, s, k_face=32, nd=1.0):
     """TĂNG CHI TIẾT KHUÔN MẶT NHỎ (chân dung trong ảnh rộng). Vấn đề: k-means toàn
     ảnh dồn hết cụm màu cho thân/nền -> mặt nhỏ chỉ còn 1-2 tông xám (chảy hết nét).
     Cách chữa: với mỗi bbox mặt, CẮT vùng mặt từ ảnh GỐC (im_pre, TRƯỚC mean-shift ->
@@ -919,10 +919,14 @@ def _refine_faces(arr, im_pre, boxes, s, k_face=24):
         cw2 = max(2, int((bx1 - bx0) * s))
         ch2 = max(2, int((by1 - by0) * s))
         crop2 = cv2.resize(crop, (cw2, ch2), interpolation=cv2.INTER_LANCZOS4)
-        fq = _quantize_rarity(crop2, k=k_face)
-        fq, feat = _merge_keep_features(fq, r_keep=1.5 * s, de_keep=5.5, max_pass=2,
+        # Chi tiết cao (nd<1) -> NHIỀU màu mặt hơn + gộp/mượt NHẸ hơn -> mặt GIỐNG THẬT
+        # hơn (nhiều sắc độ da, khối mặt rõ). Kẹp số màu để không quá vụn / tốn RAM.
+        kf = int(round(k_face / max(0.6, float(nd))))
+        kf = max(24, min(60, kf))
+        fq = _quantize_rarity(crop2, k=kf)
+        fq, feat = _merge_keep_features(fq, r_keep=1.5 * s * nd, de_keep=5.5 * nd, max_pass=2,
                                         feature_cap=10 ** 7)
-        fq = _smooth_labels_voting(fq, sigma=0.8 * s, protect=feat)
+        fq = _smooth_labels_voting(fq, sigma=0.8 * s * nd, protect=feat)
         ax0, ay0 = int(bx0 * s), int(by0 * s)
         ay1 = min(H2, ay0 + fq.shape[0])
         ax1 = min(W2, ax0 + fq.shape[1])
@@ -1084,6 +1088,7 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
                 counter_mask = None
         except Exception:
             counter_mask, counter_src = None, None
+    nd_face = 1.0                                       # hệ số chi tiết cho refine mặt (else set)
     if detail:
         # CHI TIẾT (cây/hoa): giữ NHIỀU ô nhỏ (cánh hoa/lá) -> nhiều số nhỏ. Chỉ dọn
         # bụi/đốm gần-trùng-màu, KHÔNG gộp theo trần (feature_cap vô hạn), bán kính
@@ -1108,6 +1113,7 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         # nhiều chi tiết hơn (khách muốn khó hơn). Giảm bán kính gộp + ngưỡng gộp-màu +
         # độ mượt theo nd. Kẹp [0.5,1.5] để không vỡ vụn / không quá bệt.
         nd = min(1.5, max(0.5, float(num_detail or 1.0)))
+        nd_face = nd                                    # refine mặt theo cùng mức chi tiết
         r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s * size_scale * nd
         arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=18.0 * nd,
                                          min_area=int(min_area * s * s * nd), max_pass=4,
@@ -1131,7 +1137,7 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     # hết chảy. Làm TRƯỚC _smooth_fill để vệt oval được làm mượt cùng các biên khác.
     if im_pre is not None and face_boxes:
         try:
-            arr = _refine_faces(arr, im_pre, face_boxes, s, k_face=24)
+            arr = _refine_faces(arr, im_pre, face_boxes, s, k_face=32, nd=nd_face)
             # Refine thêm bảng màu RIÊNG cho mặt -> tổng màu có thể vượt trần preset
             # (khách phải pha nhiều hũ hơn đặt). GỘP về 'target' màu, BẢO VỆ ngũ quan
             # (mask + tông rực gộp sau cùng) -> mặt vẫn nét, nền/thân nhường suất màu.
