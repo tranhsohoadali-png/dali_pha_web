@@ -181,10 +181,14 @@ def _feature_protect_mask(H, W, face_data):
             continue
         x, y, w, h = box
         r = max(3, int(min(w, h) * 0.12))              # bán kính bảo vệ quanh mỗi điểm mốc
+        r_eye = max(4, int(min(w, h) * 0.20))          # MẮT nới rộng hơn -> giữ tròng/đốm sáng/mí
         if m is None:
             m = np.zeros((H, W), np.uint8)
-        for px, py in np.asarray(lms, np.float32).reshape(-1, 2):
-            cv2.circle(m, (int(px), int(py)), r, 1, -1)
+        pts = np.asarray(lms, np.float32).reshape(-1, 2)
+        for i, (px, py) in enumerate(pts):
+            # YuNet: 0,1 = 2 MẮT -> vòng to hơn (mắt cần nhiều ô: tròng đen, lòng trắng,
+            # đốm bắt sáng, mí) mới ra "có hồn"; 2 mũi, 3-4 mép miệng -> vòng thường.
+            cv2.circle(m, (int(px), int(py)), r_eye if i < 2 else r, 1, -1)
     return m
 
 
@@ -579,6 +583,17 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
         # phần nền = num_colors - face_extra -> tổng ~ num_colors (không vượt "120 màu").
         face_data = _detect_face_boxes(img, with_lms=True) if boost_faces else []
         face_boxes = [b for (b, _l) in face_data]
+        # SỨC SỐNG CHO MÔI: đẩy môi đỏ tươi TRƯỚC khi lấy palette -> bảng màu có tông môi
+        # riêng (không chìm vào da). Dùng điểm mốc miệng đã dò. No-op nếu thiếu mốc.
+        if face_data:
+            try:
+                from pha.color_index_lib import _boost_lips
+                # NHẸ hơn path thường: engine khổ to giữ màu RỰC mạnh (rarity palette) nên
+                # boost mạnh -> môi hồng chóe (nhất là nam). Đỏ vừa phải, tự nhiên.
+                _boost_lips(img, [{'box': b, 'lms': l} for (b, l) in face_data],
+                            da=16, db=-3, dL=2)
+            except Exception:
+                pass
         reserve = face_extra if face_boxes else 0
         base_k = max(2, int(num_colors) - reserve)
         centers = _rarity_palette(img, base_k)         # GIỮ vật thể hiếm (R1) thay k-means trơn
