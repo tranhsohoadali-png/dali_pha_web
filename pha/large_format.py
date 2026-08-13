@@ -587,11 +587,13 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
         # riêng (không chìm vào da). Dùng điểm mốc miệng đã dò. No-op nếu thiếu mốc.
         if face_data:
             try:
-                from pha.color_index_lib import _boost_lips
+                from pha.color_index_lib import _boost_lips, _boost_eyes
+                _faces = [{'box': b, 'lms': l} for (b, l) in face_data]
                 # NHẸ hơn path thường: engine khổ to giữ màu RỰC mạnh (rarity palette) nên
                 # boost mạnh -> môi hồng chóe (nhất là nam). Đỏ vừa phải, tự nhiên.
-                _boost_lips(img, [{'box': b, 'lms': l} for (b, l) in face_data],
-                            da=16, db=-3, dL=2)
+                _boost_lips(img, _faces, da=16, db=-3, dL=2)
+                # Làm rõ MẮT: đậm hoá con ngươi -> mắt không bị gán màu da (mặt nhỏ).
+                _boost_eyes(img, _faces)
             except Exception:
                 pass
         reserve = face_extra if face_boxes else 0

@@ -626,6 +626,52 @@ def _auto_tone_dark(rgb):
     return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB)
 
 
+def _boost_eyes(src_rgb, faces, strength=0.60, r_frac=0.10):
+    """LÀM RÕ MẮT: tại mỗi điểm mốc MẮT (2 điểm đầu YuNet), tìm lõi TỐI NHẤT (tròng
+    đen/con ngươi) trong đĩa nhỏ rồi ĐẬM thêm -> thành cụm màu TỐI riêng, không bị gán
+    màu da khi tách màu (mặt nhỏ hay mất mắt). Sửa TẠI CHỖ src_rgb. No-op nếu thiếu mốc.
+    """
+    if not faces:
+        return
+    lab = cv2.cvtColor(src_rgb, cv2.COLOR_RGB2LAB)
+    L = lab[:, :, 0].astype(np.int16)
+    H, W = src_rgb.shape[:2]
+    touched = False
+    for f in faces:
+        lms = f.get('lms')
+        box = f.get('box')
+        if lms is None or box is None:
+            continue
+        x, y, w, h = box
+        r = max(3, int(min(w, h) * r_frac))
+        P = np.asarray(lms, np.float32).reshape(-1, 2)
+        for i in (0, 1):                                 # 2 MẮT
+            ex, ey = int(P[i][0]), int(P[i][1])
+            x0, y0 = max(0, ex - r), max(0, ey - r)
+            x1, y1 = min(W, ex + r), min(H, ey + r)
+            if x1 - x0 < 3 or y1 - y0 < 3:
+                continue
+            disk = np.zeros((y1 - y0, x1 - x0), np.uint8)
+            cv2.circle(disk, (ex - x0, ey - y0), r, 1, -1)
+            reg = disk > 0
+            sub = L[y0:y1, x0:x1]
+            vals = sub[reg]
+            if vals.size < 6:
+                continue
+            # LÕI TỐI (tròng/con ngươi) = 45% pixel tối nhất trong đĩa -> đậm thêm.
+            thr = float(np.percentile(vals, 45))
+            core = reg & (sub <= thr)
+            if core.sum() < 3:
+                continue
+            sub2 = sub.copy()
+            sub2[core] = np.clip((sub2[core] * strength).astype(np.int16), 0, 255)
+            L[y0:y1, x0:x1] = sub2
+            touched = True
+    if touched:
+        lab[:, :, 0] = np.clip(L, 0, 255).astype(np.uint8)
+        src_rgb[:] = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+
+
 def _boost_lips(src_rgb, faces, da=34, db=-6, dL=6):
     """TẠO SỨC SỐNG CHO MÔI: đẩy pixel môi (vùng miệng, sắc ĐỎ hơn da) sang ĐỎ TƯƠI
     TRƯỚC khi tách màu -> bảng màu chắc chắn có tông môi riêng, không bị gộp vào da
