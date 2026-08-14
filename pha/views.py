@@ -523,7 +523,18 @@ def api_luong(request):
     # Chấm công: ngày công + giờ + tăng ca + đi muộn (đầu vào để kế toán tính lương theo NGÀY CÔNG)
     cfg = _att_cfg()
     att = {}
-    for r in Attendance.objects.filter(month=month):
+    # Chi tiết TỪNG NGÀY: kế toán in kèm vào phiếu lương (mục "Chi tiết chấm công").
+    # Vòng lặp dưới vốn đã duyệt từng ngày rồi cộng dồn — nay giữ lại luôn từng dòng,
+    # không phải truy vấn thêm lần nào.
+    days_by_user = {}
+
+    def _hm(dt):
+        """Giờ 'HH:MM' theo múi VN; rỗng nếu chưa quẹt."""
+        if not dt:
+            return ''
+        return (dt.astimezone(_VN) if _VN else dt).strftime('%H:%M')
+
+    for r in Attendance.objects.filter(month=month).order_by('user', 'day'):
         c = _att_calc(r, cfg)
         a = att.setdefault(r.user, {'work_days': 0, 'total_hours': 0.0, 'ot_hours': 0.0,
                                     'ot_pay': 0, 'late_minutes': 0, 'late_fine': 0, 'late_days': 0})
@@ -533,6 +544,22 @@ def api_luong(request):
             a['late_days'] += 1
         a['total_hours'] += c['hours']; a['ot_hours'] += c['ot_hours']
         a['ot_pay'] += c['ot_pay']; a['late_minutes'] += c['late_min']; a['late_fine'] += c['fine']
+
+        try:
+            _thu = _WEEKDAYS[datetime.strptime(r.day, '%Y-%m-%d').weekday()]
+        except Exception:
+            _thu = ''
+        days_by_user.setdefault(r.user, []).append({
+            'ngay': r.day,
+            'thu': _thu,
+            'gio_vao': _hm(r.check_in),
+            'gio_ra': _hm(r.check_out),
+            'ngay_cong': 1 if r.check_in else 0,
+            'so_gio': round(c['hours'], 2),
+            'tang_ca': round(c['ot_hours'], 2),
+            'late_minutes': c['late_min'],   # tên có 'minutes' -> kế toán tự hiểu đơn vị là PHÚT
+            'phat': round(c['fine']),
+        })
 
     # Nghỉ phép đã duyệt trong tháng (để kế toán trừ/cộng phép)
     from pha.extra_views import _approved_leave_days
@@ -553,6 +580,9 @@ def api_luong(request):
                            'leave_days': len(leave_map.get(u, ()))},
             'output': {'pha_batches': p['pha'], 'rot_paintings': p['rot_p'],
                        'rot_colors': p['rot_c'], 'sx_paintings': p['sx']},
+            # 1 dòng/ngày để kế toán in bảng chấm công kèm phiếu lương.
+            # Không có chấm công trong tháng -> mảng rỗng, kế toán tự bỏ mục.
+            'chi_tiet': days_by_user.get(u, []),
         })
 
     data = {
