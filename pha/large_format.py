@@ -607,7 +607,8 @@ def _refine_features(lbl, centers, img_rgb, face_data, px_per_mm,
             fl[:] = (base + li).astype(np.uint8)
             lbl[lip_mask] = fl
 
-    # ===== 2) MẮT: đĩa quanh 2 mốc mắt -> palette riêng (tròng/mí/nếp) DÁN đè =====
+    # ===== 2) MẮT: trong đĩa quanh mốc mắt CHỈ lấy pixel ĐẶC TRƯNG (tối hơn da: tròng/
+    # mí/lông mi) — KHÔNG dán cả đĩa (dán cả da -> rìa đĩa thành VÒNG TRÒN quanh mắt) =====
     eye_mask = np.zeros((H, W), np.uint8)
     for box, lms in face_data:
         if lms is None:
@@ -616,7 +617,18 @@ def _refine_features(lbl, centers, img_rgb, face_data, px_per_mm,
         r = max(4, int(min(w, h) * 0.13))               # đĩa ôm tròng + mí + đuôi mắt
         P = np.asarray(lms, np.float32).reshape(-1, 2)
         for i in (0, 1):
-            cv2.circle(eye_mask, (int(P[i][0]), int(P[i][1])), r, 1, -1)
+            ex, ey = int(P[i][0]), int(P[i][1])
+            disk = np.zeros((H, W), np.uint8)
+            cv2.circle(disk, (ex, ey), r, 1, -1)
+            dk = disk > 0
+            # DA quanh mắt = phần SÁNG trong đĩa (trung vị 60% sáng nhất) -> ngưỡng tách
+            # đặc trưng mắt (tối hơn da rõ). Chỉ giữ pixel mắt, chừa da -> không viền tròn.
+            sL = float(np.median(LC[dk]))
+            feat = dk & (LC < sL - 16)
+            feat = cv2.morphologyEx(feat.astype(np.uint8), cv2.MORPH_CLOSE,
+                                    np.ones((3, 3), np.uint8))
+            feat = _largest_components(feat, keep=2, min_frac=0.10)
+            eye_mask[feat] = 1
     eye_mask = eye_mask > 0
     if eye_mask.sum() >= 30:
         eyepx = img_rgb[eye_mask]
