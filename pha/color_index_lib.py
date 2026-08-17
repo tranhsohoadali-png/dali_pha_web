@@ -614,6 +614,11 @@ def _auto_tone_dark(rgb):
     Trả ảnh RGB đã chỉnh (hoặc ảnh gốc nếu không cần)."""
     lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)
     Lp = lab[:, :, 0].astype(np.float32) / 255.0
+    # CHỈ nâng khi ảnh TỐI THẬT: median sáng thấp (<100/255). Ảnh đã sáng/đã tinh chỉnh
+    # (median cao) -> GIỮ NGUYÊN MÀU (không nâng, không tăng rực) kẻo mặt bị cam/rực.
+    # (Đo thực: ảnh đêm median~73 -> nâng; ảnh minh hoạ sáng median~135 -> bỏ qua.)
+    if float(np.median(Lp)) >= 100 / 255.0:
+        return rgb
     if float((Lp < 60 / 255.0).mean()) < 0.25:          # ít vùng tối -> khỏi nâng
         return rgb
     Lg = np.power(Lp, 0.60)                              # gamma<1: nâng bóng (mạnh)
