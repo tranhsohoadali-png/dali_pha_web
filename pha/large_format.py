@@ -291,7 +291,7 @@ def _draw_outlines(lbl, canvas):
     canvas[d] = 0
 
 
-def _draw_smooth_outlines_hi(lbl, canvas, out_scale=1.0, eps=0.8, iters=2,
+def _draw_smooth_outlines_hi(lbl, canvas, out_scale=1.0, eps=1.4, iters=3,
                              cap=SMOOTH_CONTOUR_CAP):
     """Vẽ biên MƯỢT 1-NÉT (như Illustration TK325). Cách: DỰNG LẠI bản-đồ-nhãn MƯỢT ở cỡ
     canvas rồi _draw_outlines (label-diff 1px) -> mỗi biên CHỈ 1 nét (KHÔNG double-line như
