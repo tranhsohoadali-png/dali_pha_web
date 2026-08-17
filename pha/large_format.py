@@ -516,6 +516,127 @@ def _nearest_idx(sub_rgb, centers):
     return bidx
 
 
+def _largest_components(mask, keep=2, min_frac=0.06):
+    """Giữ 'keep' đốm LỚN NHẤT của mask 0/1 (bỏ vệt nhiễu tách rời — vd bóng má bắt
+    nhầm màu môi). Cũng bỏ đốm < min_frac diện tích đốm lớn nhất. Trả mask bool."""
+    m = (mask > 0).astype(np.uint8)
+    num, comp, stats, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+    if num <= 1:
+        return m > 0
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    order = np.argsort(areas)[::-1]
+    if len(order) == 0:
+        return m > 0
+    amax = float(areas[order[0]])
+    out = np.zeros_like(m, bool)
+    for r in order[:keep]:
+        if areas[r] >= max(1.0, min_frac * amax):
+            out |= (comp == (r + 1))
+    return out
+
+
+def _refine_features(lbl, centers, img_rgb, face_data, px_per_mm,
+                     eye_k=6, lip_k=5):
+    """TÁI TẠO MẮT & MÔI có HỒN (chạy SAU _merge_labels để gộp không phá).
+
+    Gốc rễ 'chán': (1) _boost_lips đè MỌI pixel môi về 1 đỏ -> k-means gộp thành 1 mảng
+    đỏ phẳng, mất viền/môi trên-dưới/khối sáng; (2) _boost_eyes chỉ đậm-hoá đĩa quanh mắt
+    -> hoà lông mày/bọng mắt thành HỐC NÂU phẳng, mất tròng/mí. Cách sửa: cho mỗi NGŨ QUAN
+    một BẢNG MÀU CỤC BỘ RIÊNG (k-means CHỈ trên pixel ngũ quan, KHÔNG lẫn da) rồi DÁN đè
+    lên bản nhãn -> giữ nhiều tông (viền môi sẫm, thân môi, khối sáng; tròng, mí, nếp mắt).
+    Với MÔI còn ĐẨY SẮC từng TÂM CỤM (giữ L -> giữ khối sáng-tối) nên môi ĐỎ HỒNG tự nhiên,
+    KHÔNG chóe, KHÔNG phẳng. Trả 'centers' MỞ RỘNG (thêm màu mắt/môi); sửa lbl TẠI CHỖ."""
+    if not face_data:
+        return centers
+    H, W = lbl.shape
+    centers = np.asarray(centers, np.uint8)
+    add = []                                            # màu ngũ quan sẽ nối vào palette
+
+    # ===== 1) MÔI: mask ôm sát 2 môi -> palette riêng -> đẩy sắc từng tâm cụm =====
+    lab = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2LAB)      # 1 LẦN (không đổi theo mặt)
+    aC = lab[:, :, 1].astype(np.int16)
+    LC = lab[:, :, 0].astype(np.int16)
+    lip_mask = np.zeros((H, W), np.uint8)
+    for box, lms in face_data:
+        if lms is None:
+            continue
+        P = np.asarray(lms, np.float32).reshape(-1, 2)
+        (mrx, mry), (mlx, mly) = P[3], P[4]
+        cx, cy = (mrx + mlx) / 2.0, (mry + mly) / 2.0
+        mw = float(np.hypot(mlx - mrx, mly - mry))
+        if mw < 6:
+            continue
+        ang = np.degrees(np.arctan2(mly - mry, mlx - mrx))
+        ax, ay = int(mw * 0.85), int(mw * 0.60)         # ôm cả môi trên/dưới + viền
+        ell = np.zeros((H, W), np.uint8)
+        cv2.ellipse(ell, (int(cx), int(cy)), (max(4, ax), max(4, ay)), ang, 0, 360, 1, -1)
+        er = ell > 0
+        if not er.any():
+            continue
+        ring = (cv2.dilate(ell, np.ones((21, 21), np.uint8)) > 0) & (~er)
+        if ring.sum() < 20:
+            continue
+        sA = float(np.median(aC[ring])); sL = float(np.median(LC[ring]))
+        # môi = trong ellipse VÀ (đỏ hơn da RÕ  hoặc  là viền/khe miệng TỐI hơn da)
+        cand = er & ((aC > sA + 6) | (LC < sL - 20))
+        cand = cv2.morphologyEx(cand.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+        cand = cv2.morphologyEx(cand, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+        cand = _largest_components(cand, keep=2, min_frac=0.12)
+        if cand.sum() >= 30:
+            lip_mask[cand] = 1
+    lip_mask = lip_mask > 0
+    if lip_mask.sum() >= 30:
+        lippx = img_rgb[lip_mask]
+        lcen = _kmeans_rgb(lippx.reshape(-1, 1, 3), lip_k)
+        if len(lcen):
+            # ĐẨY SẮC ĐỎ-HỒNG từng TÂM cụm (giữ L* -> giữ khối sáng-tối, không bệt). ĐẨY
+            # THEO TRẦN (adaptive): chỉ nâng a* TỚI mức môi tự nhiên A_TARGET, KHÔNG cộng cứng
+            # -> môi nhạt (nữ) lên đủ hồng, môi NAM/đã đỏ KHÔNG bị chóe như son (lỗi cũ). b*
+            # giảm nhẹ cho bớt vàng. dịch theo tỉ lệ nên viền sẫm & thân môi đều tự nhiên.
+            A_TARGET, DA_MAX = 156, 18
+            cl = cv2.cvtColor(lcen.reshape(-1, 1, 3), cv2.COLOR_RGB2LAB).reshape(-1, 3).astype(np.int16)
+            da = np.clip(A_TARGET - cl[:, 1], 0, DA_MAX)   # chỉ nâng tới trần, không quá
+            cl[:, 1] = np.clip(cl[:, 1] + da, 0, 255)      # a*+ : đỏ hơn (có trần)
+            cl[:, 2] = np.clip(cl[:, 2] - (da * 6 // 18), 0, 255)  # b*- theo cùng tỉ lệ
+            lcen = cv2.cvtColor(cl.astype(np.uint8).reshape(-1, 1, 3),
+                                cv2.COLOR_LAB2RGB).reshape(-1, 3)
+            base = len(centers)
+            centers = np.concatenate([centers, lcen.astype(np.uint8)], axis=0)
+            li = _nearest_idx(img_rgb[lip_mask].reshape(-1, 1, 3), lcen).reshape(-1)
+            fl = lbl[lip_mask]
+            fl[:] = (base + li).astype(np.uint8)
+            lbl[lip_mask] = fl
+
+    # ===== 2) MẮT: đĩa quanh 2 mốc mắt -> palette riêng (tròng/mí/nếp) DÁN đè =====
+    eye_mask = np.zeros((H, W), np.uint8)
+    for box, lms in face_data:
+        if lms is None:
+            continue
+        x, y, w, h = box
+        r = max(4, int(min(w, h) * 0.13))               # đĩa ôm tròng + mí + đuôi mắt
+        P = np.asarray(lms, np.float32).reshape(-1, 2)
+        for i in (0, 1):
+            cv2.circle(eye_mask, (int(P[i][0]), int(P[i][1])), r, 1, -1)
+    eye_mask = eye_mask > 0
+    if eye_mask.sum() >= 30:
+        eyepx = img_rgb[eye_mask]
+        ecen = _kmeans_rgb(eyepx.reshape(-1, 1, 3), eye_k)
+        if len(ecen):
+            # đậm thêm cụm TỐI NHẤT (tròng/con ngươi) -> tròng rõ, mắt "bắt" hơn
+            el = cv2.cvtColor(ecen.reshape(-1, 1, 3), cv2.COLOR_RGB2LAB).reshape(-1, 3).astype(np.int16)
+            di = int(el[:, 0].argmin())
+            el[di, 0] = np.clip(el[di, 0] - 14, 0, 255)
+            ecen = cv2.cvtColor(el.astype(np.uint8).reshape(-1, 1, 3),
+                                cv2.COLOR_LAB2RGB).reshape(-1, 3)
+            base = len(centers)
+            centers = np.concatenate([centers, ecen.astype(np.uint8)], axis=0)
+            ei = _nearest_idx(img_rgb[eye_mask].reshape(-1, 1, 3), ecen).reshape(-1)
+            fe = lbl[eye_mask]
+            fe[:] = (base + ei).astype(np.uint8)
+            lbl[eye_mask] = fe
+    return centers
+
+
 def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
                   min_num_mm=3.0, name='kholon', boost_faces=True, face_extra=20,
                   max_work_mpx=45.0, keep_floor_mm=2.5, line_render_scale=1.0):
@@ -583,35 +704,29 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
         # phần nền = num_colors - face_extra -> tổng ~ num_colors (không vượt "120 màu").
         face_data = _detect_face_boxes(img, with_lms=True) if boost_faces else []
         face_boxes = [b for (b, _l) in face_data]
-        # SỨC SỐNG CHO MÔI: đẩy môi đỏ tươi TRƯỚC khi lấy palette -> bảng màu có tông môi
-        # riêng (không chìm vào da). Dùng điểm mốc miệng đã dò. No-op nếu thiếu mốc.
-        if face_data:
-            try:
-                from pha.color_index_lib import _boost_lips, _boost_eyes
-                _faces = [{'box': b, 'lms': l} for (b, l) in face_data]
-                # NHẸ hơn path thường: engine khổ to giữ màu RỰC mạnh (rarity palette) nên
-                # boost mạnh -> môi hồng chóe (nhất là nam). Đỏ vừa phải, tự nhiên.
-                _boost_lips(img, _faces, da=16, db=-3, dL=2)
-                # Làm rõ MẮT: đậm hoá con ngươi -> mắt không bị gán màu da (mặt nhỏ).
-                _boost_eyes(img, _faces)
-            except Exception:
-                pass
+        # KHÔNG boost-đè môi/mắt TRƯỚC palette nữa: đè phẳng khiến k-means gộp môi thành 1
+        # mảng đỏ, hoà mắt vào hốc nâu ("chán"). Thay bằng _refine_features SAU gộp -> mỗi
+        # ngũ quan có BẢNG MÀU CỤC BỘ riêng (đọc từ ảnh SẠCH) -> giữ khối/viền/tròng, có hồn.
+        # DÀNH n_feat slot cho bảng màu mắt/môi cục bộ (giữ TỔNG ~ num_colors).
+        n_feat = (6 + 5) if face_boxes else 0          # eye_k + lip_k trong _refine_features
         reserve = face_extra if face_boxes else 0
         base_k = max(2, int(num_colors) - reserve)
         centers = _rarity_palette(img, base_k)         # GIỮ vật thể hiếm (R1) thay k-means trơn
         n_base = len(centers)
-        # BOOST MẶT: palette PHỤ vùng mặt (skin/mắt/tóc) ghép vào -> mặt giàu màu, đánh số chi tiết.
+        # BOOST MẶT: palette PHỤ vùng mặt (skin/tóc) ghép vào -> mặt giàu màu; bớt slot generic
+        # để nhường cho bảng màu ngũ quan cục bộ (mắt/môi) sắc nét hơn.
         if face_boxes:
             fpx = np.concatenate([img[y:y + h, x:x + w].reshape(-1, 3)
                                   for (x, y, w, h) in face_boxes], axis=0)
-            fcen = _kmeans_rgb(fpx, face_extra)
+            fcen = _kmeans_rgb(fpx, max(4, int(face_extra) - n_feat))
             if len(fcen):
                 centers = np.concatenate([centers, fcen], axis=0)
     n = len(centers)
     lbl = _to_labels(img, centers[:n_base])            # cả ảnh -> 60 màu nền
     for (x, y, w, h) in face_boxes:                    # vùng mặt -> map lại theo CẢ palette
         lbl[y:y + h, x:x + w] = _nearest_idx(img[y:y + h, x:x + w], centers)
-    del img
+    # GIỮ 'img' (ảnh work-res sạch) tới sau _merge_labels để _refine_features đọc lại
+    # vùng mắt/môi từ NGUỒN GỐC (không bị gộp làm mờ) -> tái tạo ngũ quan có hồn.
     # mặt: ngưỡng gộp NHẸ hơn (face_min_h ~0.75×) -> giữ chi tiết mắt/mũi/miệng.
     face_min_h = max(float(MIN_TEXT_SIZE), min_h * 0.75)
     # SÀN số ~2.5mm @ khổ thật: số nhỏ nhất còn ĐẶT được -> cứu ô nhỏ "đáng giữ" (mắt/điểm
@@ -625,6 +740,15 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     _merge_labels(lbl, n, min_h, face_boxes=face_boxes, face_min_h=face_min_h,
                   centers=centers, flat=flat_mode, floor_h=floor_h, protect_mask=protect_mask,
                   protect_min_area=protect_min_area)
+    # TÁI TẠO MẮT & MÔI (sau gộp): bảng màu cục bộ riêng cho ngũ quan đọc từ ảnh SẠCH ->
+    # môi có viền/khối đỏ-hồng tự nhiên, mắt có tròng/mí -> hết "chán". Mở rộng palette.
+    if face_data and not flat_mode:
+        try:
+            centers = _refine_features(lbl, centers, img, face_data, px_per_mm)
+            n = len(centers)
+        except Exception:
+            pass
+    del img
     # đánh số LIÊN TỤC 1..K theo các màu CÒN dùng (sau gộp) -> bảng gọn, không nhảy số
     used = list(int(c) for c in np.unique(lbl))
     numbers = ['' for _ in range(n)]
