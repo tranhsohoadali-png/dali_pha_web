@@ -1191,8 +1191,13 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         # độ mượt theo nd. Kẹp [0.5,1.5] để không vỡ vụn / không quá bệt.
         nd = min(1.5, max(0.5, float(num_detail or 1.0)))
         nd_face = nd                                    # refine mặt theo cùng mức chi tiết
+        # NGƯỠNG GỘP-THEO-MÀU theo "Độ đơn giản hoá": user chọn THẤP = muốn CHI TIẾT ->
+        # hạ de_keep để GIỮ nét tương phản THẤP (kẽ ngón tay, viền kem bánh, nếp vải —
+        # đo thật: ΔE chỉ ~8-12 nên de_keep=18 nuốt sạch). Chọn Vừa/Mạnh -> giữ 18 như
+        # cũ (ảnh đã chạy tốt trước đây KHÔNG đổi).
+        de_base = {0: 9.0, 1: 12.0}.get(sm_level, 18.0)
         r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s * size_scale * nd
-        arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=18.0 * nd,
+        arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=de_base * nd,
                                          min_area=int(min_area * s * s * nd), max_pass=4,
                                          protect=face_protect, keep_holes=keep_holes,
                                          hard_keep=counter_mask)
