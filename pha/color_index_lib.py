@@ -1867,6 +1867,16 @@ def _number_work_image(work_path, design_out=None, debug=False,
     img_white.fill(255)
 
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    # NÉT 1 LẦN (hết NÉT ĐÔI): trước đây vẽ contour RIÊNG cho TỪNG màu -> biên chung của
+    # 2 vùng kề nhau bị vẽ 2 LẦN, lại lệch nhau vài px sau Chaikin -> 2 vạch song song.
+    # Nay vẽ theo RANH GIỚI NHÃN (pixel khác màu với hàng xóm phải/dưới) -> mỗi biên đúng
+    # 1 nét. Biên vốn đã mượt vì render_arr đi qua _smooth_fill (đa giác Chaikin).
+    _es = big_rgb if (rs > 1.0 and big_rgb is not None) else img_rgb
+    _d = np.zeros(_es.shape[:2], bool)
+    _d[:, :-1] |= np.any(_es[:, :-1] != _es[:, 1:], axis=2)
+    _d[:-1, :] |= np.any(_es[:-1, :] != _es[1:, :], axis=2)
+    img_white[_d] = 0
+    del _es, _d
     color_mapping = []
     color_counts = []
     color_idx = 1
@@ -1881,13 +1891,6 @@ def _number_work_image(work_path, design_out=None, debug=False,
         if hierarchy is None or not contours:
             color_idx += 1
             continue
-        if rs > 1.0:
-            # ĐƯỜNG NÉT lấy từ ảnh 2x: biên cong mượt của bản thiết kế, in to không gãy.
-            big_mask = get_color_areas(big_rgb, color, color, color_idx)
-            big_cnts, _ = cv2.findContours(big_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-            _draw_smooth_contours(img_white, big_cnts)   # làm mượt Chaikin -> hết răng cưa
-        else:
-            _draw_smooth_contours(img_white, contours)
 
         # ĐÁNH SỐ CHUẨN (học của siêu chi tiết): mỗi MẢNH (connected component) đúng 1
         # số, đặt tại TÂM NỘI TIẾP (distanceTransform), cỡ kẹp [min,mean,max] -> đều,
