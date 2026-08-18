@@ -1189,14 +1189,21 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         # "Độ chi tiết đánh số" (nút web) áp cho CẢ chân dung: nd<1 -> ô nhỏ hơn, giữ
         # nhiều chi tiết hơn (khách muốn khó hơn). Giảm bán kính gộp + ngưỡng gộp-màu +
         # độ mượt theo nd. Kẹp [0.5,1.5] để không vỡ vụn / không quá bệt.
-        nd = min(1.5, max(0.5, float(num_detail or 1.0)))
+        # "Độ chi tiết đánh số" KHÔNG áp cho chân dung: đo thật cho thấy nd<1 tạo mảng
+        # vụn -> màu không đánh số nổi bị LOẠI -> 60 màu còn 13, một màu chiếm 97.6%
+        # (tranh hỏng). Chi tiết ở chân dung chỉnh bằng "Độ đơn giản hoá" (de_keep).
+        nd = 1.0
         nd_face = nd                                    # refine mặt theo cùng mức chi tiết
         # NGƯỠNG GỘP-THEO-MÀU theo "Độ đơn giản hoá": user chọn THẤP = muốn CHI TIẾT ->
         # hạ de_keep để GIỮ nét tương phản THẤP (kẽ ngón tay, viền kem bánh, nếp vải —
         # đo thật: ΔE chỉ ~8-12 nên de_keep=18 nuốt sạch). Chọn Vừa/Mạnh -> giữ 18 như
         # cũ (ảnh đã chạy tốt trước đây KHÔNG đổi).
         de_base = {0: 9.0, 1: 12.0}.get(sm_level, 18.0)
-        r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s * size_scale * nd
+        # r_keep = NGƯỠNG "ô đủ to để NHÉT NỔI SỐ" -> KHÔNG nhân nd. Trước đây nhân nd
+        # (<1) làm giữ hàng loạt ô KHÔNG đánh số nổi -> khâu đánh số LOẠI luôn màu đó
+        # khỏi bảng (đo thật: 60 màu -> còn 14, nền dồn 1 màu tối 86% = tranh hỏng).
+        # Mức chi tiết giờ chỉ ăn vào de_keep (giữ nhiều SẮC ĐỘ hơn) + độ mượt.
+        r_keep = ((MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0 + 1.0) * s * size_scale
         arr, feat = _merge_keep_features(arr, r_keep=r_keep, de_keep=de_base * nd,
                                          min_area=int(min_area * s * s * nd), max_pass=4,
                                          protect=face_protect, keep_holes=keep_holes,
@@ -1212,7 +1219,7 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         ks = int(round(3 * s * nd)) | 1                 # ksize lẻ (nhỏ hơn khi chi tiết cao)
         arr = _smooth_boundaries(arr, ksize=max(3, ks), protect_mask=feat)
         arr = _smooth_labels_voting(arr, sigma=1.6 * s * nd, protect=feat)
-        arr, _ = _merge_keep_features(arr, r_keep=1.8 * s * size_scale * nd, de_keep=10.0 * nd,
+        arr, _ = _merge_keep_features(arr, r_keep=1.8 * s * size_scale, de_keep=10.0 * nd,
                                       max_pass=2, protect=face_protect, keep_holes=keep_holes,
                                       hard_keep=counter_mask)
     # CHÂN DUNG: dán vùng mặt CHI TIẾT (lượng tử cục bộ) đè lên kết quả gộp -> mặt nhỏ
