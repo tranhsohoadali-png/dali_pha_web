@@ -1181,7 +1181,7 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         arr = _ensure_n_colors(arr, src2x, target)
         del src2x
     else:
-        del src2x
+        # (giữ src2x tới sau _ensure_n_colors -> ép ĐỦ số màu khách đặt)
         # size_scale>1 (khổ NHỎ 20x20/30x30): số sẽ vẽ TO hơn (giữ mm khi in) -> ngưỡng
         # gộp ô cũng PHÓNG theo, kẻo ô giữ lại mà không nhét nổi số (ô-trống). Phải phóng
         # CẢ bán kính (·size_scale ngoài cùng): chỉ phóng phần chữ thì bán kính tăng chậm
@@ -1222,6 +1222,11 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         arr, _ = _merge_keep_features(arr, r_keep=1.8 * s * size_scale, de_keep=10.0 * nd,
                                       max_pass=2, protect=face_protect, keep_holes=keep_holes,
                                       hard_keep=counter_mask)
+        # ÉP ĐỦ SỐ MÀU KHÁCH ĐẶT ("chọn 60 phải ra 60"): sau gộp, bảng màu thường co lại
+        # -> TÁCH màu nhiều-pixel/biến-thiên cao thành sắc gần nhau (dựa MÀU GỐC) cho đủ
+        # 'target'. Y hệt cách preset Cây/Hoa vẫn "cài bao nhiêu ra bấy nhiêu".
+        arr = _ensure_n_colors(arr, src2x, target)
+        del src2x
     # CHÂN DUNG: dán vùng mặt CHI TIẾT (lượng tử cục bộ) đè lên kết quả gộp -> mặt nhỏ
     # hết chảy. Làm TRƯỚC _smooth_fill để vệt oval được làm mượt cùng các biên khác.
     if im_pre is not None and face_boxes:
@@ -1960,8 +1965,12 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
                                          size_scale=size_scale,
                                          num_detail=num_detail,
                                          keep_holes=keep_holes)
+    # keep_all=True cho MỌI preset: bảng màu = ĐÚNG các màu có trong ảnh thiết kế,
+    # KHÔNG lọc bỏ màu chiếm ít diện tích. Trước đây path chân dung lọc theo
+    # THRESHOLD_PERCENT_COLOR (0.03%) -> "chọn 60 màu mà chỉ ra 32" (đo thật: thiết kế
+    # có 62 màu, bảng báo 32). Khách đặt bao nhiêu màu phải nhận đúng bấy nhiêu.
     return _number_work_image(work_path, design_out=None, debug=debug,
-                              render_arr=arr2x, render_scale=s, keep_all=detail,
+                              render_arr=arr2x, render_scale=s, keep_all=True,
                               size_scale=size_scale)
 
 
