@@ -18,10 +18,18 @@ from pha import wifi_ip
 from pha import product_studio
 from pha import web_publish
 from pha import kho_ma as kho_ma_views
+from pha import inbox as inbox_views
 from pha import a3_sheet
 from pha import shopee_export
 
 urlpatterns = [
+    path('inbox', inbox_views.inbox, name='inbox'),
+    path('inbox/api/list', inbox_views.api_list, name='inbox_list'),
+    path('inbox/api/mo', inbox_views.api_mo, name='inbox_mo'),
+    path('inbox/api/tao', inbox_views.api_tao, name='inbox_tao'),
+    path('inbox/api/them-tin', inbox_views.api_them_tin, name='inbox_them_tin'),
+    path('inbox/api/goi-y', inbox_views.api_goi_y, name='inbox_goi_y'),
+    path('inbox/api/kich-ban', inbox_views.api_kich_ban, name='inbox_kich_ban'),
     path('login', views.login_view, name='login'),
     path('logout', views.logout_view, name='logout'),
     path('home', views.home, name='home_app'),
