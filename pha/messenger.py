@@ -114,7 +114,7 @@ def webhook(request):
                 continue
             c = inbox.ghi_tin('messenger', psid, _ten_khach(psid), 'khach', text)
             if auto:
-                tra_loi, _nguon = inbox.soan_tra_loi(text, c.get('tin'))
+                tra_loi, _nguon = inbox.soan_tra_loi(text, c.get('tin'), c)
                 if tra_loi:
                     # GUARDRAIL: chặn cam kết/giá sai/mã KM tự chế/hẹn ngày + chống loop.
                     g = guardrail.kiem(tra_loi, c, tu_dong=True)

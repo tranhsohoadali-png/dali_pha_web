@@ -83,9 +83,24 @@ def _kich_ban():
         return {'quy_tac': [], 'chu_ky': ''}
 
 
-def soan_tra_loi(cau_hoi, lich_su=None):
-    """Soạn câu trả lời cho tin của khách. Ưu tiên KỊCH BẢN chủ shop tự đặt, sau đó
-    tới mẫu sẵn (giá / khổ / thời gian / chào). Trả (nội_dung, nguồn). '' = chưa có mẫu."""
+def soan_tra_loi(cau_hoi, lich_su=None, hoi_thoai=None):
+    """Soạn câu trả lời cho tin của khách.
+
+    1) AGENT AI (đọc hiểu cả hội thoại + kho tri thức) — nếu đã cấu hình khoá AI.
+    2) Không có khoá / AI lỗi -> lùi về KỊCH BẢN từ khoá của chủ shop.
+    3) Cuối cùng là mẫu sẵn (giá / khổ / thời gian / chào).
+    Trả (nội_dung, nguồn). '' = agent không trả lời được -> để người xử lý.
+    """
+    try:
+        from pha import agent_ai
+        if agent_ai.co_ai():
+            nd, nguon, chuyen = agent_ai.tra_loi(cau_hoi, hoi_thoai or {'tin': lich_su or []})
+            if nd and not chuyen:
+                return nd, nguon
+            if chuyen:
+                return '', 'agent AI: cần người xử lý'
+    except Exception:
+        pass
     q = (cau_hoi or '').lower().strip()
     kb = _kich_ban()
     for r in kb.get('quy_tac') or []:
@@ -180,7 +195,7 @@ def api_them_tin(request):
                                     'luc': datetime.now().strftime('%Y-%m-%d %H:%M')})
     c['chua_tra_loi'] = (ai == 'khach')
     _save(c)
-    goi_y, nguon = soan_tra_loi(nd, c.get('tin')) if ai == 'khach' else ('', '')
+    goi_y, nguon = soan_tra_loi(nd, c.get('tin'), c) if ai == 'khach' else ('', '')
     return JsonResponse({'ok': True, 'hoi_thoai': c, 'goi_y': goi_y, 'nguon': nguon})
 
 
@@ -195,7 +210,7 @@ def api_goi_y(request):
         if t.get('ai') == 'khach':
             cuoi = t.get('noi_dung') or ''
             break
-    nd, nguon = soan_tra_loi(cuoi, c.get('tin'))
+    nd, nguon = soan_tra_loi(cuoi, c.get('tin'), c)
     if not nd:
         return JsonResponse({'ok': False,
                              'error': 'Chưa có mẫu phù hợp — thêm kịch bản để agent trả lời câu này.'})

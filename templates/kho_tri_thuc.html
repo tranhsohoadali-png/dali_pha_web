@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kho tri thức agent · DALI</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+</head>
+<body class="bg-body-tertiary">
+{% include '_nav.html' %}
+<div class="container-fluid py-3">
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-semibold"><i class="bi bi-book text-primary"></i> Kho tri thức — thứ quyết định agent trả lời hay hay dở</span>
+          <span class="badge bg-secondary">{{ so_muc }} mục</span>
+        </div>
+        <div class="card-body">
+          <div class="alert {% if co_ai %}alert-success{% else %}alert-warning{% endif %} py-2 small">
+            {% if co_ai %}
+              <b>Agent AI đang bật</b> — model: <code>{{ model }}</code>. Agent đọc kho tri thức bên dưới + lịch sử hội thoại rồi tự viết câu trả lời.
+            {% else %}
+              <b>Chưa có khoá AI</b> — agent đang chạy bằng kịch bản từ khoá (máy móc). Vào <a href="/cai-dat-ai">Cài đặt AI</a> nhập khoá OpenAI hoặc Google để agent biết tự nghĩ.
+            {% endif %}
+          </div>
+          <div class="form-text mb-2">Viết mỗi thứ khách hay hỏi thành 1 mục. Agent <b>chỉ được dùng dữ kiện trong đây</b> — không có thì nó nói cần kiểm tra lại chứ không bịa.</div>
+          <div id="kbList"></div>
+          <button class="btn btn-sm btn-outline-primary" id="btnAdd"><i class="bi bi-plus-lg"></i> Thêm mục</button>
+          <button class="btn btn-sm btn-primary" id="btnSave">Lưu kho tri thức</button>
+          <a href="/inbox" class="btn btn-sm btn-outline-secondary">Về Hộp thư</a>
+          <span class="small text-success ms-2">{{ msg }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-header fw-semibold"><i class="bi bi-chat-quote text-success"></i> Thử agent (không gửi cho ai)</div>
+        <div class="card-body">
+          <div class="form-text mb-2">Hỏi thử như khách. Đây là cách chấm điểm agent <b>trước khi</b> cho nó nói chuyện với khách thật.</div>
+          <div class="input-group input-group-sm mb-2">
+            <input id="q" class="form-control" placeholder="VD: tranh 50x70 bao nhiêu tiền, làm mấy ngày?">
+            <button class="btn btn-success" id="btnAsk">Hỏi</button>
+          </div>
+          <div id="kq"></div>
+        </div>
+      </div>
+      <div class="card shadow-sm mt-3">
+        <div class="card-header fw-semibold">Gợi ý nội dung nên có</div>
+        <div class="card-body small">
+          <ul class="mb-0">
+            <li>Bảng giá theo từng khổ (kèm đã gồm khung/bộ màu chưa)</li>
+            <li>Thời gian làm + thời gian giao từng khu vực</li>
+            <li>Số màu theo loại tranh, độ khó</li>
+            <li>Chất liệu vải, khung, loại màu</li>
+            <li>Cách xử lý lỗi hay gặp: số mờ, màu khô, tô lem</li>
+            <li>Chính sách đổi trả, bảo hành (ghi rõ điều kiện)</li>
+            <li>Cách gửi ảnh để đặt tranh theo yêu cầu</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+var MUC = {{ muc_json|safe }};
+function esc(s){ return $('<div>').text(s||'').html(); }
+function draw(){
+  var h='';
+  MUC.forEach(function(m,i){
+    h += '<div class="border rounded p-2 mb-2">'
+      +  '<div class="d-flex gap-1"><input class="form-control form-control-sm kb-t" data-i="'+i+'" value="'+esc(m.tieu_de)+'" placeholder="Tiêu đề (vd: Giá theo khổ)">'
+      +  '<button class="btn btn-sm btn-outline-danger kb-x" data-i="'+i+'">&times;</button></div>'
+      +  '<textarea class="form-control form-control-sm mt-1 kb-n" data-i="'+i+'" rows="2" placeholder="Nội dung — viết rõ ràng, có số liệu cụ thể">'+esc(m.noi_dung)+'</textarea></div>';
+  });
+  $('#kbList').html(h||'<div class="text-secondary small mb-2">Chưa có mục nào. Bấm “Thêm mục”.</div>');
+}
+$('#btnAdd').on('click',function(){ MUC.push({tieu_de:'',noi_dung:''}); draw(); });
+$('#kbList').on('click','.kb-x',function(){ MUC.splice($(this).data('i'),1); draw(); });
+$('#btnSave').on('click',function(){
+  $('.kb-t').each(function(){ MUC[$(this).data('i')].tieu_de=$(this).val(); });
+  $('.kb-n').each(function(){ MUC[$(this).data('i')].noi_dung=$(this).val(); });
+  var f=$('<form method="POST">').attr('action','');
+  f.append($('<input type="hidden" name="csrfmiddlewaretoken">').val('{{ csrf_token }}'));
+  f.append($('<input type="hidden" name="data">').val(JSON.stringify(MUC)));
+  $('body').append(f); f.submit();
+});
+$('#btnAsk').on('click',function(){
+  $('#kq').html('<div class="text-secondary small">Đang hỏi agent…</div>');
+  $.post('/inbox/api/thu-agent',{cau_hoi:$('#q').val(),csrfmiddlewaretoken:'{{ csrf_token }}'},function(r){
+    if(!r.ok){ $('#kq').html('<div class="text-danger small">'+esc(r.error)+'</div>'); return; }
+    var g=r.guardrail||{};
+    var h='<div class="border rounded p-2"><div class="small text-secondary">Agent trả lời ('+esc(r.nguon)+'):</div>'
+      + '<div class="mt-1">'+esc(r.tra_loi||'(agent không trả lời — chuyển người)')+'</div>';
+    if(r.chuyen_nguoi) h+='<div class="badge bg-warning text-dark mt-2">Agent đề nghị chuyển người</div>';
+    if(g.cho_gui===false) h+='<div class="alert alert-danger py-1 px-2 small mt-2 mb-0"><b>Guardrail chặn:</b> '+esc(g.ly_do)+'<br>Sẽ gửi thay: <i>'+esc(g.se_gui)+'</i></div>';
+    else if(r.tra_loi) h+='<div class="text-success small mt-2">Guardrail: cho gửi.</div>';
+    $('#kq').html(h+'</div>');
+  });
+});
+$('#q').on('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); $('#btnAsk').click(); }});
+draw();
+</script>
+</body>
+</html>

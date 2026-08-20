@@ -21,6 +21,7 @@ from pha import kho_ma as kho_ma_views
 from pha import inbox as inbox_views
 from pha import messenger as mess_views
 from pha import guardrail as gr_views
+from pha import agent_ai as ai_views
 from pha import a3_sheet
 from pha import shopee_export
 
@@ -37,6 +38,8 @@ urlpatterns = [
     path('inbox/api/gui-messenger', mess_views.api_gui, name='mess_gui'),
     path('inbox/guardrail', gr_views.man_hinh, name='guardrail'),
     path('inbox/api/guardrail-thu', gr_views.api_thu, name='guardrail_thu'),
+    path('inbox/kho-tri-thuc', ai_views.man_hinh_kb, name='kho_tri_thuc'),
+    path('inbox/api/thu-agent', ai_views.api_thu_agent, name='thu_agent'),
     path('login', views.login_view, name='login'),
     path('logout', views.logout_view, name='logout'),
     path('home', views.home, name='home_app'),
