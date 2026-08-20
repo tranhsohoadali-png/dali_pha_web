@@ -111,6 +111,26 @@ def soan_tra_loi(cau_hoi, lich_su=None):
     return '', ''
 
 
+def ghi_tin(kenh, ngoai_id, ten, ai, noi_dung):
+    """Ghi 1 tin từ KÊNH NGOÀI (Messenger/Zalo/TikTok) vào hộp thư. 'ngoai_id' là ID
+    người dùng trên nền tảng (vd PSID của Messenger) -> mỗi người 1 hội thoại cố định.
+    Trả hội thoại đã cập nhật."""
+    cid = ('%s_%s' % (kenh, re.sub(r'[^0-9a-zA-Z]', '', str(ngoai_id))))[:60]
+    c = _load(cid)
+    if not c:
+        c = {'id': cid, 'kenh': kenh if kenh in KENH else 'messenger',
+             'ten': (ten or 'Khách')[:60], 'ngoai_id': str(ngoai_id), 'tin': [],
+             'tao_luc': datetime.now().strftime('%Y-%m-%d %H:%M'), 'chua_tra_loi': False}
+    elif ten and c.get('ten') in ('', 'Khách'):
+        c['ten'] = ten[:60]
+    c.setdefault('tin', []).append({'ai': ('khach' if ai == 'khach' else 'shop'),
+                                    'noi_dung': noi_dung,
+                                    'luc': datetime.now().strftime('%Y-%m-%d %H:%M')})
+    c['chua_tra_loi'] = (ai == 'khach')
+    _save(c)
+    return c
+
+
 # ================= MÀN HÌNH + API =================
 @csrf_exempt
 @staff_required

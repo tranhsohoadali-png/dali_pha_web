@@ -28,6 +28,7 @@
       <div class="card shadow-sm">
         <div class="card-header d-flex align-items-center justify-content-between">
           <span class="fw-semibold"><i class="bi bi-chat-dots text-success"></i> Hội thoại</span>
+          <a href="/inbox/messenger" class="btn btn-sm btn-outline-primary" title="Nối Messenger"><i class="bi bi-messenger"></i></a>
           <button class="btn btn-sm btn-outline-success" id="btnNew"><i class="bi bi-plus-lg"></i></button>
         </div>
         <div class="card-body p-2">
@@ -65,7 +66,7 @@
           <div class="input-group input-group-sm">
             <span class="input-group-text bg-success text-white">Trả lời</span>
             <textarea id="inShop" class="form-control" rows="2" placeholder="Câu trả lời (agent tự điền khi có mẫu)…"></textarea>
-            <button class="btn btn-success" id="btnGui" title="Lưu là đã trả lời">Đã gửi</button>
+            <button class="btn btn-success" id="btnGui" title="Messenger: gửi thật · kênh khác: ghi nhận đã trả lời">Gửi</button>
             <button class="btn btn-outline-success" id="btnChep" title="Chép để dán sang Shopee/TikTok"><i class="bi bi-clipboard"></i></button>
           </div>
           <div class="form-text" id="nguonGoiY"></div>
@@ -93,7 +94,7 @@
 
 <script>
 var KENH = {{ kenh_json|safe }};
-var CUR = null, FILTER = '';
+var CUR = null, CURKENH = '', FILTER = '';
 
 function esc(s){ return $('<div>').text(s||'').html(); }
 
@@ -115,7 +116,7 @@ function loadList(){
 }
 
 function render(c){
-  CUR = c.id;
+  CUR = c.id; CURKENH = c.kenh || '';
   $('#convTitle').text(c.ten).removeClass('text-secondary');
   $('#convKenh').text(KENH[c.kenh]||c.kenh);
   var h='';
@@ -154,7 +155,16 @@ function themTin(ai, nd){
 }
 $('#btnKhach').on('click',function(){ themTin('khach',$('#inKhach').val().trim()); });
 $('#inKhach').on('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); $('#btnKhach').click(); }});
-$('#btnGui').on('click',function(){ themTin('shop',$('#inShop').val().trim()); });
+$('#btnGui').on('click',function(){
+  var nd=$('#inShop').val().trim(); if(!CUR||!nd) return;
+  if(CURKENH==='messenger'){          // GỬI THẬT tới khách qua Messenger Send API
+    $('#nguonGoiY').text('Đang gửi…');
+    $.post('/inbox/api/gui-messenger',{id:CUR,noi_dung:nd},function(r){
+      if(!r.ok){ $('#nguonGoiY').text('Gửi lỗi: '+(r.error||'')); return; }
+      render(r.hoi_thoai); $('#inShop').val(''); $('#nguonGoiY').text('Đã gửi tới khách trên Messenger.');
+    });
+  } else { themTin('shop',nd); }     // kênh dán tay: chỉ ghi nhận đã trả lời
+});
 $('#btnChep').on('click',function(){
   var t=$('#inShop').val(); if(!t) return;
   navigator.clipboard.writeText(t); $('#nguonGoiY').text('Đã chép — dán sang cửa sổ chat của nền tảng.');

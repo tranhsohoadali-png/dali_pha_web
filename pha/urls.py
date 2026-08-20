@@ -19,6 +19,7 @@ from pha import product_studio
 from pha import web_publish
 from pha import kho_ma as kho_ma_views
 from pha import inbox as inbox_views
+from pha import messenger as mess_views
 from pha import a3_sheet
 from pha import shopee_export
 
@@ -30,6 +31,9 @@ urlpatterns = [
     path('inbox/api/them-tin', inbox_views.api_them_tin, name='inbox_them_tin'),
     path('inbox/api/goi-y', inbox_views.api_goi_y, name='inbox_goi_y'),
     path('inbox/api/kich-ban', inbox_views.api_kich_ban, name='inbox_kich_ban'),
+    path('inbox/messenger', mess_views.cai_dat, name='mess_cai_dat'),
+    path('inbox/webhook/messenger', mess_views.webhook, name='mess_webhook'),
+    path('inbox/api/gui-messenger', mess_views.api_gui, name='mess_gui'),
     path('login', views.login_view, name='login'),
     path('logout', views.logout_view, name='logout'),
     path('home', views.home, name='home_app'),

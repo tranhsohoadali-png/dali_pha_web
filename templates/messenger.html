@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nối Messenger · DALI</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body class="bg-body-tertiary">
+{% include '_nav.html' %}
+<div class="container py-3" style="max-width:900px">
+  <h5 class="mb-3"><i class="bi bi-messenger text-primary"></i> Nối Messenger (Fanpage) — API chính thức</h5>
+
+  {% if msg %}<div class="alert alert-success py-2">{{ msg }}</div>{% endif %}
+  <div class="alert {% if 'Đã nối' in trang_thai %}alert-success{% elif 'Lỗi' in trang_thai %}alert-danger{% else %}alert-secondary{% endif %} py-2">
+    <b>Trạng thái:</b> {{ trang_thai }}
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header fw-semibold">Các bước làm (một lần duy nhất)</div>
+    <div class="card-body small">
+      <ol class="mb-0">
+        <li>Vào <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener">developers.facebook.com/apps</a> → <b>Create App</b> → chọn loại <b>Business</b>.</li>
+        <li>Trong app, thêm sản phẩm <b>Messenger</b> → mục <b>Access Tokens</b> → chọn Fanpage của bạn → bấm <b>Generate Token</b>. Chép token đó vào ô <b>Page Access Token</b> bên dưới.</li>
+        <li>Mục <b>App Settings → Basic</b> → chép <b>App Secret</b> vào ô bên dưới (dùng để chống giả mạo webhook).</li>
+        <li>Tự nghĩ một chuỗi bất kỳ (vd <code>dali-2026</code>) điền vào ô <b>Verify Token</b> bên dưới rồi bấm <b>Lưu</b>.</li>
+        <li>Quay lại Messenger → <b>Webhooks</b> → <b>Add Callback URL</b>:
+          <div class="mt-1"><b>Callback URL:</b> <code>{{ webhook_url }}</code></div>
+          <div><b>Verify Token:</b> chuỗi bạn vừa đặt ở bước 4</div>
+        </li>
+        <li>Bấm <b>Verify and Save</b> → sau đó <b>Add subscriptions</b> cho Page, tích <b>messages</b> và <b>messaging_postbacks</b>.</li>
+        <li>Nhắn thử vào Fanpage bằng tài khoản khác → tin sẽ hiện trong <a href="/inbox">Hộp thư</a>.</li>
+      </ol>
+    </div>
+  </div>
+
+  <form method="POST" class="card shadow-sm">
+    {% csrf_token %}
+    <div class="card-header fw-semibold">Khoá kết nối <span class="text-secondary fw-normal small">— lưu trong cơ sở dữ liệu, không nằm trong mã nguồn</span></div>
+    <div class="card-body">
+      <div class="mb-3">
+        <label class="form-label small mb-1">Verify Token <span class="text-secondary">(chuỗi bạn tự đặt)</span></label>
+        <input name="MESSENGER_VERIFY_TOKEN" class="form-control form-control-sm" value="{{ cfg.MESSENGER_VERIFY_TOKEN }}" placeholder="vd: dali-2026">
+      </div>
+      <div class="mb-3">
+        <label class="form-label small mb-1">Page Access Token <span class="text-secondary">(Meta cấp)</span></label>
+        <input name="MESSENGER_PAGE_TOKEN" class="form-control form-control-sm" value="{{ cfg.MESSENGER_PAGE_TOKEN }}" placeholder="EAAG...">
+        <div class="form-text">Đang lưu: <code>{{ hien.MESSENGER_PAGE_TOKEN|default:"(trống)" }}</code></div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small mb-1">App Secret</label>
+        <input name="MESSENGER_APP_SECRET" class="form-control form-control-sm" value="{{ cfg.MESSENGER_APP_SECRET }}" placeholder="App Secret của Meta App">
+        <div class="form-text">Có App Secret thì mọi webhook đều được kiểm chữ ký — người ngoài không giả tin nhắn được.</div>
+      </div>
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" id="auto" name="MESSENGER_AUTO" value="1" {% if cfg.MESSENGER_AUTO == '1' %}checked{% endif %}>
+        <label class="form-check-label small" for="auto">
+          <b>Agent tự động trả lời ngay</b>
+          <span class="text-secondary d-block">Bật: khách nhắn là agent gửi trả lời luôn (chỉ khi khớp kịch bản/mẫu — không khớp thì để im chờ người). Tắt: chỉ lưu vào Hộp thư, nhân viên bấm gửi.</span>
+        </label>
+      </div>
+      <button class="btn btn-primary btn-sm">Lưu</button>
+      <a href="/inbox" class="btn btn-outline-secondary btn-sm">Về Hộp thư</a>
+    </div>
+  </form>
+</div>
+</body>
+</html>
