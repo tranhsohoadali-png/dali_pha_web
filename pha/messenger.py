@@ -22,7 +22,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 
-from pha import inbox
+from pha import guardrail, inbox
 from pha.views import staff_required
 
 GRAPH = 'https://graph.facebook.com/v21.0'
@@ -116,11 +116,19 @@ def webhook(request):
             if auto:
                 tra_loi, _nguon = inbox.soan_tra_loi(text, c.get('tin'))
                 if tra_loi:
-                    try:
-                        gui_tin(psid, tra_loi)
-                        inbox.ghi_tin('messenger', psid, '', 'shop', tra_loi)
-                    except Exception:
-                        pass          # gửi lỗi -> vẫn giữ tin khách trong hộp thư
+                    # GUARDRAIL: chặn cam kết/giá sai/mã KM tự chế/hẹn ngày + chống loop.
+                    g = guardrail.kiem(tra_loi, c, tu_dong=True)
+                    if not g['cho_gui']:
+                        guardrail.ghi_audit(c['id'], 'agent', 'chan', tra_loi, g['ly_do'])
+                    if g['noi_dung']:
+                        try:
+                            gui_tin(psid, g['noi_dung'])
+                            inbox.ghi_tin('messenger', psid, '', 'shop', g['noi_dung'],
+                                          tu_dong=True)
+                            guardrail.ghi_audit(c['id'], 'agent', 'gui', g['noi_dung'],
+                                                g['ly_do'])
+                        except Exception as e:
+                            guardrail.ghi_audit(c['id'], 'agent', 'loi', tra_loi, str(e)[:200])
     return HttpResponse('EVENT_RECEIVED')
 
 
@@ -141,6 +149,7 @@ def api_gui(request):
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)[:300]})
     c = inbox.ghi_tin('messenger', c['ngoai_id'], '', 'shop', nd)
+    guardrail.ghi_audit(c['id'], 'nguoi', 'gui', nd)
     return JsonResponse({'ok': True, 'hoi_thoai': c})
 
 

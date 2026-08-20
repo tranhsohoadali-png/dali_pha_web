@@ -111,7 +111,7 @@ def soan_tra_loi(cau_hoi, lich_su=None):
     return '', ''
 
 
-def ghi_tin(kenh, ngoai_id, ten, ai, noi_dung):
+def ghi_tin(kenh, ngoai_id, ten, ai, noi_dung, tu_dong=False):
     """Ghi 1 tin từ KÊNH NGOÀI (Messenger/Zalo/TikTok) vào hộp thư. 'ngoai_id' là ID
     người dùng trên nền tảng (vd PSID của Messenger) -> mỗi người 1 hội thoại cố định.
     Trả hội thoại đã cập nhật."""
@@ -124,7 +124,7 @@ def ghi_tin(kenh, ngoai_id, ten, ai, noi_dung):
     elif ten and c.get('ten') in ('', 'Khách'):
         c['ten'] = ten[:60]
     c.setdefault('tin', []).append({'ai': ('khach' if ai == 'khach' else 'shop'),
-                                    'noi_dung': noi_dung,
+                                    'noi_dung': noi_dung, 'tu_dong': bool(tu_dong),
                                     'luc': datetime.now().strftime('%Y-%m-%d %H:%M')})
     c['chua_tra_loi'] = (ai == 'khach')
     _save(c)
