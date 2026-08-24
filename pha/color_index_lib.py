@@ -1952,6 +1952,8 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
     một nửa, ô li ti không tô nổi). Khổ >=40cm giữ NGUYÊN chuẩn cũ (không đổi kết quả).
     num_detail: nút "Độ chi tiết đánh số" (1.0 = chuẩn, <1 = giữ ô nhỏ hơn -> chi tiết
     hơn). CHỈ có tác dụng khi detail=True; 1.0 -> kết quả y hệt trước."""
+    cv2.setRNGSeed(0)              # cv2.kmeans khong seed -> so mau nhay moi lan;
+    #                               co dinh -> chon 60 ra 60 on dinh, chay lai giong het.
     effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
     try:
         _L = float(print_long_cm or 0)

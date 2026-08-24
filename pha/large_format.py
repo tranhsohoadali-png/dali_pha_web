@@ -535,8 +535,52 @@ def _largest_components(mask, keep=2, min_frac=0.06):
     return out
 
 
+def _khu_soi(lbl, centers, feat_mask, min_rad, max_pass=3):
+    """Trong VUNG NGU QUAN da refine: gop o co ban kinh noi tiep < min_rad (soi/dai MONG
+    -> hai bien chay song song = NET DOI, khong to duoc) vao hang xom GIONG MAU nhat.
+    Giu trong/than moi (du to), bo soi mong. Sua lbl tai cho, tra lbl."""
+    H, W = lbl.shape
+    fm = feat_mask > 0
+    if not fm.any():
+        return lbl
+    labc = cv2.cvtColor(np.asarray(centers, np.uint8).reshape(-1, 1, 3),
+                        cv2.COLOR_RGB2LAB).reshape(-1, 3).astype(np.float32)
+    k3 = np.ones((3, 3), np.uint8)
+    for _ in range(max_pass):
+        changed = False
+        for ci in [int(c) for c in np.unique(lbl[fm])]:
+            mask = (lbl == ci).astype(np.uint8)
+            num, comp, stats, _c = cv2.connectedComponentsWithStats(mask, 8)
+            for k in range(1, num):
+                x, y = int(stats[k, 0]), int(stats[k, 1])
+                w, h = int(stats[k, 2]), int(stats[k, 3])
+                x0, y0 = max(0, x - 1), max(0, y - 1)
+                x1, y1 = min(W, x + w + 1), min(H, y + h + 1)
+                sub = comp[y0:y1, x0:x1] == k
+                if not (fm[y0:y1, x0:x1] & sub).any():   # o khong dung vung refine -> bo qua
+                    continue
+                subp = cv2.copyMakeBorder(sub.astype(np.uint8), 1, 1, 1, 1,
+                                          cv2.BORDER_CONSTANT, value=0)
+                rad = float(cv2.distanceTransform(subp, cv2.DIST_L2, 3).max())
+                if rad >= min_rad:                        # du day -> giu
+                    continue
+                ring = (cv2.dilate(sub.astype(np.uint8), k3) > 0) & (~sub)
+                nb = lbl[y0:y1, x0:x1][ring]
+                nb = nb[nb != ci]
+                if nb.size == 0:
+                    continue
+                cand = np.unique(nb)
+                best = int(min(cand, key=lambda j: float(((labc[ci] - labc[j]) ** 2).sum())))
+                yy, xx = np.where(sub)
+                lbl[y0 + yy, x0 + xx] = best
+                changed = True
+        if not changed:
+            break
+    return lbl
+
+
 def _refine_features(lbl, centers, img_rgb, face_data, px_per_mm,
-                     eye_k=6, lip_k=5):
+                     eye_k=6, lip_k=5, min_rad=2.0):
     """TÁI TẠO MẮT & MÔI có HỒN (chạy SAU _merge_labels để gộp không phá).
 
     Gốc rễ 'chán': (1) _boost_lips đè MỌI pixel môi về 1 đỏ -> k-means gộp thành 1 mảng
@@ -646,6 +690,13 @@ def _refine_features(lbl, centers, img_rgb, face_data, px_per_mm,
             fe = lbl[eye_mask]
             fe[:] = (base + ei).astype(np.uint8)
             lbl[eye_mask] = fe
+
+    # KHU NET DOI: refine tao nhieu o MONG (trong/mi/vien moi) chay sau _merge_labels nen
+    # KHONG duoc don -> hai bien song song. Gop o mong (< min_rad) vao hang xom giong mau
+    # nhat, chi trong vung ngu quan -> het net doi ma van giu trong/than moi du to.
+    feat = (lip_mask | eye_mask)
+    if feat.any():
+        _khu_soi(lbl, centers, feat, min_rad)
     return centers
 
 
@@ -654,6 +705,8 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
                   max_work_mpx=45.0, keep_floor_mm=2.5, line_render_scale=1.0):
     """Tạo tranh tô số KHỔ LỚN từ ảnh nét cao. Lưu bản đồ số + thiết kế + bảng màu vào
     out_dir; trả dict thống kê. Số tối thiểu theo MM @ khổ thật (long_cm)."""
+    cv2.setRNGSeed(0)                    # cv2.kmeans PP-centers khong seed -> moi lan
+    #                                     ra so mau khac; co dinh -> KET QUA LAP LAI.
     os.makedirs(out_dir, exist_ok=True)
     t0 = time.time()
     bgr = cv2.imread(src_path)
@@ -756,7 +809,8 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     # môi có viền/khối đỏ-hồng tự nhiên, mắt có tròng/mí -> hết "chán". Mở rộng palette.
     if face_data and not flat_mode:
         try:
-            centers = _refine_features(lbl, centers, img, face_data, px_per_mm)
+            centers = _refine_features(lbl, centers, img, face_data, px_per_mm,
+                                       min_rad=max(1.5, floor_h * 0.55))
             n = len(centers)
         except Exception:
             pass
