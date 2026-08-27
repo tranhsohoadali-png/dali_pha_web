@@ -156,7 +156,7 @@ def _process_large_into(obj, name, long_cm, color_limit):
 
     def _beat():
         from pha.models import ImageResult as _IR
-        while not _stop.wait(3.0):
+        while not _stop.wait(20.0):   # 20s: bớt ghi DB nền -> ít khoá SQLite
             el = _time.time() - _t0
             try:
                 rec = _IR.objects.get(id=obj.id)

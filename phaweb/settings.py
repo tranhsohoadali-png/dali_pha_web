@@ -92,6 +92,10 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        # timeout: chờ khoá tới 30s thay vì 5s mặc định -> job xử-lý-ảnh nền ghi DB
+        # (heartbeat) không làm request trang bị "database is locked" -> hết trắng màn hình.
+        # WAL + busy_timeout đặt thêm ở pha/apps.py (connection_created signal).
+        'OPTIONS': {'timeout': 30},
     }
 }
 
