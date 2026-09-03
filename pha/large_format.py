@@ -381,9 +381,10 @@ def _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h,
     placed = 0
     os_ = float(out_scale)
     fl = float(MIN_TEXT_SIZE) if floor_h is None else max(float(MIN_TEXT_SIZE), float(floor_h))
-    # Ô trong VÙNG MẶT dùng SÀN NHỎ HƠN (face_min_h) -> cứu ô mắt/mũi/miệng nhỏ mà
-    # _refine_features vừa tách -> đánh số CHI TIẾT hơn ở khuôn mặt (mắt hết ô trống số).
-    fl_face = fl if face_min_h is None else max(float(MIN_TEXT_SIZE), float(face_min_h))
+    # Ô trong VÙNG MẶT dùng sàn THẤP HƠN (fl×0.62) -> NHỒI thêm số (nhỏ) vào mắt/mũi/miệng
+    # ở bản CHÍNH (mặt nhỏ, ô 2-4mm). Số ~1mm (khó đọc) nhưng có còn hơn trống; tô mặt kỹ
+    # vẫn nên dùng _mat.png. KHÔNG dùng face_min_h (=min_h×0.75 > floor_h -> ngược mục đích).
+    fl_face = max(float(MIN_TEXT_SIZE), fl * 0.62)
     boxes = face_boxes or []
     for ci in range(n):
         num = numbers[ci]
