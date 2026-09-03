@@ -381,6 +381,10 @@ def _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h,
     placed = 0
     os_ = float(out_scale)
     fl = float(MIN_TEXT_SIZE) if floor_h is None else max(float(MIN_TEXT_SIZE), float(floor_h))
+    # Ô trong VÙNG MẶT dùng SÀN NHỎ HƠN (face_min_h) -> cứu ô mắt/mũi/miệng nhỏ mà
+    # _refine_features vừa tách -> đánh số CHI TIẾT hơn ở khuôn mặt (mắt hết ô trống số).
+    fl_face = fl if face_min_h is None else max(float(MIN_TEXT_SIZE), float(face_min_h))
+    boxes = face_boxes or []
     for ci in range(n):
         num = numbers[ci]
         if not num:
@@ -399,7 +403,8 @@ def _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h,
             dt = cv2.distanceTransform(subp, cv2.DIST_L2, 3)
             ly, lx = np.unravel_index(int(dt.argmax()), dt.shape)
             ctr = (x + int(lx) - 1, y + int(ly) - 1)
-            ts, scale, th = get_number_size(num, float(dt[ly, lx]) * 2, fl, mean_h, max_h)
+            fl_cell = fl_face if (boxes and _in_boxes(ctr[0], ctr[1], boxes)) else fl
+            ts, scale, th = get_number_size(num, float(dt[ly, lx]) * 2, fl_cell, mean_h, max_h)
             if ts is None:
                 continue
             org = (ctr[0] - ts[0] // 2, ctr[1] + ts[1] // 2)
@@ -416,7 +421,7 @@ def _place_numbers(lbl, n, numbers, canvas, min_h, mean_h, max_h,
 
 
 def _face_detail_sheet(canvas, lbl, numbers, n, face_boxes, mean_h, max_h, floor_h,
-                       max_insets=6, target_w=1500, mark_scale=1.0):
+                       max_insets=6, target_w=3000, mark_scale=1.0):
     """ZOOM-INSET: với mỗi vùng MẶT (tối đa max_insets), (1) đánh dấu KHUNG + CHỮ CÁI lên
     bản số chính 'canvas' (tại chỗ); (2) trích nhãn vùng đó, PHÓNG TO (NEAREST) -> vẽ nét +
     đánh số đầy đủ trong ô riêng. Trả 1 ẢNH 'bản chi tiết mặt' (ghép dọc các ô phóng to) để
@@ -432,15 +437,18 @@ def _face_detail_sheet(canvas, lbl, numbers, n, face_boxes, mean_h, max_h, floor
     panels = []
     # KHÔNG vẽ khung A/B/C/D lên BẢN SỐ CHÍNH nữa (giữ bản số sạch); chỉ xuất bản chi tiết
     # mặt riêng (file _mat.png) làm tham chiếu. mark_scale giữ cho tương thích, không dùng.
+    # PHÓNG TO MẠNH (>=2.6x kể cả ảnh CẬN mặt đã to sẵn): ô mắt/mí nhỏ nở đủ để nhét số
+    # 2 chữ số -> bản chi tiết đánh số ĐƯỢC CHỖ mà bản chính không (số vẫn ≥ sàn = đọc rõ).
+    sheet_floor = max(float(MIN_TEXT_SIZE), float(floor_h) * 0.7)   # sàn NHỎ hơn: đánh số dày hơn
     for i, (x, y, w, h) in enumerate(boxes):
-        zf = max(1.0, target_w / float(max(1, w)))
+        zf = max(3.2, target_w / float(max(1, w)))     # phóng MẠNH: ô mắt/mí nhỏ vẫn nhét số
         cw, ch = int(w * zf), int(h * zf)
         crop0 = lbl[y:y + h, x:x + w]                   # work-res (cho biên mượt scale ×zf)
         crop = cv2.resize(crop0, (cw, ch), interpolation=cv2.INTER_NEAREST)  # cho đặt số
         sub = np.full((ch, cw), 255, np.uint8)
         if not _draw_smooth_outlines_hi(crop0, sub, out_scale=zf):
             _draw_outlines(crop, sub)                   # fallback thô
-        _place_numbers(crop, n, numbers, sub, mean_h, mean_h, max_h, floor_h=floor_h)
+        _place_numbers(crop, n, numbers, sub, mean_h, mean_h, max_h, floor_h=sheet_floor)
         title = np.full((68, cw), 255, np.uint8)
         cv2.putText(title, 'Vung ' + letters[i], (10, 50), _FONT, 1.6, 0, 3, cv2.LINE_AA)
         panels.append(np.vstack([title, sub]))
@@ -633,17 +641,9 @@ def _refine_features(lbl, centers, img_rgb, face_data, px_per_mm,
         lippx = img_rgb[lip_mask]
         lcen = _kmeans_rgb(lippx.reshape(-1, 1, 3), lip_k)
         if len(lcen):
-            # ĐẨY SẮC ĐỎ-HỒNG từng TÂM cụm (giữ L* -> giữ khối sáng-tối, không bệt). ĐẨY
-            # THEO TRẦN (adaptive): chỉ nâng a* TỚI mức môi tự nhiên A_TARGET, KHÔNG cộng cứng
-            # -> môi nhạt (nữ) lên đủ hồng, môi NAM/đã đỏ KHÔNG bị chóe như son (lỗi cũ). b*
-            # giảm nhẹ cho bớt vàng. dịch theo tỉ lệ nên viền sẫm & thân môi đều tự nhiên.
-            A_TARGET, DA_MAX = 156, 18
-            cl = cv2.cvtColor(lcen.reshape(-1, 1, 3), cv2.COLOR_RGB2LAB).reshape(-1, 3).astype(np.int16)
-            da = np.clip(A_TARGET - cl[:, 1], 0, DA_MAX)   # chỉ nâng tới trần, không quá
-            cl[:, 1] = np.clip(cl[:, 1] + da, 0, 255)      # a*+ : đỏ hơn (có trần)
-            cl[:, 2] = np.clip(cl[:, 2] - (da * 6 // 18), 0, 255)  # b*- theo cùng tỉ lệ
-            lcen = cv2.cvtColor(cl.astype(np.uint8).reshape(-1, 1, 3),
-                                cv2.COLOR_LAB2RGB).reshape(-1, 3)
+            # MÔI GIỮ MÀU TỰ NHIÊN: chỉ requantize riêng vùng môi cho ĐỦ CHI TIẾT (lip_k
+            # cụm) -> KHÔNG đẩy đỏ/hồng nữa (user không muốn "môi hồng" nhân tạo). Môi
+            # lấy đúng màu đã chụp: ánh lạnh -> môi trầm; ánh ấm -> môi hồng tự nhiên.
             base = len(centers)
             centers = np.concatenate([centers, lcen.astype(np.uint8)], axis=0)
             li = _nearest_idx(img_rgb[lip_mask].reshape(-1, 1, 3), lcen).reshape(-1)

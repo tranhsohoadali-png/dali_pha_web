@@ -712,9 +712,20 @@ def _boost_lips(src_rgb, faces, da=34, db=-6, dL=6):
         lip = reg & (aC > med + 3)
         if lip.sum() < 8:
             continue
-        lab[:, :, 1][lip] = np.clip(aC[lip] + da, 0, 255)            # đỏ MẠNH hơn
-        lab[:, :, 2][lip] = np.clip(lab[:, :, 2][lip] + db, 0, 255)  # bớt vàng -> đỏ/hồng
-        lab[:, :, 0][lip] = np.clip(lab[:, :, 0][lip] + dL, 0, 255)  # sáng nhẹ -> tươi
+        # ĐÍCH TƯƠNG ĐỐI theo DA quanh miệng: môi chỉ đỏ hơn da ~offset, KHÔNG ép về 1
+        # đỏ CỐ ĐỊNH. Ảnh ánh LẠNH (da a* thấp) -> đích thấp -> môi đã đỏ sẵn thì gần
+        # đích -> nâng ~0 (hết "vệt hồng" loè trên nền xanh). Ảnh ấm / môi chìm nâu xám
+        # -> đích cao hơn hiện tại -> nâng lên đỏ tươi. Da làm mốc = pixel KHÔNG-môi.
+        skin = reg & ~lip
+        sA = float(np.median(aC[skin])) if int(skin.sum()) >= 8 else med
+        LIP_OFFSET, DA_MAX = 16, float(da)                # da(=34) làm TRẦN, không phải mức cố định
+        target = sA + LIP_OFFSET
+        aa = aC[lip].astype(np.int16)
+        bb = lab[:, :, 2][lip].astype(np.int16)
+        dpx = np.clip(target - aa, 0, DA_MAX)             # chỉ nâng tới đích, có trần
+        lab[:, :, 1][lip] = np.clip(aa + dpx, 0, 255)
+        lab[:, :, 2][lip] = np.clip(bb + (dpx * db / DA_MAX), 0, 255)   # đỏ nhiều -> bớt vàng
+        lab[:, :, 0][lip] = np.clip(lab[:, :, 0][lip] + (dpx * dL / DA_MAX), 0, 255)  # tươi theo mức đẩy
         touched = True
     if touched:
         src_rgb[:] = cv2.cvtColor(lab.astype(np.uint8), cv2.COLOR_LAB2RGB)
@@ -1116,14 +1127,9 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
             face_protect = feature_protect_mask(src2x, faces=pre)
         except Exception:
             face_protect = None
-        # SỨC SỐNG CHO MÔI: đẩy môi hồng/đỏ TRƯỚC k-means -> có tông môi riêng, không
-        # bị gộp thành nâu xám (nhất là ảnh chụp tối). Try riêng: lỗi môi KHÔNG xoá
-        # face_protect đã tính. Điểm mốc phải khớp 2x (scale theo s).
-        try:
-            from pha.face_features import scale_faces as _scf
-            _boost_lips(src2x, _scf(faces1x, s) if faces1x else None)
-        except Exception:
-            pass
+        # MÔI GIỮ MÀU TỰ NHIÊN: KHÔNG đẩy đỏ/hồng nữa (user không muốn "môi hồng" nhân
+        # tạo). Môi lấy đúng màu đã chụp qua k-means chung -> ánh lạnh thì môi trầm, ánh
+        # ấm thì môi hồng tự nhiên của chính người đó. (_boost_lips vẫn còn, đã tắt gọi.)
 
     # DỒN MÀU VÀO NGƯỜI: từ các mặt đã dò -> dựng mask VÙNG NGƯỜI (mặt + thân nở
     # xuống dưới ~ chiều cao thân) -> bơm thêm mẫu vùng này ở k-means (nền tối nhường
