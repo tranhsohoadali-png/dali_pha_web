@@ -171,6 +171,23 @@ def _in_boxes(cx, cy, boxes):
     return False
 
 
+def _lineart_mask(img_rgb, px_per_mm):
+    """Mặt nạ NÉT MỰC SẪM trên nền SÁNG: CHỮ (HAPPY BIRTHDAY), miệng bé, viền mảnh...
+    Dùng BLACK-HAT (đóng ảnh − ảnh): làm nổi nét TỐI nhỏ hơn kernel NẰM TRÊN nền SÁNG hơn.
+    TÓC/vùng tối lớn (tối-trên-tối) KHÔNG nổi (đóng ≈ ảnh -> black-hat ≈ 0) nên không dính.
+    Trả mask bool full-res (nét cần GIỮ khỏi gộp dù mảnh không nhét được số). None nếu rỗng."""
+    g = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
+    kw = max(3, int(round(1.8 * float(px_per_mm))) | 1)   # nét dày < ~1.8mm mới nổi (chữ/miệng)
+    ker = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kw, kw))
+    bh = cv2.morphologyEx(g, cv2.MORPH_BLACKHAT, ker)      # nét tối trên nền sáng -> giá trị CAO
+    bg = cv2.morphologyEx(g, cv2.MORPH_CLOSE, ker)         # nền quanh nét (đã lấp nét) -> độ sáng nền
+    m = ((bh >= 26) & (bg > 155)).astype(np.uint8)         # nét đủ tương phản + NỀN đủ sáng
+    if not m.any():
+        return None
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    return m > 0
+
+
 def _feature_protect_mask(H, W, face_data):
     """Mask BẢO VỆ NGŨ QUAN (B3): vẽ vòng quanh 5 điểm mốc YuNet (2 mắt, mũi, 2 mép miệng)
     của mỗi mặt -> ô rơi vào đây KHÔNG bị gộp (mắt/môi giữ nét, mặt sắc). Trả None nếu không
@@ -194,7 +211,7 @@ def _feature_protect_mask(H, W, face_data):
 
 def _merge_labels(lbl, n, min_h, max_pass=4, face_boxes=None, face_min_h=None,
                   centers=None, flat=False, keep_delta_e=14.0, pad=1.08, floor_h=None,
-                  protect_mask=None, protect_min_area=0.0):
+                  protect_mask=None, protect_min_area=0.0, lineart_mask=None):
     """GỘP ô quá nhỏ. KHÁC bản cũ ở 2 điểm để GIỮ CHI TIẾT:
     (1) Gộp vào hàng xóm GIỐNG MÀU NHẤT (LAB) thay vì DIỆN TÍCH lớn nhất -> ô bị nuốt ít
         lệch màu (trước gộp vào nền -> mắt/điểm nhấn bị nhuộm mất).
@@ -243,6 +260,12 @@ def _merge_labels(lbl, n, min_h, max_pass=4, face_boxes=None, face_min_h=None,
                 sub = (comp[y:y + h, x:x + w] == k).astype(np.uint8)
                 subp = cv2.copyMakeBorder(sub, 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
                 rad = float(cv2.distanceTransform(subp, cv2.DIST_L2, 3).max())
+                # NÉT MỰC SẪM trên nền SÁNG (CHỮ 'HAPPY BIRTHDAY', MIỆNG bé mặt không dò được,
+                # viền mảnh): GIỮ dù rad < r_floor -> nét mảnh 1 màu, hiện ở bản màu + bản số.
+                # Black-hat mask đã loại tóc/nền tối nên chỉ giữ nét-mực-trên-nền-sáng chủ ý.
+                if lineart_mask is not None and area >= max(10, int(fl * fl * 0.4)):
+                    if int((lineart_mask[y:y + h, x:x + w] & (sub > 0)).sum()) >= int(0.3 * area):
+                        continue
                 # B3: GIỮ ô NGŨ QUAN (mắt/mũi/miệng) — chỉ ô ĐỦ TO (>=protect_min_area ~1.3mm²)
                 # VÀ đủ chỗ nhét số (rad>=r_floor). Ô ngũ-quan quá nhỏ (TRƯỚC bị giữ mà TRỐNG
                 # SỐ) nay rơi xuống dưới -> gộp vào màu da/mắt gần nhất -> HẾT ô-giữ-mà-vô-số ở mặt.
@@ -803,9 +826,12 @@ def process_large(src_path, out_dir, long_cm=200.0, dpi=150, num_colors=60,
     # (>= ~1.3mm²) -> diệt DĂM noise 1-3px ở mặt (đo: 1657 ô <9px bị protect_mask giữ oan).
     protect_mask = _feature_protect_mask(H, W, face_data)
     protect_min_area = max(9.0, 1.3 * px_per_mm * px_per_mm)   # ~1.3mm² @ khổ thật
+    # NÉT MỰC trên nền sáng (CHỮ, MIỆNG mặt-không-dò-được, viền mảnh): giữ khỏi gộp. Chỉ
+    # nhánh ẢNH (flat giữ nguyên palette nên không cần). Black-hat -> không dính tóc/nền tối.
+    lineart_mask = None if flat_mode else _lineart_mask(img, px_per_mm)
     _merge_labels(lbl, n, min_h, face_boxes=face_boxes, face_min_h=face_min_h,
                   centers=centers, flat=flat_mode, floor_h=floor_h, protect_mask=protect_mask,
-                  protect_min_area=protect_min_area)
+                  protect_min_area=protect_min_area, lineart_mask=lineart_mask)
     # TÁI TẠO MẮT & MÔI (sau gộp): bảng màu cục bộ riêng cho ngũ quan đọc từ ảnh SẠCH ->
     # môi có viền/khối đỏ-hồng tự nhiên, mắt có tròng/mí -> hết "chán". Mở rộng palette.
     if face_data and not flat_mode:
