@@ -3286,7 +3286,13 @@ def anh_legend(request):
     res = _get_img(request)
     if not res:
         return HttpResponseNotFound('no result')
-    left = res.name if os.path.exists(os.path.join(settings.MEDIA_ROOT, res.name)) else res.name_output
+    # Ảnh bên TRÁI = BẢN THIẾT KẾ màu phẳng (giống mẫu K456: xem trước thành phẩm sẽ tô),
+    # KHÔNG phải ảnh gốc. Không có thiết kế -> lùi về ảnh gốc / bản kết quả.
+    left = res.name
+    for cand in (res.design_name, res.name, res.name_output):
+        if cand and os.path.exists(os.path.join(settings.MEDIA_ROOT, cand)):
+            left = cand
+            break
     left_path = os.path.join(settings.MEDIA_ROOT, left)
     title = (request.GET.get('title') or '').strip()
     out = os.path.join(settings.MEDIA_ROOT, f'{res.name_output or res.name}_legend.png')
