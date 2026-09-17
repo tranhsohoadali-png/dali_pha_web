@@ -79,7 +79,7 @@
   width:20px;height:20px;border-radius:50%;background:var(--set-accent);
   box-shadow:inset 0 0 0 3px var(--surface),0 0 0 2px var(--set-accent)}
 
-.prog{margin-top:14px;padding:14px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.prog{margin-top:14px;padding:14px 16px;display:flex;flex-direction:row;align-items:center;gap:14px;flex-wrap:wrap}
 .prog .nums{font-family:"Baloo 2";font-weight:700;font-size:15px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .prog .nums b{color:var(--set-accent);font-size:20px}
 .prog .bar{flex:1;min-width:160px;height:12px;border-radius:999px;background:var(--line-soft);overflow:hidden}
@@ -97,8 +97,11 @@
 .listhead h3{font-family:"Baloo 2";font-size:17px;font-weight:700}
 .listhead .hint{font-size:12.5px;color:var(--ink-soft)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:10px}
-.row{display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none;
+.row{display:flex;align-items:center;gap:12px;flex-wrap:nowrap;margin:0;cursor:pointer;user-select:none;
   background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:11px 13px;transition:.14s;position:relative}
+/* Neutralize Bootstrap's grid `.row` / `.row>*` (flex-wrap:wrap, width:100%, gutter padding,
+   negative margins) which otherwise force our subject rows to stack vertically. */
+.row>*{width:auto;max-width:none;margin-top:0;padding-left:0;padding-right:0}
 .row:hover{border-color:var(--set-accent)}
 .row input{position:absolute;opacity:0;width:1px;height:1px}
 .box{flex:0 0 auto;width:24px;height:24px;border:2px solid var(--line);border-radius:7px;
@@ -150,7 +153,81 @@
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast i{font-size:18px}
 
-@media (max-width:520px){ .tabs{grid-template-columns:1fr} }
+/* ============ MOBILE (phones & small tablets, ≤768px) ============ */
+@media (max-width:768px){
+  .tkb{padding-bottom:calc(86px + env(safe-area-inset-bottom,0px))}
+
+  /* Header — tidy, wraps if needed */
+  .pagehead{padding:14px 0 2px;gap:10px}
+  .pagehead h1{font-size:20px}
+  .pagehead .sub{font-size:12px}
+  #printBtn{padding:8px 13px;font-size:13.5px}
+
+  /* Order info — 2-col grid with smart spans, easy-tap controls */
+  .order{margin-top:12px;padding:14px}
+  .order h2{margin-bottom:10px}
+  .fields{grid-template-columns:1fr 1fr;gap:10px 10px}
+  .fields .field:nth-child(1){grid-column:1 / -1}   /* Tên bé — full width */
+  .fields .field:nth-child(4){grid-column:1 / -1}   /* Màu nút — full width */
+  .field input{padding:11px 12px;font-size:16px}    /* 16px = no iOS zoom */
+  .colorpick{gap:8px}
+  .chip{padding:10px 13px;font-size:14px}
+
+  /* Tabs — full-width segmented control, large & obvious */
+  .tabs{grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  .tab{padding:12px 12px 13px}
+  .tab .t-top{flex-wrap:wrap;gap:7px}
+  .tab .t-name{font-size:15px}
+  .tab .t-sub{font-size:11.5px;margin-top:3px}
+  .tab[aria-selected="true"]::after{top:9px;right:9px;width:16px;height:16px}
+
+  /* Progress — compact STICKY strip just under the site nav (~56px) */
+  .prog{position:sticky;top:56px;z-index:30;margin-top:12px;
+    padding:10px 14px;gap:6px 12px;flex-wrap:wrap;border-radius:14px;
+    box-shadow:0 3px 12px rgba(27,35,64,.12)}
+  .prog .nums{order:1;font-size:14px}
+  .prog .nums b{font-size:18px}
+  .prog .sub{order:2;margin-left:auto;font-size:12px}
+  .prog .bar{order:3;flex:0 0 100%;min-width:0;height:7px}
+
+  .banner{margin-top:10px;padding:11px 14px;font-size:13.5px}
+
+  /* Checklist — single column, tall comfortable tap rows */
+  .listhead{margin:16px 2px 8px}
+  .listhead h3{font-size:16px}
+  .listhead .hint{font-size:12px;flex:1 1 100%}
+  .grid{grid-template-columns:1fr;gap:8px}
+  .row{min-height:54px;padding:10px 14px;gap:13px;border-radius:12px}
+  .box{width:26px;height:26px}
+  .box::after{left:8px;top:4px}
+  .emoji{font-size:20px}
+  .name{font-size:15.5px}
+  .qty{font-size:14px;padding:4px 10px}
+
+  /* Actions — sticky bottom bar, thumb-reachable, Lưu đơn prominent */
+  .actions{position:fixed;left:0;right:0;bottom:0;z-index:40;margin-top:0;
+    gap:8px;flex-wrap:nowrap;background:var(--surface);
+    border-top:1px solid var(--line);
+    box-shadow:0 -3px 16px rgba(27,35,64,.12);
+    padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px))}
+  .actions .btn{padding:12px 12px;font-size:14.5px;white-space:nowrap}
+  #saveBtn{flex:1 1 auto;justify-content:center}
+  #resetBtn,#newBtn{flex:0 0 auto;padding:12px 13px}
+
+  /* Saved orders — everything reachable, meta wraps, ≥40px icon buttons */
+  .saved{margin-top:20px;padding:14px}
+  .sitem{flex-wrap:wrap;row-gap:8px;gap:10px;padding:11px 12px;align-items:center}
+  .sitem .si-cap{order:1}
+  .sitem .si-badge{order:2;margin-left:auto}
+  .sitem .si-main{order:3;flex:1 1 100%;min-width:0}
+  .sitem .si-name{white-space:normal}
+  .sitem .si-meta{white-space:normal}
+  .sitem .si-act{order:4;flex:1 1 100%;justify-content:flex-end;gap:8px}
+  .iconbtn{width:40px;height:40px;font-size:17px}
+
+  /* Toast floats above the sticky action bar */
+  .toast{bottom:calc(86px + env(safe-area-inset-bottom,0px))}
+}
 @media (prefers-reduced-motion:reduce){.tkb *{transition:none!important}}
 
 .print-head{display:none;align-items:center;justify-content:space-between;
@@ -159,6 +236,7 @@
 @media print{
   nav.navbar,.pagehead,.tabs,.actions,.foot,.listhead .hint,.saved,.toast{display:none!important}
   .tkb{background:#fff;color:#000;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .prog{position:static!important;top:auto!important;z-index:auto!important;box-shadow:none!important}
   .wrap{padding:0;max-width:none}
   .card,.row{box-shadow:none}
   .order,.prog{margin-top:10px}
