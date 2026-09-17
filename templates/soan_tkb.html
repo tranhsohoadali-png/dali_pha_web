@@ -153,6 +153,45 @@
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast i{font-size:18px}
 
+/* ---- Cảnh báo kho (banner gọn gần đầu) ---- */
+.khoalert{display:none;margin-top:12px;padding:11px 14px;border-radius:12px;font-weight:600;
+  font-size:13.5px;align-items:center;gap:9px;cursor:pointer;border:1px solid transparent}
+.khoalert i{font-size:18px;flex:0 0 auto}
+.khoalert .go{margin-left:auto;font-size:12.5px;font-weight:700;text-decoration:underline;white-space:nowrap}
+.khoalert.show.out{display:flex;background:#FCEBEA;border-color:#F3C0BC;color:#B23A2E}
+.khoalert.show.low{display:flex;background:#FDF3E3;border-color:#F3D9A8;color:#9A5B0E}
+
+/* ---- Cột dấu ⚠ trên hàng checklist ---- */
+.row .warn{flex:0 0 auto;font-size:15px;line-height:1}
+.row .warn.low{color:#D98413} .row .warn.out{color:#D64545}
+
+/* ---- Kho nút (tồn kho) ---- */
+.kho{margin-top:24px;padding:16px}
+.kho h2{font-family:"Baloo 2";font-size:14px;font-weight:700;color:var(--ink-soft);
+  text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.kho h2 .pin{color:var(--set-accent)}
+.khohint{font-size:12.5px;color:var(--ink-soft);margin-bottom:12px}
+.nguongrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;
+  font-size:13px;color:var(--ink-soft)}
+.nguongrow input{width:66px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);
+  border-radius:8px;padding:7px 8px;font-size:14px;font-weight:700;text-align:center}
+.nguongrow .ksum{margin-left:auto;font-weight:600}
+.khogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:8px}
+.kitem{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:11px;
+  padding:8px 11px;background:var(--surface)}
+.kitem .kemo{font-size:17px;line-height:1;flex:0 0 auto}
+.kitem .kname{font-weight:600;font-size:14px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kitem input{width:58px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);
+  border-radius:8px;padding:7px 4px;font-size:15px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums}
+.kitem input:focus{outline:2px solid var(--set-accent);outline-offset:1px;border-color:transparent}
+.kpill{flex:0 0 auto;font-size:10.5px;font-weight:700;border-radius:999px;padding:3px 8px;white-space:nowrap}
+.kpill.ok{background:var(--ok-wash);color:var(--ok-ink)}
+.kpill.low{background:#FBEDD9;color:#A9640F}
+.kpill.out{background:#FCEBEA;color:#B23A2E}
+.kpill.na{background:var(--surface-2);color:var(--ink-faint)}
+.kitem.low{border-color:#F0CD97;background:#FFFBF4}
+.kitem.out{border-color:#F0B7B1;background:#FFF6F5}
+
 /* ============ MOBILE (phones & small tablets, ≤768px) ============ */
 @media (max-width:768px){
   .tkb{padding-bottom:calc(86px + env(safe-area-inset-bottom,0px))}
@@ -225,6 +264,11 @@
   .sitem .si-act{order:4;flex:1 1 100%;justify-content:flex-end;gap:8px}
   .iconbtn{width:40px;height:40px;font-size:17px}
 
+  /* Kho nút — 1 cột trên điện thoại */
+  .khogrid{grid-template-columns:1fr;gap:7px}
+  .kitem input{width:64px;font-size:16px}
+  .nguongrow .ksum{margin-left:0;flex:1 1 100%;margin-top:4px}
+
   /* Toast floats above the sticky action bar */
   .toast{bottom:calc(86px + env(safe-area-inset-bottom,0px))}
 }
@@ -234,7 +278,7 @@
   padding-bottom:10px;margin-bottom:6px;border-bottom:2px solid #000}
 .print-head b{font-family:"Baloo 2";font-size:20px}
 @media print{
-  nav.navbar,.pagehead,.tabs,.actions,.foot,.listhead .hint,.saved,.toast{display:none!important}
+  nav.navbar,.pagehead,.tabs,.actions,.foot,.listhead .hint,.saved,.toast,.kho,.khoalert{display:none!important}
   .tkb{background:#fff;color:#000;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .prog{position:static!important;top:auto!important;z-index:auto!important;box-shadow:none!important}
   .wrap{padding:0;max-width:none}
@@ -293,11 +337,11 @@
   <div class="tabs" role="tablist" aria-label="Chọn bộ nút">
     <button type="button" class="tab c1" role="tab" data-set="c1" aria-selected="true">
       <div class="t-top"><span class="badge">CẤP 1</span><span class="t-name">Tiểu học</span></div>
-      <div class="t-sub">17 môn · <b>50 nút</b></div>
+      <div class="t-sub">17 môn · <b>44 nút</b></div>
     </button>
     <button type="button" class="tab c2" role="tab" data-set="c2" aria-selected="false">
       <div class="t-top"><span class="badge">CẤP 2</span><span class="t-name">THCS</span></div>
-      <div class="t-sub">19 môn · <b>63 nút</b></div>
+      <div class="t-sub">19 môn · <b>49 nút</b></div>
     </button>
   </div>
 
@@ -307,6 +351,7 @@
     <div class="sub">Đã soạn <b id="pNut">0</b>/<span id="tNut">50</span> nút</div>
   </section>
   <div class="banner" id="banner"><i class="bi bi-check-circle-fill"></i><span id="bannerTxt"></span></div>
+  <div class="khoalert" id="khoAlert"><i class="bi bi-exclamation-triangle-fill"></i><span id="khoAlertTxt"></span><span class="go">Xem kho ↓</span></div>
 
   <div class="listhead">
     <h3 id="listTitle">Bộ Nút Cấp 1</h3>
@@ -325,6 +370,14 @@
     <div class="slist" id="slist"><div class="sempty">Đang tải…</div></div>
   </section>
 
+  <section class="card kho" id="khoCard">
+    <h2><span class="pin">◆</span> Kho nút — tồn kho từng môn</h2>
+    <div class="khohint">Nhập số nút <b>còn lại</b> của mỗi môn. Hệ tự cảnh báo môn <b>Hết</b> hoặc <b>Sắp hết</b> để in bù, và hiện dấu ⚠ ngay trên danh sách khi soạn.</div>
+    <div class="nguongrow">Cảnh báo khi còn ≤ <input id="khoNguong" type="number" min="0" inputmode="numeric" value="5"> nút
+      <span class="ksum" id="khoSum"></span></div>
+    <div class="khogrid" id="khogrid"></div>
+  </section>
+
   <p class="foot">Đơn đã lưu ghi trên máy chủ — mọi máy đều tra lại được. Bấm <b>In phiếu</b> để in ra tích tay.<br>DALI 3D · Cùng con tỏa sáng ★</p>
 </div>
 </div>
@@ -333,27 +386,28 @@
 <script>
 "use strict";
 var DATA={
- c1:{title:"Bộ Nút Cấp 1",total:50,mon:17,items:[
+ c1:{title:"Bộ Nút Cấp 1",total:44,mon:17,items:[
   {n:"Tiếng Việt",q:6,e:"📖"},{n:"Toán",q:6,e:"🧮"},{n:"Tiếng Anh",q:4,e:"💬"},
-  {n:"Khoa Học",q:3,e:"🧪"},{n:"HĐTN",q:2,e:"🎯"},{n:"KN Sống",q:2,e:"💡"},
-  {n:"GDTC",q:3,e:"🏃"},{n:"Chào Cờ",q:2,e:"🚩"},{n:"Tin Học",q:3,e:"💻"},
-  {n:"GDĐP",q:2,e:"🌐"},{n:"TN & XH",q:3,e:"🌱"},{n:"Đạo Đức",q:2,e:"❤️"},
-  {n:"Mĩ Thuật",q:2,e:"🎨"},{n:"LS & ĐL",q:3,e:"📚"},{n:"C. Nghệ",q:3,e:"🎵"},
-  {n:"SH . Lớp",q:2,e:"👥"},{n:"Âm Nhạc",q:2,e:"🎶"}
+  {n:"Khoa Học",q:2,e:"🧪"},{n:"HĐTN",q:2,e:"🎯"},{n:"KN Sống",q:2,e:"💡"},
+  {n:"GDTC",q:2,e:"🏃"},{n:"Chào Cờ",q:1,e:"🚩"},{n:"Tin Học",q:3,e:"💻"},
+  {n:"GDĐP",q:2,e:"🌐"},{n:"TN & XH",q:2,e:"🌱"},{n:"Đạo Đức",q:2,e:"❤️"},
+  {n:"Mĩ Thuật",q:2,e:"🎨"},{n:"LS & ĐL",q:2,e:"📚"},{n:"C. Nghệ",q:3,e:"🎵"},
+  {n:"SH . Lớp",q:1,e:"👥"},{n:"Âm Nhạc",q:2,e:"🎶"}
  ]},
- c2:{title:"Bộ Nút Cấp 2",total:63,mon:19,items:[
-  {n:"GDCD",q:4,e:"👥"},{n:"Toán",q:6,e:"🧮"},{n:"Sinh Học",q:4,e:"🌿"},
-  {n:"Chào Cờ",q:3,e:"🚩"},{n:"Ngữ Văn",q:6,e:"📖"},{n:"Hóa Học",q:3,e:"🧪"},
-  {n:"KHTN",q:6,e:"⚛️"},{n:"C. Nghệ",q:2,e:"🔧"},{n:"Vật Lý",q:2,e:"🧲"},
-  {n:"Địa Lý",q:3,e:"🌐"},{n:"GDTC",q:4,e:"🏃"},{n:"GDĐP",q:2,e:"🗺️"},
-  {n:"Lịch Sử",q:3,e:"🏛️"},{n:"Tiếng Anh",q:5,e:"💬"},{n:"Tin Học",q:2,e:"💻"},
-  {n:"SH . Lớp",q:2,e:"👥"},{n:"Mĩ Thuật",q:2,e:"🎨"},{n:"Âm Nhạc",q:2,e:"🎶"},
+ c2:{title:"Bộ Nút Cấp 2",total:49,mon:19,items:[
+  {n:"GDCD",q:2,e:"👥"},{n:"Toán",q:6,e:"🧮"},{n:"Sinh Học",q:2,e:"🌿"},
+  {n:"Chào Cờ",q:1,e:"🚩"},{n:"Ngữ Văn",q:6,e:"📖"},{n:"Hóa Học",q:3,e:"🧪"},
+  {n:"KHTN",q:3,e:"⚛️"},{n:"C. Nghệ",q:2,e:"🔧"},{n:"Vật Lý",q:2,e:"🧲"},
+  {n:"Địa Lý",q:2,e:"🌐"},{n:"GDTC",q:2,e:"🏃"},{n:"GDĐP",q:2,e:"🗺️"},
+  {n:"Lịch Sử",q:2,e:"🏛️"},{n:"Tiếng Anh",q:5,e:"💬"},{n:"Tin Học",q:2,e:"💻"},
+  {n:"SH . Lớp",q:1,e:"👥"},{n:"Mĩ Thuật",q:2,e:"🎨"},{n:"Âm Nhạc",q:2,e:"🎶"},
   {n:"HĐTN",q:2,e:"❤️"}
  ]}
 };
 var CSRF="{{ csrf_token }}";
 var KEY="dali_tkb_v1";
 var state={set:"c1",color:"Đa màu",name:"",code:"",date:"",ticks:{c1:[],c2:[]},savedId:""};
+var kho={stock:{},nguong:5}, ALLSUB=[];
 function load(){ try{var s=localStorage.getItem(KEY); if(s){var o=JSON.parse(s);
   if(o&&typeof o==="object"){state=Object.assign(state,o);
     state.ticks=Object.assign({c1:[],c2:[]},o.ticks||{});}}}catch(e){} }
@@ -380,6 +434,7 @@ function render(){
       +'<span class="box" aria-hidden="true"></span>'
       +'<span class="emoji" aria-hidden="true">'+it.e+'</span>'
       +'<span class="name">'+it.n+'</span>'
+      +khoMarker(it.n)
       +'<span class="qty">×'+it.q+'</span>';
     lab.querySelector("input").addEventListener("change",function(){ toggle(idx,this.checked); });
     list.appendChild(lab);
@@ -453,6 +508,52 @@ function delOrder(it){ if(!confirm('Xóa đơn "'+(it.ten||it.ma||"")+'" khỏi 
      toast("Đã xóa đơn"); loadList(); } else toast("Xóa lỗi",true); }); }
 function syncColorChips(){ $("colorPick").querySelectorAll(".chip").forEach(function(x){
   x.setAttribute("aria-pressed", x.dataset.color===state.color?"true":"false"); }); }
+/* ---- KHO NÚT (tồn kho + cảnh báo hết / sắp hết) ---- */
+function khoStatus(name){ var st=kho.stock[name];
+  if(st===undefined||st===null||st==="") return null;
+  st=+st; if(isNaN(st)) return null;
+  if(st<=0) return "out"; if(st<=kho.nguong) return "low"; return "ok"; }
+function khoMarker(name){ var s=khoStatus(name);
+  if(s==="out") return '<span class="warn out" title="Hết nút môn này — cần in bù">⚠️</span>';
+  if(s==="low") return '<span class="warn low" title="Sắp hết nút môn này">⚠️</span>';
+  return ""; }
+function buildAllSub(){ var seen={}; ALLSUB=[];
+  ["c1","c2"].forEach(function(s){ DATA[s].items.forEach(function(it){
+    if(!seen[it.n]){ seen[it.n]=1; ALLSUB.push({n:it.n,e:it.e}); } }); }); }
+function pillTxt(s){ return s==="out"?"Hết":s==="low"?"Sắp hết":s==="ok"?"Đủ":"—"; }
+function renderKho(){ var g=$("khogrid"); if(!g) return; g.innerHTML="";
+  ALLSUB.forEach(function(it){
+    var st=kho.stock[it.n], stv=(st===undefined||st===null)?"":st, s=khoStatus(it.n);
+    var el=document.createElement("div"); el.className="kitem"+(s==="low"?" low":s==="out"?" out":"");
+    el.innerHTML='<span class="kemo">'+it.e+'</span><span class="kname">'+esc(it.n)+'</span>'
+      +'<input type="number" min="0" inputmode="numeric" value="'+stv+'">'
+      +'<span class="kpill '+(s||"na")+'">'+pillTxt(s)+'</span>';
+    var inp=el.querySelector("input"), pill=el.querySelector(".kpill");
+    inp.addEventListener("input",function(){ var v=this.value.trim();
+      if(v==="") delete kho.stock[it.n]; else kho.stock[it.n]=Math.max(0,parseInt(v,10)||0);
+      var ns=khoStatus(it.n);
+      el.className="kitem"+(ns==="low"?" low":ns==="out"?" out":"");
+      pill.className="kpill "+(ns||"na"); pill.textContent=pillTxt(ns);
+      updateKhoSummary(); markRows(); saveKho(); });
+    g.appendChild(el); });
+  updateKhoSummary(); }
+function updateKhoSummary(){ var out=0,low=0;
+  ALLSUB.forEach(function(it){ var s=khoStatus(it.n); if(s==="out")out++; else if(s==="low")low++; });
+  var sum=$("khoSum"); if(sum) sum.textContent=(out||low)
+    ? ((out?out+" hết":"")+(out&&low?" · ":"")+(low?low+" sắp hết":"")) : "Tồn kho ổn";
+  var al=$("khoAlert"); if(!al) return; al.className="khoalert";
+  if(out){ al.classList.add("show","out"); $("khoAlertTxt").innerHTML="<b>"+out+" môn HẾT</b>"+(low?" và "+low+" môn sắp hết":"")+" — cần in bù"; }
+  else if(low){ al.classList.add("show","low"); $("khoAlertTxt").innerHTML="<b>"+low+" môn sắp hết</b> — nên in thêm"; } }
+function markRows(){ var d=DATA[state.set], rows=$("list").children;
+  d.items.forEach(function(it,i){ var row=rows[i]; if(!row) return;
+    var old=row.querySelector(".warn"); if(old) old.remove();
+    var m=khoMarker(it.n); if(m){ var nm=row.querySelector(".name"); if(nm) nm.insertAdjacentHTML("afterend",m); } }); }
+function loadKho(){ fetch("/soan-tkb/kho").then(function(r){return r.json();})
+  .then(function(r){ kho.stock=r.stock||{}; kho.nguong=(r.nguong==null?5:r.nguong);
+    var nn=$("khoNguong"); if(nn) nn.value=kho.nguong; renderKho(); markRows(); })
+  .catch(function(){}); }
+var _khoT; function saveKho(){ clearTimeout(_khoT); _khoT=setTimeout(function(){
+  post("/soan-tkb/kho-luu",{stock:kho.stock,nguong:kho.nguong}).catch(function(){}); },500); }
 function bindField(id,key){ var el=$(id); el.value=state[key]||"";
   el.addEventListener("input",function(){ state[key]=el.value; save(); }); }
 load();
@@ -475,6 +576,12 @@ $("newBtn").addEventListener("click",function(){
   $("fName").value="";$("fCode").value=""; save(); render(); });
 render();
 loadList();
+buildAllSub();
+$("khoNguong").addEventListener("input",function(){
+  kho.nguong=Math.max(0,parseInt(this.value,10)||0); renderKho(); markRows(); saveKho(); });
+$("khoAlert").addEventListener("click",function(){
+  var c=$("khoCard"); if(c) c.scrollIntoView({behavior:"smooth",block:"start"}); });
+loadKho();
 </script>
 </body>
 </html>

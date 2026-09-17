@@ -198,6 +198,8 @@ urlpatterns = [
     path('soan-tkb/luu', tkb_views.soan_tkb_luu, name='soan_tkb_luu'),
     path('soan-tkb/ds', tkb_views.soan_tkb_ds, name='soan_tkb_ds'),
     path('soan-tkb/xoa', tkb_views.soan_tkb_xoa, name='soan_tkb_xoa'),
+    path('soan-tkb/kho', tkb_views.soan_tkb_kho, name='soan_tkb_kho'),
+    path('soan-tkb/kho-luu', tkb_views.soan_tkb_kho_luu, name='soan_tkb_kho_luu'),
 
     path('manifest.webmanifest', views.manifest, name='manifest'),
     path('sw.js', views.service_worker, name='sw'),

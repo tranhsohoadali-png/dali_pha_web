@@ -102,3 +102,51 @@ def soan_tkb_xoa(request):
     items = [it for it in _load_all() if it.get('id') != rid]
     _save_all(items)
     return JsonResponse({'ok': True})
+
+
+# ===================== KHO NÚT (tồn kho + cảnh báo hết/sắp hết) =====================
+def _kho_path():
+    d = os.path.join(settings.MEDIA_ROOT, _SUB)
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, 'kho.json')
+
+
+def _kho_load():
+    try:
+        with open(_kho_path(), encoding='utf-8') as f:
+            d = json.load(f)
+            if isinstance(d, dict):
+                return {'stock': d.get('stock') or {}, 'nguong': int(d.get('nguong') or 5)}
+    except Exception:
+        pass
+    return {'stock': {}, 'nguong': 5}
+
+
+@staff_required
+def soan_tkb_kho(request):
+    """Đọc tồn kho từng môn + ngưỡng 'sắp hết'."""
+    return JsonResponse({'ok': True, **_kho_load()})
+
+
+@staff_required
+def soan_tkb_kho_luu(request):
+    """Lưu tồn kho. Body JSON: {stock:{tên_môn: số_còn,...}, nguong:N} (thay toàn bộ)."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    try:
+        d = json.loads(request.body.decode('utf-8') or '{}')
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'JSON hỏng'}, status=400)
+    stock = {}
+    for k, v in (d.get('stock') or {}).items():
+        try:
+            stock[str(k)[:60]] = max(0, int(v))
+        except Exception:
+            continue
+    try:
+        nguong = max(0, int(d.get('nguong', 5)))
+    except Exception:
+        nguong = 5
+    with open(_kho_path(), 'w', encoding='utf-8') as f:
+        json.dump({'stock': stock, 'nguong': nguong}, f, ensure_ascii=False)
+    return JsonResponse({'ok': True})
