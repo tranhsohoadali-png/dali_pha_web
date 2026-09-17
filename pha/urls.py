@@ -24,6 +24,7 @@ from pha import guardrail as gr_views
 from pha import agent_ai as ai_views
 from pha import a3_sheet
 from pha import shopee_export
+from pha import tkb as tkb_views
 
 urlpatterns = [
     path('inbox', inbox_views.inbox, name='inbox'),
@@ -191,6 +192,9 @@ urlpatterns = [
     path('anh-luu-kho-hoc', learn_lib.save_sample, name='anh_luu_kho_hoc'),
     path('kho-hoc', learn_lib.kho_hoc, name='kho_hoc'),
     path('kho-hoc-xoa', learn_lib.delete_sample, name='kho_hoc_xoa'),
+
+    # PHIẾU SOẠN NÚT MÔN HỌC (thời khóa biểu) — checklist tích khi soạn đơn
+    path('soan-tkb', tkb_views.soan_tkb, name='soan_tkb'),
 
     path('manifest.webmanifest', views.manifest, name='manifest'),
     path('sw.js', views.service_worker, name='sw'),
