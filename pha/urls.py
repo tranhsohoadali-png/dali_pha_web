@@ -193,8 +193,11 @@ urlpatterns = [
     path('kho-hoc', learn_lib.kho_hoc, name='kho_hoc'),
     path('kho-hoc-xoa', learn_lib.delete_sample, name='kho_hoc_xoa'),
 
-    # PHIẾU SOẠN NÚT MÔN HỌC (thời khóa biểu) — checklist tích khi soạn đơn
+    # PHIẾU SOẠN NÚT MÔN HỌC (thời khóa biểu) — checklist tích khi soạn đơn + lưu server
     path('soan-tkb', tkb_views.soan_tkb, name='soan_tkb'),
+    path('soan-tkb/luu', tkb_views.soan_tkb_luu, name='soan_tkb_luu'),
+    path('soan-tkb/ds', tkb_views.soan_tkb_ds, name='soan_tkb_ds'),
+    path('soan-tkb/xoa', tkb_views.soan_tkb_xoa, name='soan_tkb_xoa'),
 
     path('manifest.webmanifest', views.manifest, name='manifest'),
     path('sw.js', views.service_worker, name='sw'),
