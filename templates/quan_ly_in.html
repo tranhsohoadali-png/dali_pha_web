@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quản lý xưởng in · DALI</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#EEF2F5; --surface:#FFFFFF; --surface-2:#F4F8F8; --ink:#173038; --ink-soft:#546A72;
+  --ink-faint:#8AA0A6; --line:#DCE6E8; --line-soft:#E9F0F1;
+  --accent:#0F9C9C; --accent-ink:#0B7A7A; --accent-wash:#E1F3F3;
+  --ok:#2FA36B; --ok-wash:#E4F5EC; --ok-ink:#1E7A4E;
+  --amber:#C77A15; --amber-wash:#FBEDD9; --grey:#7A8A90; --grey-wash:#EEF1F2;
+  --shadow:0 1px 2px rgba(23,48,56,.06),0 6px 18px rgba(23,48,56,.06);
+}
+.xin *{box-sizing:border-box}
+.xin{background:var(--bg);color:var(--ink);min-height:100vh;padding-bottom:44px;
+  font-family:"Be Vietnam Pro",system-ui,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;line-height:1.45}
+.xin h1,.xin h2,.xin h3{margin:0}
+.xin input,.xin select,.xin button,.xin textarea{font-family:inherit}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:0}
+
+.pagehead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:20px 0 6px}
+.pagehead .ttl{margin-right:auto;display:flex;align-items:center;gap:11px}
+.logo{width:38px;height:38px;border-radius:11px;flex:0 0 auto;background:linear-gradient(135deg,#0F9C9C,#1E6FBF);
+  display:grid;place-items:center;box-shadow:var(--shadow)}
+.logo i{color:#fff;font-size:19px}
+.pagehead h1{font-family:"Baloo 2";font-weight:800;font-size:22px;letter-spacing:.2px;line-height:1.1}
+.pagehead .sub{font-size:12.5px;color:var(--ink-soft);font-weight:500}
+
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;
+  padding:9px 14px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:.15s;text-decoration:none}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn i{font-size:16px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.06);color:#fff}
+.btn.sm{padding:6px 10px;font-size:13px;border-radius:9px}
+
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
+.tab{cursor:pointer;border:1.5px solid var(--line);background:var(--surface);border-radius:14px;
+  padding:13px 16px;transition:.16s;box-shadow:var(--shadow);display:flex;align-items:center;gap:11px;text-align:left}
+.tab i{font-size:22px;color:var(--ink-soft)}
+.tab .tn{font-family:"Baloo 2";font-weight:700;font-size:16px}
+.tab .ts{font-size:12px;color:var(--ink-soft)}
+.tab[aria-selected="true"]{border-color:var(--accent);background:var(--accent-wash)}
+.tab[aria-selected="true"] i{color:var(--accent)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+.panel{margin-top:16px;padding:16px}
+.panel h2{font-family:"Baloo 2";font-size:14px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;
+  letter-spacing:.06em;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.panel h2 .pin{color:var(--accent)}
+.panel h2 .cnt{margin-left:auto;font-family:"Be Vietnam Pro";font-weight:600;font-size:12px;color:var(--ink-soft);
+  background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:2px 10px;text-transform:none;letter-spacing:0}
+
+.frm{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;align-items:end}
+.fld{display:flex;flex-direction:column;gap:5px;min-width:0}
+.fld label{font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em}
+.fld input,.fld select,.fld textarea{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);
+  border-radius:9px;padding:9px 11px;font-size:14.5px;font-weight:500;width:100%}
+.fld input:focus,.fld select:focus,.fld textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+.fld.wide{grid-column:1/-1}
+.frm .act{display:flex;gap:8px}
+
+/* Máy in */
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.mcard{border:1px solid var(--line);border-radius:13px;padding:12px 13px;background:var(--surface);position:relative}
+.mcard.dang_in{border-color:#EAC98F;background:#FFFCF6}
+.mcard.bao_tri{background:#F7F8F9}
+.mcard .mtop{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.mcard .mname{font-family:"Baloo 2";font-weight:700;font-size:16px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mcard .mmodel{font-size:10.5px;font-weight:700;color:#fff;background:var(--accent);border-radius:999px;padding:2px 8px;flex:0 0 auto}
+.mcard select{width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 8px;font-size:13.5px;font-weight:600;background:var(--surface-2);color:var(--ink)}
+.mcard .mdang{width:100%;margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13px;background:var(--surface-2);color:var(--ink)}
+.mcard .mact{position:absolute;top:9px;right:10px;display:flex;gap:5px}
+.dotst{display:inline-block;width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.st-ranh{background:var(--ok)} .st-dang_in{background:var(--amber)} .st-bao_tri{background:var(--grey)}
+
+/* File in */
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 2px 10px}
+.filters select,.filters input{border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  border-radius:9px;padding:8px 11px;font-size:14px;font-weight:500}
+.filters .grow{flex:1;min-width:140px}
+.grouphdr{font-family:"Baloo 2";font-weight:700;font-size:14px;color:var(--accent-ink);margin:14px 2px 8px;
+  display:flex;align-items:center;gap:8px}
+.grouphdr .gc{font-family:"Be Vietnam Pro";font-weight:600;font-size:12px;color:var(--ink-soft)}
+.fitem{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:11px 13px;background:var(--surface);margin-bottom:8px}
+.fico{width:38px;height:38px;border-radius:10px;background:var(--accent-wash);color:var(--accent-ink);display:grid;place-items:center;font-size:18px;flex:0 0 auto}
+.fmain{flex:1;min-width:0}
+.fname{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fmeta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.mtag{font-size:11.5px;font-weight:600;color:var(--ink-soft);background:var(--surface-2);border:1px solid var(--line-soft);border-radius:7px;padding:2px 7px;white-space:nowrap}
+.mtag b{color:var(--ink);font-weight:700}
+.fnote{font-size:12px;color:var(--ink-faint);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fact{display:flex;gap:6px;flex:0 0 auto}
+.iconbtn{border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);border-radius:8px;
+  width:34px;height:34px;display:grid;place-items:center;cursor:pointer;font-size:15px;transition:.14s;text-decoration:none}
+.iconbtn:hover{color:var(--accent);border-color:var(--accent)}
+.iconbtn.del:hover{color:#D64545;border-color:#D64545}
+.empty{font-size:13.5px;color:var(--ink-faint);padding:14px 2px}
+
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;
+  padding:11px 18px;border-radius:12px;font-weight:600;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.28);
+  opacity:0;pointer-events:none;transition:.25s;z-index:60;display:flex;gap:9px;align-items:center;max-width:92vw}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast i{font-size:18px}
+.foot{margin-top:22px;font-size:12px;color:var(--ink-faint);text-align:center;line-height:1.6}
+.hidden{display:none!important}
+@media (max-width:600px){ .tabs{grid-template-columns:1fr} .frm .act{grid-column:1/-1} }
+</style>
+</head>
+<body class="bg-body-tertiary">
+{% include '_nav.html' %}
+<div class="xin" id="xin">
+<div class="wrap">
+  <div class="pagehead">
+    <div class="ttl">
+      <span class="logo"><i class="bi bi-printer-fill"></i></span>
+      <div><h1>Quản lý xưởng in 3D</h1><div class="sub">Máy Bambu Lab A1 · thư viện file in</div></div>
+    </div>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button type="button" class="tab" role="tab" data-tab="may" aria-selected="true">
+      <i class="bi bi-hdd-stack"></i><div><div class="tn">Máy in</div><div class="ts">Trạng thái từng máy A1</div></div>
+    </button>
+    <button type="button" class="tab" role="tab" data-tab="file" aria-selected="false">
+      <i class="bi bi-folder2-open"></i><div><div class="tn">Thư viện file in</div><div class="ts">File .3mf theo sản phẩm</div></div>
+    </button>
+  </div>
+
+  <!-- ===== TAB MÁY ===== -->
+  <div id="paneMay">
+    <section class="card panel">
+      <h2><span class="pin">◆</span> <span id="mFormTitle">Thêm máy in</span></h2>
+      <div class="frm">
+        <div class="fld"><label>Tên máy</label><input id="mTen" placeholder="VD: A1 số 1" autocomplete="off"></div>
+        <div class="fld"><label>Model</label><input id="mModel" value="A1" autocomplete="off"></div>
+        <div class="fld"><label>Trạng thái</label><select id="mTrangThai">
+          <option value="ranh">Rảnh</option><option value="dang_in">Đang in</option><option value="bao_tri">Bảo trì</option></select></div>
+        <div class="fld"><label>Đang in gì</label><input id="mDangIn" placeholder="VD: Nút Toán ×40" autocomplete="off"></div>
+        <div class="fld wide"><label>Ghi chú</label><input id="mGhiChu" placeholder="Vị trí, đầu phun, AMS…" autocomplete="off"></div>
+        <div class="act">
+          <button type="button" class="btn primary" id="mSave"><i class="bi bi-save"></i> Lưu máy</button>
+          <button type="button" class="btn hidden" id="mCancel">Hủy sửa</button>
+        </div>
+      </div>
+    </section>
+    <section class="card panel">
+      <h2><span class="pin">◆</span> Danh sách máy <span class="cnt" id="mCount">…</span></h2>
+      <div class="mgrid" id="mgrid"><div class="empty">Đang tải…</div></div>
+    </section>
+  </div>
+
+  <!-- ===== TAB FILE ===== -->
+  <div id="paneFile" class="hidden">
+    <section class="card panel">
+      <h2><span class="pin">◆</span> <span id="fFormTitle">Thêm file in</span></h2>
+      <div class="frm">
+        <div class="fld wide" id="fFileWrap"><label>File in (.3mf / .gcode / .stl / .zip)</label><input id="fFile" type="file" accept=".3mf,.gcode,.stl,.zip,.gcode.3mf"></div>
+        <div class="fld"><label>Nhóm sản phẩm</label><input id="fNhom" placeholder="VD: Nút môn học" autocomplete="off" list="nhomList"><datalist id="nhomList"></datalist></div>
+        <div class="fld"><label>Tên hiển thị</label><input id="fTen" placeholder="VD: Nút Toán" autocomplete="off"></div>
+        <div class="fld"><label>Phút in / khay</label><input id="fPhut" type="number" min="0" inputmode="numeric" placeholder="phút"></div>
+        <div class="fld"><label>Nhựa (g) / khay</label><input id="fNhua" type="number" min="0" inputmode="numeric" placeholder="gam"></div>
+        <div class="fld"><label>Số con / khay</label><input id="fCon" type="number" min="0" inputmode="numeric" placeholder="con"></div>
+        <div class="fld"><label>Màu gợi ý</label><input id="fMau" placeholder="VD: Xanh dương" autocomplete="off"></div>
+        <div class="fld wide"><label>Ghi chú</label><input id="fGhiChu" placeholder="Đầu phun, tốc độ, lưu ý…" autocomplete="off"></div>
+        <div class="act">
+          <button type="button" class="btn primary" id="fSave"><i class="bi bi-cloud-arrow-up"></i> Tải lên</button>
+          <button type="button" class="btn hidden" id="fCancel">Hủy sửa</button>
+        </div>
+      </div>
+    </section>
+    <div class="filters">
+      <select id="fFilter"><option value="">Tất cả nhóm</option></select>
+      <input id="fSearch" class="grow" placeholder="Tìm theo tên file…">
+      <span class="cnt" id="fCount" style="font-size:12px;color:var(--ink-soft)"></span>
+    </div>
+    <div id="flist"><div class="empty">Đang tải…</div></div>
+  </div>
+
+  <p class="foot">Dữ liệu lưu trên máy chủ (media/print). Sắp tới: hàng đợi lệnh in + lịch sử + nối kho nút.<br>DALI 3D · Xưởng in</p>
+</div>
+</div>
+<div class="toast" id="toast"><i class="bi bi-check-circle-fill"></i><span id="toastTxt"></span></div>
+
+<script>
+"use strict";
+var CSRF="{{ csrf_token }}";
+var $=function(id){return document.getElementById(id);};
+function esc(s){return (s||"").replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+function toast(m,bad){var t=$("toast");$("toastTxt").textContent=m;
+  t.querySelector("i").className=bad?"bi bi-exclamation-circle-fill":"bi bi-check-circle-fill";
+  t.style.background=bad?"#B4341F":"var(--ink)";t.classList.add("show");
+  clearTimeout(toast._t);toast._t=setTimeout(function(){t.classList.remove("show");},2300);}
+function postJSON(url,data){return fetch(url,{method:"POST",headers:{"Content-Type":"application/json","X-CSRFToken":CSRF},body:JSON.stringify(data)}).then(function(r){return r.json();});}
+var TT={ranh:"Rảnh",dang_in:"Đang in",bao_tri:"Bảo trì"};
+
+/* ---------- TABS ---------- */
+document.querySelectorAll(".tab").forEach(function(t){ t.addEventListener("click",function(){
+  document.querySelectorAll(".tab").forEach(function(x){x.setAttribute("aria-selected",x===t?"true":"false");});
+  $("paneMay").classList.toggle("hidden",t.dataset.tab!=="may");
+  $("paneFile").classList.toggle("hidden",t.dataset.tab!=="file");
+}); });
+
+/* ---------- MÁY IN ---------- */
+var mEdit="";
+function loadMay(){ fetch("/quan-ly-in/may").then(function(r){return r.json();})
+  .then(function(r){ renderMay(r.items||[]); }).catch(function(){ $("mgrid").innerHTML='<div class="empty">Không tải được.</div>'; }); }
+function renderMay(items){
+  $("mCount").textContent=items.length+" máy";
+  var g=$("mgrid");
+  if(!items.length){ g.innerHTML='<div class="empty">Chưa có máy nào. Thêm máy A1 ở trên.</div>'; return; }
+  g.innerHTML="";
+  items.forEach(function(it){
+    var el=document.createElement("div"); el.className="mcard "+(it.trang_thai||"ranh");
+    el.innerHTML='<div class="mtop"><span class="dotst st-'+(it.trang_thai||"ranh")+'"></span>'
+      +'<span class="mname">'+esc(it.ten)+'</span><span class="mmodel">'+esc(it.model||"A1")+'</span></div>'
+      +'<select>'+["ranh","dang_in","bao_tri"].map(function(s){return '<option value="'+s+'"'+(it.trang_thai===s?" selected":"")+'>'+TT[s]+'</option>';}).join("")+'</select>'
+      +'<input class="mdang" placeholder="Đang in gì…" value="'+esc(it.dang_in||"")+'">'
+      +'<div class="mact"><button type="button" class="iconbtn" title="Sửa" data-edit><i class="bi bi-pencil"></i></button>'
+      +'<button type="button" class="iconbtn del" title="Xóa" data-del><i class="bi bi-trash"></i></button></div>';
+    var sel=el.querySelector("select"), dang=el.querySelector(".mdang");
+    function quickSave(){ it.trang_thai=sel.value; it.dang_in=dang.value;
+      el.className="mcard "+it.trang_thai; el.querySelector(".dotst").className="dotst st-"+it.trang_thai;
+      postJSON("/quan-ly-in/may-luu",it).catch(function(){}); }
+    sel.addEventListener("change",quickSave);
+    var dt; dang.addEventListener("input",function(){clearTimeout(dt);dt=setTimeout(quickSave,500);});
+    el.querySelector("[data-edit]").addEventListener("click",function(){ editMay(it); });
+    el.querySelector("[data-del]").addEventListener("click",function(){
+      if(!confirm('Xóa máy "'+(it.ten||"")+'"?'))return;
+      postJSON("/quan-ly-in/may-xoa",{id:it.id}).then(function(){toast("Đã xóa máy");loadMay();}); });
+    g.appendChild(el);
+  });
+}
+function editMay(it){ mEdit=it.id; $("mFormTitle").textContent="Sửa máy: "+it.ten;
+  $("mTen").value=it.ten||""; $("mModel").value=it.model||"A1"; $("mTrangThai").value=it.trang_thai||"ranh";
+  $("mDangIn").value=it.dang_in||""; $("mGhiChu").value=it.ghi_chu||""; $("mCancel").classList.remove("hidden");
+  window.scrollTo({top:0,behavior:"smooth"}); }
+function resetMayForm(){ mEdit=""; $("mFormTitle").textContent="Thêm máy in";
+  ["mTen","mDangIn","mGhiChu"].forEach(function(i){$(i).value="";}); $("mModel").value="A1"; $("mTrangThai").value="ranh";
+  $("mCancel").classList.add("hidden"); }
+$("mSave").addEventListener("click",function(){
+  var ten=$("mTen").value.trim(); if(!ten){ toast("Nhập tên máy",true); return; }
+  postJSON("/quan-ly-in/may-luu",{id:mEdit,ten:ten,model:$("mModel").value.trim()||"A1",
+    trang_thai:$("mTrangThai").value,dang_in:$("mDangIn").value.trim(),ghi_chu:$("mGhiChu").value.trim()})
+   .then(function(r){ if(!r.ok){toast(r.error||"Lỗi",true);return;} toast(mEdit?"Đã cập nhật máy":"Đã thêm máy"); resetMayForm(); loadMay(); }); });
+$("mCancel").addEventListener("click",resetMayForm);
+
+/* ---------- THƯ VIỆN FILE ---------- */
+var FILES=[], fEdit="";
+function loadFile(){ fetch("/quan-ly-in/file").then(function(r){return r.json();})
+  .then(function(r){ FILES=r.items||[]; fillGroups(); renderFile(); }).catch(function(){ $("flist").innerHTML='<div class="empty">Không tải được.</div>'; }); }
+function fillGroups(){ var gs={}; FILES.forEach(function(f){ if(f.nhom) gs[f.nhom]=1; });
+  var keys=Object.keys(gs).sort();
+  $("nhomList").innerHTML=keys.map(function(k){return '<option value="'+esc(k)+'">';}).join("");
+  var cur=$("fFilter").value;
+  $("fFilter").innerHTML='<option value="">Tất cả nhóm</option>'+keys.map(function(k){return '<option value="'+esc(k)+'">'+esc(k)+'</option>';}).join("");
+  $("fFilter").value=cur; }
+function fmtKB(kb){ return kb>=1024?(kb/1024).toFixed(1)+" MB":kb+" KB"; }
+function renderFile(){
+  var q=($("fSearch").value||"").toLowerCase(), fg=$("fFilter").value;
+  var list=FILES.filter(function(f){ return (!fg||f.nhom===fg) && (!q||(f.ten||"").toLowerCase().indexOf(q)>=0 || (f.ten_file||"").toLowerCase().indexOf(q)>=0); });
+  $("fCount").textContent=list.length+"/"+FILES.length+" file";
+  var box=$("flist");
+  if(!list.length){ box.innerHTML='<div class="empty">'+(FILES.length?"Không có file khớp lọc.":"Chưa có file. Tải file .3mf lên ở trên.")+'</div>'; return; }
+  var groups={}; list.forEach(function(f){ (groups[f.nhom||"Khác"]=groups[f.nhom||"Khác"]||[]).push(f); });
+  box.innerHTML="";
+  Object.keys(groups).sort().forEach(function(gname){
+    var h=document.createElement("div"); h.className="grouphdr";
+    h.innerHTML='<i class="bi bi-collection"></i> '+esc(gname)+' <span class="gc">· '+groups[gname].length+' file</span>';
+    box.appendChild(h);
+    groups[gname].forEach(function(f){
+      var el=document.createElement("div"); el.className="fitem";
+      var tags="";
+      if(f.con) tags+='<span class="mtag"><b>'+f.con+'</b> con/khay</span>';
+      if(f.phut) tags+='<span class="mtag"><b>'+f.phut+'</b> phút</span>';
+      if(f.nhua) tags+='<span class="mtag"><b>'+f.nhua+'</b> g nhựa</span>';
+      if(f.mau) tags+='<span class="mtag">'+esc(f.mau)+'</span>';
+      tags+='<span class="mtag">'+esc(f.kieu||"")+" · "+fmtKB(f.kb||0)+'</span>';
+      el.innerHTML='<div class="fico"><i class="bi bi-box"></i></div>'
+        +'<div class="fmain"><div class="fname">'+esc(f.ten)+'</div><div class="fmeta">'+tags+'</div>'
+        +(f.ghi_chu?'<div class="fnote">'+esc(f.ghi_chu)+'</div>':'')+'</div>'
+        +'<div class="fact"><a class="iconbtn" title="Tải file" href="/media/'+encodeURI(f.file)+'" download><i class="bi bi-download"></i></a>'
+        +'<button type="button" class="iconbtn" title="Sửa thông tin" data-edit><i class="bi bi-pencil"></i></button>'
+        +'<button type="button" class="iconbtn del" title="Xóa" data-del><i class="bi bi-trash"></i></button></div>';
+      el.querySelector("[data-edit]").addEventListener("click",function(){ editFile(f); });
+      el.querySelector("[data-del]").addEventListener("click",function(){
+        if(!confirm('Xóa file "'+(f.ten||"")+'"? (xóa cả file trên máy chủ)'))return;
+        postJSON("/quan-ly-in/file-xoa",{id:f.id}).then(function(){toast("Đã xóa file");loadFile();}); });
+      box.appendChild(el);
+    });
+  });
+}
+function editFile(f){ fEdit=f.id; $("fFormTitle").textContent="Sửa thông tin: "+f.ten;
+  $("fFileWrap").classList.add("hidden");
+  $("fNhom").value=f.nhom||""; $("fTen").value=f.ten||""; $("fPhut").value=f.phut||"";
+  $("fNhua").value=f.nhua||""; $("fCon").value=f.con||""; $("fMau").value=f.mau||""; $("fGhiChu").value=f.ghi_chu||"";
+  $("fSave").innerHTML='<i class="bi bi-save"></i> Lưu sửa'; $("fCancel").classList.remove("hidden");
+  window.scrollTo({top:0,behavior:"smooth"}); }
+function resetFileForm(){ fEdit=""; $("fFormTitle").textContent="Thêm file in"; $("fFileWrap").classList.remove("hidden");
+  ["fFile","fTen","fPhut","fNhua","fCon","fMau","fGhiChu"].forEach(function(i){$(i).value="";});
+  $("fSave").innerHTML='<i class="bi bi-cloud-arrow-up"></i> Tải lên'; $("fCancel").classList.add("hidden"); }
+$("fCancel").addEventListener("click",resetFileForm);
+$("fSave").addEventListener("click",function(){
+  if(fEdit){
+    postJSON("/quan-ly-in/file-sua",{id:fEdit,ten:$("fTen").value.trim(),nhom:$("fNhom").value.trim(),
+      phut:$("fPhut").value,nhua:$("fNhua").value,con:$("fCon").value,mau:$("fMau").value.trim(),ghi_chu:$("fGhiChu").value.trim()})
+     .then(function(r){ if(!r.ok){toast(r.error||"Lỗi",true);return;} toast("Đã lưu thông tin"); resetFileForm(); loadFile(); });
+    return;
+  }
+  var fi=$("fFile"); if(!fi.files||!fi.files[0]){ toast("Chọn file trước",true); return; }
+  var fd=new FormData();
+  fd.append("file",fi.files[0]);
+  fd.append("nhom",$("fNhom").value.trim()); fd.append("ten",$("fTen").value.trim());
+  fd.append("phut",$("fPhut").value); fd.append("nhua",$("fNhua").value); fd.append("con",$("fCon").value);
+  fd.append("mau",$("fMau").value.trim()); fd.append("ghi_chu",$("fGhiChu").value.trim());
+  $("fSave").disabled=true; $("fSave").innerHTML='<i class="bi bi-hourglass-split"></i> Đang tải…';
+  fetch("/quan-ly-in/file-them",{method:"POST",headers:{"X-CSRFToken":CSRF},body:fd})
+   .then(function(r){return r.json();})
+   .then(function(r){ $("fSave").disabled=false;
+     if(!r.ok){ toast(r.error||"Tải lỗi",true); resetFileForm(); return; }
+     toast("Đã tải file lên"); resetFileForm(); loadFile(); })
+   .catch(function(){ $("fSave").disabled=false; resetFileForm(); toast("Tải lỗi (file quá lớn?)",true); }); });
+$("fFilter").addEventListener("change",renderFile);
+$("fSearch").addEventListener("input",renderFile);
+
+loadMay();
+loadFile();
+</script>
+</body>
+</html>

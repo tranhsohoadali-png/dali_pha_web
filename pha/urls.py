@@ -25,6 +25,7 @@ from pha import agent_ai as ai_views
 from pha import a3_sheet
 from pha import shopee_export
 from pha import tkb as tkb_views
+from pha import xuongin as xuongin_views
 
 urlpatterns = [
     path('inbox', inbox_views.inbox, name='inbox'),
@@ -200,6 +201,16 @@ urlpatterns = [
     path('soan-tkb/xoa', tkb_views.soan_tkb_xoa, name='soan_tkb_xoa'),
     path('soan-tkb/kho', tkb_views.soan_tkb_kho, name='soan_tkb_kho'),
     path('soan-tkb/kho-luu', tkb_views.soan_tkb_kho_luu, name='soan_tkb_kho_luu'),
+
+    # QUẢN LÝ XƯỞNG IN 3D (Bambu A1) — máy in + thư viện file in
+    path('quan-ly-in', xuongin_views.quan_ly_in, name='quan_ly_in'),
+    path('quan-ly-in/may', xuongin_views.may_ds, name='xin_may_ds'),
+    path('quan-ly-in/may-luu', xuongin_views.may_luu, name='xin_may_luu'),
+    path('quan-ly-in/may-xoa', xuongin_views.may_xoa, name='xin_may_xoa'),
+    path('quan-ly-in/file', xuongin_views.file_ds, name='xin_file_ds'),
+    path('quan-ly-in/file-them', xuongin_views.file_them, name='xin_file_them'),
+    path('quan-ly-in/file-sua', xuongin_views.file_sua, name='xin_file_sua'),
+    path('quan-ly-in/file-xoa', xuongin_views.file_xoa, name='xin_file_xoa'),
 
     path('manifest.webmanifest', views.manifest, name='manifest'),
     path('sw.js', views.service_worker, name='sw'),

@@ -47,6 +47,9 @@
         <li class="nav-item">
           <a class="nav-link{% if '/soan-tkb' in request.path %} active fw-semibold{% endif %}" href="/soan-tkb"><i class="bi bi-check2-square"></i> Soạn TKB</a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link{% if '/quan-ly-in' in request.path %} active fw-semibold{% endif %}" href="/quan-ly-in"><i class="bi bi-printer-fill"></i> Xưởng in</a>
+        </li>
         {# Năng suất đã chuyển sang phần mềm kế toán (ketoan.tranhdali.vn) — ẩn khỏi nav, trang /nang-suat vẫn truy cập được #}
         <li class="nav-item">
           <a class="nav-link{% if '/loi-nhuan' in request.path %} active fw-semibold{% endif %}" href="/loi-nhuan"><i class="bi bi-graph-up-arrow"></i> Lợi nhuận</a>
