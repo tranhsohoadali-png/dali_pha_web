@@ -41,7 +41,7 @@
 .btn.primary:hover{filter:brightness(1.06);color:#fff}
 .btn.sm{padding:6px 10px;font-size:13px;border-radius:9px}
 
-.tabs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
+.tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:12px;margin-top:6px}
 .tab{cursor:pointer;border:1.5px solid var(--line);background:var(--surface);border-radius:14px;
   padding:13px 16px;transition:.16s;box-shadow:var(--shadow);display:flex;align-items:center;gap:11px;text-align:left}
 .tab i{font-size:22px;color:var(--ink-soft)}
@@ -111,6 +111,26 @@
 .toast i{font-size:18px}
 .foot{margin-top:22px;font-size:12px;color:var(--ink-faint);text-align:center;line-height:1.6}
 .hidden{display:none!important}
+
+/* Lệnh in / hàng đợi */
+.jcard{border:1px solid var(--line);border-radius:12px;padding:11px 13px;background:var(--surface);margin-bottom:8px}
+.jcard.dang_in{border-color:#EAC98F;background:#FFFCF6}
+.jcard.xong{opacity:.9} .jcard.loi{border-color:#F0B7B1;background:#FFF6F5}
+.jhead{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.jname{font-weight:700;font-size:15px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jqty{font-family:"Baloo 2";font-weight:700;font-size:14px;color:var(--accent-ink);background:var(--accent-wash);border-radius:8px;padding:2px 9px;white-space:nowrap}
+.ut{font-size:10.5px;font-weight:700;border-radius:999px;padding:2px 8px;white-space:nowrap;flex:0 0 auto}
+.ut1{background:#FBE3E1;color:#B23A2E} .ut2{background:var(--surface-2);color:var(--ink-soft)} .ut3{background:#EAF3E9;color:#3E7A46}
+.jsub{font-size:12px;color:var(--ink-soft);margin-top:5px;display:flex;gap:5px 10px;flex-wrap:wrap}
+.jsub .st{font-weight:600;color:#B23A2E}
+.jact{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;align-items:center}
+.jact select{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:13px;background:var(--surface-2);color:var(--ink);max-width:180px}
+.khosug{margin-top:14px}
+.khosug .lbl{font-size:12px;color:var(--ink-soft);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.khosug .chips{display:flex;gap:7px;flex-wrap:wrap}
+.ksugchip{border:1px solid #F0CD97;background:#FFFBF4;color:var(--amber);border-radius:999px;padding:6px 11px;font-size:12.5px;font-weight:600;cursor:pointer;display:inline-flex;gap:6px;align-items:center;transition:.14s}
+.ksugchip:hover{filter:brightness(.97)}
+.ksugchip.het{border-color:#F0B7B1;background:#FFF6F5;color:#B23A2E}
 @media (max-width:600px){ .tabs{grid-template-columns:1fr} .frm .act{grid-column:1/-1} }
 </style>
 </head>
@@ -131,6 +151,9 @@
     </button>
     <button type="button" class="tab" role="tab" data-tab="file" aria-selected="false">
       <i class="bi bi-folder2-open"></i><div><div class="tn">Thư viện file in</div><div class="ts">File .3mf theo sản phẩm</div></div>
+    </button>
+    <button type="button" class="tab" role="tab" data-tab="job" aria-selected="false">
+      <i class="bi bi-list-check"></i><div><div class="tn">Lệnh in</div><div class="ts">Hàng đợi &amp; lịch sử</div></div>
     </button>
   </div>
 
@@ -184,6 +207,39 @@
     <div id="flist"><div class="empty">Đang tải…</div></div>
   </div>
 
+  <!-- ===== TAB LỆNH IN ===== -->
+  <div id="paneJob" class="hidden">
+    <section class="card panel">
+      <h2><span class="pin">◆</span> <span id="jFormTitle">Tạo lệnh in</span></h2>
+      <div class="frm">
+        <div class="fld wide"><label>Sản phẩm / tên lệnh</label><input id="jTen" list="fileNames" placeholder="VD: Nút Toán" autocomplete="off"></div>
+        <div class="fld"><label>Gắn file (tùy chọn)</label><select id="jFile"><option value="">— không gắn —</option></select></div>
+        <div class="fld"><label>Số lượng (con)</label><input id="jSL" type="number" min="0" inputmode="numeric" placeholder="con"></div>
+        <div class="fld"><label>Ưu tiên</label><select id="jUT"><option value="1">Cao</option><option value="2" selected>Thường</option><option value="3">Thấp</option></select></div>
+        <div class="fld wide"><label>Ghi chú</label><input id="jGhiChu" placeholder="Màu, máy chỉ định, lưu ý…" autocomplete="off"></div>
+        <div class="act">
+          <button type="button" class="btn primary" id="jSave"><i class="bi bi-plus-lg"></i> Tạo lệnh</button>
+          <button type="button" class="btn hidden" id="jCancel">Hủy sửa</button>
+        </div>
+      </div>
+      <datalist id="fileNames"></datalist>
+      <div class="khosug" id="khoSuggest"></div>
+    </section>
+
+    <section class="card panel">
+      <h2><span class="pin"></span><i class="bi bi-printer" style="color:var(--amber)"></i> Đang in <span class="cnt" id="jcDangIn">0</span></h2>
+      <div id="jDangIn"><div class="empty">Chưa có lệnh nào đang in.</div></div>
+    </section>
+    <section class="card panel">
+      <h2><span class="pin">◆</span> Chờ in <span class="cnt" id="jcCho">0</span></h2>
+      <div id="jCho"><div class="empty">Hàng đợi trống.</div></div>
+    </section>
+    <section class="card panel">
+      <h2><i class="bi bi-clock-history" style="color:var(--ink-soft)"></i> Lịch sử (Xong / Lỗi) <span class="cnt" id="jcHist">0</span></h2>
+      <div id="jHistory"><div class="empty">Chưa có lịch sử.</div></div>
+    </section>
+  </div>
+
   <p class="foot">Dữ liệu lưu trên máy chủ (media/print). Sắp tới: hàng đợi lệnh in + lịch sử + nối kho nút.<br>DALI 3D · Xưởng in</p>
 </div>
 </div>
@@ -203,9 +259,12 @@ var TT={ranh:"Rảnh",dang_in:"Đang in",bao_tri:"Bảo trì"};
 
 /* ---------- TABS ---------- */
 document.querySelectorAll(".tab").forEach(function(t){ t.addEventListener("click",function(){
+  var tab=t.dataset.tab;
   document.querySelectorAll(".tab").forEach(function(x){x.setAttribute("aria-selected",x===t?"true":"false");});
-  $("paneMay").classList.toggle("hidden",t.dataset.tab!=="may");
-  $("paneFile").classList.toggle("hidden",t.dataset.tab!=="file");
+  $("paneMay").classList.toggle("hidden",tab!=="may");
+  $("paneFile").classList.toggle("hidden",tab!=="file");
+  $("paneJob").classList.toggle("hidden",tab!=="job");
+  if(tab==="job"){ loadJob(); loadKhoSuggest(); }
 }); });
 
 /* ---------- MÁY IN ---------- */
@@ -255,7 +314,7 @@ $("mCancel").addEventListener("click",resetMayForm);
 /* ---------- THƯ VIỆN FILE ---------- */
 var FILES=[], fEdit="";
 function loadFile(){ fetch("/quan-ly-in/file").then(function(r){return r.json();})
-  .then(function(r){ FILES=r.items||[]; fillGroups(); renderFile(); }).catch(function(){ $("flist").innerHTML='<div class="empty">Không tải được.</div>'; }); }
+  .then(function(r){ FILES=r.items||[]; fillGroups(); renderFile(); fillJobFiles(); }).catch(function(){ $("flist").innerHTML='<div class="empty">Không tải được.</div>'; }); }
 function fillGroups(){ var gs={}; FILES.forEach(function(f){ if(f.nhom) gs[f.nhom]=1; });
   var keys=Object.keys(gs).sort();
   $("nhomList").innerHTML=keys.map(function(k){return '<option value="'+esc(k)+'">';}).join("");
@@ -330,8 +389,102 @@ $("fSave").addEventListener("click",function(){
 $("fFilter").addEventListener("change",renderFile);
 $("fSearch").addEventListener("input",renderFile);
 
+/* ---------- LỆNH IN / HÀNG ĐỢI ---------- */
+var JOBS=[], MAYS=[], jEdit="";
+var UTX={1:{t:"Cao",c:"ut1"},2:{t:"Thường",c:"ut2"},3:{t:"Thấp",c:"ut3"}};
+function fileName(id){ var f=FILES.filter(function(x){return x.id===id;})[0]; return f?f.ten:""; }
+function mayName(id){ var m=MAYS.filter(function(x){return x.id===id;})[0]; return m?m.ten:""; }
+function fillJobFiles(){ var sel=$("jFile"); if(!sel) return; var cur=sel.value;
+  sel.innerHTML='<option value="">— không gắn —</option>'+FILES.map(function(f){return '<option value="'+f.id+'">'+esc(f.ten)+(f.nhom?" ("+esc(f.nhom)+")":"")+'</option>';}).join("");
+  sel.value=cur;
+  $("fileNames").innerHTML=FILES.map(function(f){return '<option value="'+esc(f.ten)+'">';}).join(""); }
+function loadJob(){ Promise.all([
+    fetch("/quan-ly-in/job").then(function(r){return r.json();}),
+    fetch("/quan-ly-in/may").then(function(r){return r.json();})
+  ]).then(function(a){ JOBS=(a[0]&&a[0].items)||[]; MAYS=(a[1]&&a[1].items)||[]; fillJobFiles(); renderJob(); }).catch(function(){}); }
+function jobCard(it,mode){
+  var ut=UTX[it.uu_tien]||UTX[2], sub=[];
+  if(it.nhom) sub.push(esc(it.nhom));
+  if(it.file_id&&fileName(it.file_id)) sub.push('<i class="bi bi-box"></i> '+esc(fileName(it.file_id)));
+  if(it.may_id&&mayName(it.may_id)) sub.push('<i class="bi bi-hdd"></i> '+esc(mayName(it.may_id)));
+  sub.push(mode==="hist"?("Xong: "+(it.luc_xong||"")):("Tạo: "+(it.luc_tao||"")));
+  if(it.ghi_chu) sub.push(esc(it.ghi_chu));
+  var el=document.createElement("div"); el.className="jcard "+it.trang_thai;
+  var head='<div class="jhead"><span class="ut '+ut.c+'">'+ut.t+'</span><span class="jname">'+esc(it.ten)+'</span>'
+    +(it.so_luong?'<span class="jqty">×'+it.so_luong+'</span>':'')+'</div>'
+    +'<div class="jsub">'+sub.map(function(s){return '<span>'+s+'</span>';}).join("")+'</div>';
+  var act='';
+  if(it.trang_thai==="cho"){
+    var opts='<option value="">— chưa gán máy —</option>'+MAYS.filter(function(m){return m.trang_thai==="ranh";}).map(function(m){return '<option value="'+m.id+'">'+esc(m.ten)+'</option>';}).join("");
+    act='<select class="jmay">'+opts+'</select>'
+      +'<button type="button" class="btn sm primary" data-start><i class="bi bi-play-fill"></i> Bắt đầu</button>'
+      +'<button type="button" class="iconbtn" data-edit title="Sửa"><i class="bi bi-pencil"></i></button>'
+      +'<button type="button" class="iconbtn del" data-del title="Xóa"><i class="bi bi-trash"></i></button>';
+  } else if(it.trang_thai==="dang_in"){
+    act='<button type="button" class="btn sm primary" data-done><i class="bi bi-check-lg"></i> Xong</button>'
+      +'<button type="button" class="btn sm" data-fail><i class="bi bi-x-octagon"></i> Lỗi</button>'
+      +'<button type="button" class="iconbtn del" data-del title="Xóa"><i class="bi bi-trash"></i></button>';
+  } else {
+    act='<span class="ut '+(it.trang_thai==="loi"?"ut1":"")+'"'+(it.trang_thai==="xong"?' style="background:var(--ok-wash);color:var(--ok-ink)"':'')+'>'+(it.trang_thai==="loi"?"Lỗi":"Đã xong")+'</span>'
+      +'<button type="button" class="btn sm" data-redo><i class="bi bi-arrow-repeat"></i> Làm lại</button>'
+      +'<button type="button" class="iconbtn del" data-del title="Xóa"><i class="bi bi-trash"></i></button>';
+  }
+  el.innerHTML=head+'<div class="jact">'+act+'</div>';
+  function tt(status,may_id){ postJSON("/quan-ly-in/job-trangthai",{id:it.id,trang_thai:status,may_id:may_id||""})
+    .then(function(r){ if(r.ok){ loadJob(); loadMay(); } else toast(r.error||"Lỗi",true); }); }
+  var b;
+  if((b=el.querySelector("[data-start]"))) b.addEventListener("click",function(){ tt("dang_in",el.querySelector(".jmay").value); toast("Đã chuyển sang Đang in"); });
+  if((b=el.querySelector("[data-done]"))) b.addEventListener("click",function(){ tt("xong"); toast("Đã xong"); });
+  if((b=el.querySelector("[data-fail]"))) b.addEventListener("click",function(){ tt("loi"); toast("Đã đánh dấu Lỗi"); });
+  if((b=el.querySelector("[data-redo]"))) b.addEventListener("click",function(){ tt("cho"); toast("Đưa lại hàng đợi"); });
+  if((b=el.querySelector("[data-edit]"))) b.addEventListener("click",function(){ editJob(it); });
+  if((b=el.querySelector("[data-del]"))) b.addEventListener("click",function(){ if(!confirm('Xóa lệnh "'+(it.ten||"")+'"?'))return; postJSON("/quan-ly-in/job-xoa",{id:it.id}).then(function(){toast("Đã xóa lệnh");loadJob();loadMay();}); });
+  return el;
+}
+function fillSection(id,arr,emptyMsg,mode){ var box=$(id); box.innerHTML="";
+  if(!arr.length){ box.innerHTML='<div class="empty">'+emptyMsg+'</div>'; return; }
+  arr.forEach(function(it){ box.appendChild(jobCard(it,mode)); }); }
+function renderJob(){
+  var dang=JOBS.filter(function(j){return j.trang_thai==="dang_in";});
+  var cho=JOBS.filter(function(j){return j.trang_thai==="cho";}).sort(function(a,b){return (a.uu_tien-b.uu_tien)||(a.luc_tao<b.luc_tao?-1:1);});
+  var hist=JOBS.filter(function(j){return j.trang_thai==="xong"||j.trang_thai==="loi";}).sort(function(a,b){return a.luc_xong<b.luc_xong?1:-1;}).slice(0,40);
+  $("jcDangIn").textContent=dang.length; $("jcCho").textContent=cho.length; $("jcHist").textContent=hist.length;
+  fillSection("jDangIn",dang,"Chưa có lệnh nào đang in.","live");
+  fillSection("jCho",cho,"Hàng đợi trống.","live");
+  fillSection("jHistory",hist,"Chưa có lịch sử.","hist");
+}
+function editJob(it){ jEdit=it.id; $("jFormTitle").textContent="Sửa lệnh: "+it.ten;
+  $("jTen").value=it.ten||""; $("jFile").value=it.file_id||""; $("jSL").value=it.so_luong||"";
+  $("jUT").value=it.uu_tien||2; $("jGhiChu").value=it.ghi_chu||""; $("jCancel").classList.remove("hidden");
+  $("jSave").innerHTML='<i class="bi bi-save"></i> Lưu lệnh'; window.scrollTo({top:0,behavior:"smooth"}); }
+function resetJobForm(){ jEdit=""; $("jFormTitle").textContent="Tạo lệnh in";
+  ["jTen","jSL","jGhiChu"].forEach(function(i){$(i).value="";}); $("jFile").value=""; $("jUT").value=2;
+  $("jCancel").classList.add("hidden"); $("jSave").innerHTML='<i class="bi bi-plus-lg"></i> Tạo lệnh'; }
+$("jCancel").addEventListener("click",resetJobForm);
+$("jSave").addEventListener("click",function(){
+  var ten=$("jTen").value.trim(); if(!ten){toast("Nhập tên sản phẩm",true);return;}
+  var fid=$("jFile").value, nhom="";
+  if(fid){ var f=FILES.filter(function(x){return x.id===fid;})[0]; if(f) nhom=f.nhom||""; }
+  postJSON("/quan-ly-in/job-luu",{id:jEdit,ten:ten,nhom:nhom,file_id:fid,so_luong:$("jSL").value,uu_tien:parseInt($("jUT").value,10),ghi_chu:$("jGhiChu").value.trim()})
+   .then(function(r){ if(!r.ok){toast(r.error||"Lỗi",true);return;} toast(jEdit?"Đã cập nhật lệnh":"Đã tạo lệnh"); resetJobForm(); loadJob(); }); });
+function loadKhoSuggest(){ fetch("/quan-ly-in/kho-goi-y").then(function(r){return r.json();})
+  .then(function(r){ var items=(r&&r.items)||[], box=$("khoSuggest");
+    if(!items.length){ box.innerHTML=""; return; }
+    box.innerHTML='<div class="lbl"><i class="bi bi-exclamation-triangle-fill" style="color:var(--amber)"></i> Kho nút cần in bù — bấm để điền lệnh:</div><div class="chips"></div>';
+    var chips=box.querySelector(".chips");
+    items.forEach(function(it){ var c=document.createElement("button"); c.type="button"; c.className="ksugchip"+(it.trang_thai==="het"?" het":"");
+      c.innerHTML=esc(it.ten)+' <b>('+it.con_lai+')</b>';
+      c.addEventListener("click",function(){ prefillFromKho(it.ten); });
+      chips.appendChild(c); }); }).catch(function(){}); }
+function prefillFromKho(ten){ $("jTen").value=ten;
+  var f=FILES.filter(function(x){ var t=(x.ten||"").toLowerCase(); return t===ten.toLowerCase()||(x.nhom==="Nút môn học"&&t.indexOf(ten.toLowerCase())>=0); })[0];
+  $("jFile").value=f?f.id:""; $("jUT").value=1;
+  window.scrollTo({top:0,behavior:"smooth"}); $("jTen").focus(); toast("Điền lệnh in bù: "+ten); }
+
 loadMay();
 loadFile();
+loadJob();
+loadKhoSuggest();
 </script>
 </body>
 </html>

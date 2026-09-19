@@ -211,6 +211,11 @@ urlpatterns = [
     path('quan-ly-in/file-them', xuongin_views.file_them, name='xin_file_them'),
     path('quan-ly-in/file-sua', xuongin_views.file_sua, name='xin_file_sua'),
     path('quan-ly-in/file-xoa', xuongin_views.file_xoa, name='xin_file_xoa'),
+    path('quan-ly-in/job', xuongin_views.job_ds, name='xin_job_ds'),
+    path('quan-ly-in/job-luu', xuongin_views.job_luu, name='xin_job_luu'),
+    path('quan-ly-in/job-trangthai', xuongin_views.job_trangthai, name='xin_job_tt'),
+    path('quan-ly-in/job-xoa', xuongin_views.job_xoa, name='xin_job_xoa'),
+    path('quan-ly-in/kho-goi-y', xuongin_views.kho_goi_y, name='xin_kho_goi_y'),
 
     path('manifest.webmanifest', views.manifest, name='manifest'),
     path('sw.js', views.service_worker, name='sw'),

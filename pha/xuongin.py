@@ -197,6 +197,137 @@ def file_xoa(request):
     return JsonResponse({'ok': True})
 
 
+# ============================ LỆNH IN / HÀNG ĐỢI ============================
+_JOB_TT = ('cho', 'dang_in', 'xong', 'loi')
+
+
+def _set_may(may_id, trang_thai, dang_in):
+    """Đồng bộ trạng thái 1 máy khi lệnh in đổi trạng thái. Bỏ qua nếu không có máy."""
+    if not may_id:
+        return
+    mays = _load('may.json')
+    ch = False
+    for m in mays:
+        if m.get('id') == may_id:
+            m['trang_thai'] = trang_thai
+            m['dang_in'] = dang_in
+            ch = True
+            break
+    if ch:
+        _save('may.json', mays)
+
+
+@staff_required
+def job_ds(request):
+    return JsonResponse({'ok': True, 'items': _load('job.json')})
+
+
+@staff_required
+def job_luu(request):
+    """Tạo/sửa lệnh in. JSON: {id?, ten, nhom, file_id, so_luong, so_khay, uu_tien, ghi_chu}."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    d = _body(request)
+    ten = (d.get('ten') or '').strip()
+    if not ten:
+        return JsonResponse({'ok': False, 'error': 'Nhập tên sản phẩm / lệnh in.'})
+    items = _load('job.json')
+    old = None
+    rid = (d.get('id') or '').strip()
+    for it in items:
+        if it.get('id') == rid:
+            old = it
+            break
+    ut = d.get('uu_tien')
+    rec = {
+        'id': rid or _nid('J'), 'ten': ten[:120], 'nhom': (d.get('nhom') or '').strip()[:60],
+        'file_id': (d.get('file_id') or '').strip()[:40],
+        'so_luong': _toint(d.get('so_luong')), 'so_khay': _toint(d.get('so_khay')),
+        'uu_tien': ut if ut in (1, 2, 3) else 2,
+        'may_id': (old or {}).get('may_id', ''),
+        'trang_thai': (old or {}).get('trang_thai', 'cho'),
+        'ghi_chu': (d.get('ghi_chu') or '').strip()[:300],
+        'luc_tao': (old or {}).get('luc_tao') or time.strftime('%Y-%m-%d %H:%M'),
+        'luc_xong': (old or {}).get('luc_xong', ''),
+        'nguoi': getattr(request.user, 'username', '') or '',
+    }
+    if old is not None:
+        items[items.index(old)] = rec
+    else:
+        items.append(rec)
+    _save('job.json', items)
+    return JsonResponse({'ok': True, 'item': rec})
+
+
+@staff_required
+def job_trangthai(request):
+    """Đổi trạng thái lệnh in + đồng bộ máy. JSON: {id, trang_thai, may_id?}."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    d = _body(request)
+    rid = (d.get('id') or '').strip()
+    tt = d.get('trang_thai')
+    if tt not in _JOB_TT:
+        return JsonResponse({'ok': False, 'error': 'Trạng thái sai'})
+    items = _load('job.json')
+    for it in items:
+        if it.get('id') == rid:
+            if tt == 'dang_in':
+                if d.get('may_id'):
+                    it['may_id'] = (d.get('may_id') or '').strip()[:40]
+                it['trang_thai'] = 'dang_in'
+                it['luc_xong'] = ''
+                _set_may(it.get('may_id'), 'dang_in',
+                         (it['ten'] + (' ×%d' % it['so_luong'] if it['so_luong'] else ''))[:120])
+            elif tt in ('xong', 'loi'):
+                it['trang_thai'] = tt
+                it['luc_xong'] = time.strftime('%Y-%m-%d %H:%M')
+                _set_may(it.get('may_id'), 'ranh', '')   # in xong -> máy rảnh
+            else:  # 'cho'
+                it['trang_thai'] = 'cho'
+                _set_may(it.get('may_id'), 'ranh', '')
+                it['may_id'] = ''
+            _save('job.json', items)
+            return JsonResponse({'ok': True, 'item': it})
+    return JsonResponse({'ok': False, 'error': 'Không thấy lệnh'})
+
+
+@staff_required
+def job_xoa(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    rid = (_body(request).get('id') or '').strip()
+    items = _load('job.json')
+    for it in items:
+        if it.get('id') == rid and it.get('trang_thai') == 'dang_in':
+            _set_may(it.get('may_id'), 'ranh', '')
+    _save('job.json', [it for it in items if it.get('id') != rid])
+    return JsonResponse({'ok': True})
+
+
+@staff_required
+def kho_goi_y(request):
+    """Đọc kho nút /soan-tkb -> gợi ý môn HẾT/SẮP HẾT để in bù."""
+    p = os.path.join(settings.MEDIA_ROOT, 'tkb', 'kho.json')
+    try:
+        with open(p, encoding='utf-8') as f:
+            k = json.load(f)
+        stock = k.get('stock') or {}
+        ng = int(k.get('nguong') or 5)
+    except Exception:
+        stock, ng = {}, 5
+    out = []
+    for ten, sl in stock.items():
+        try:
+            sl = int(sl)
+        except Exception:
+            continue
+        if sl <= ng:
+            out.append({'ten': ten, 'con_lai': sl, 'trang_thai': 'het' if sl <= 0 else 'sap_het'})
+    out.sort(key=lambda x: x['con_lai'])
+    return JsonResponse({'ok': True, 'items': out, 'nguong': ng})
+
+
 def _toint(v):
     try:
         return max(0, int(float(v)))
