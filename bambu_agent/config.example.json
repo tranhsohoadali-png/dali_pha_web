@@ -1,0 +1,19 @@
+{
+  "server": "https://mau.tranhdali.vn",
+  "key": "DÁN_KHOÁ_AGENT_TỪ_TAB_REALTIME_VÀO_ĐÂY",
+  "heartbeat_s": 5,
+  "printers": [
+    {
+      "name": "A1 số 1",
+      "ip": "192.168.1.50",
+      "serial": "SERIAL_MÁY_1",
+      "access_code": "ACCESS_CODE_MÁY_1"
+    },
+    {
+      "name": "A1 số 2",
+      "ip": "192.168.1.51",
+      "serial": "SERIAL_MÁY_2",
+      "access_code": "ACCESS_CODE_MÁY_2"
+    }
+  ]
+}

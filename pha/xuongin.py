@@ -7,14 +7,16 @@ model/migration (đúng quy ước dự án; deploy = git pull + restart). File 
 
 v2 (sau): lệnh in / hàng đợi + lịch sử + nối kho /soan-tkb.
 """
+import hmac
 import json
 import os
 import re
 import time
 
 from django.conf import settings
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseForbidden
 from django.shortcuts import render
+from django.views.decorators.csrf import csrf_exempt
 
 from pha.views import staff_required
 
@@ -95,6 +97,8 @@ def may_luu(request):
         'ten': ten[:60], 'model': (d.get('model') or 'A1')[:30],
         'trang_thai': d.get('trang_thai') if d.get('trang_thai') in TRANG_THAI else 'ranh',
         'dang_in': (d.get('dang_in') or '')[:120], 'ghi_chu': (d.get('ghi_chu') or '')[:200],
+        # v3: map heartbeat realtime -> máy (Serial hiện trên màn hình máy / Access Code KHÔNG lưu ở VPS)
+        'serial': (d.get('serial') or '').strip()[:40], 'ip': (d.get('ip') or '').strip()[:40],
     }
     items = _load('may.json')
     for i, it in enumerate(items):
@@ -326,6 +330,219 @@ def kho_goi_y(request):
             out.append({'ten': ten, 'con_lai': sl, 'trang_thai': 'het' if sl <= 0 else 'sap_het'})
     out.sort(key=lambda x: x['con_lai'])
     return JsonResponse({'ok': True, 'items': out, 'nguong': ng})
+
+
+# ============================ V3: NỐI MÁY A1 REALTIME ============================
+# Kiến trúc: VPS ở XA không với tới LAN xưởng -> 1 "agent" chạy trên PC xưởng (cùng
+# mạng máy in) đọc trạng thái A1 qua MQTT rồi POST về đây (heartbeat), đồng thời POLL
+# lệnh (pull) để thực thi (in/tạm dừng/tiếp tục/dừng) rồi báo lại (ack). Access Code của
+# máy CHỈ nằm trong config agent, KHÔNG bao giờ lưu trên VPS. Xác thực agent bằng 1 khoá
+# tự sinh trong AppSetting (giống RIP agent) — endpoint agent @csrf_exempt + kiểm khoá.
+_AGENT_KEY = 'BAMBU_AGENT_KEY'
+_LIVE, _CMD = 'live.json', 'cmd.json'
+STALE_S = 30                       # máy/agent coi là OFFLINE nếu không báo trong 30s
+CMD_ACTIONS = ('print', 'pause', 'resume', 'stop')
+_CMD_KEEP = 200
+
+
+def _agent_key():
+    from pha.models import AppSetting
+    k = AppSetting.get(_AGENT_KEY, '')
+    if not k:
+        k = 'ba-' + os.urandom(8).hex()
+        AppSetting.set(_AGENT_KEY, k)
+    return k
+
+
+def _check_agent(request):
+    given = request.headers.get('X-API-Key') or request.GET.get('key') or ''
+    if not given:
+        given = (_body(request).get('key') or '')
+    return hmac.compare_digest(str(given), str(_agent_key()))
+
+
+def _tofloat(v):
+    try:
+        return round(float(v), 1)
+    except Exception:
+        return 0.0
+
+
+def _live_load():
+    try:
+        with open(_path(_LIVE), encoding='utf-8') as f:
+            d = json.load(f)
+            return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _live_save(d):
+    with open(_path(_LIVE), 'w', encoding='utf-8') as f:
+        json.dump(d, f, ensure_ascii=False)
+
+
+# ---------------- Endpoint cho AGENT (kiểm khoá, không cần đăng nhập) ----------------
+@csrf_exempt
+def agent_heartbeat(request):
+    """Agent POST trạng thái tất cả máy: {key, machines:[{serial,ip,online,gcode_state,
+    percent,layer,total_layer,nozzle,nozzle_t,bed,bed_t,remain_min,stage,error,file,ams}]}."""
+    if request.method != 'POST' or not _check_agent(request):
+        return HttpResponseForbidden('bad key')
+    try:
+        from pha.wifi_ip import remember as _rw     # tiện cập nhật IP xưởng nếu chỉ chạy agent này
+        _rw(request)
+    except Exception:
+        pass
+    d = _body(request)
+    now = time.time()
+    live = _live_load()
+    macs = live.get('machines') or {}
+    for m in (d.get('machines') or []):
+        sn = str(m.get('serial') or m.get('ip') or '').strip()
+        if not sn:
+            continue
+        rec = macs.get(sn, {})
+        rec.update({
+            'serial': sn, 'ip': (m.get('ip') or rec.get('ip') or '')[:40],
+            'online': bool(m.get('online', True)),
+            'gcode_state': (str(m.get('gcode_state') or ''))[:20],
+            'percent': _toint(m.get('percent')),
+            'layer': _toint(m.get('layer')), 'total_layer': _toint(m.get('total_layer')),
+            'nozzle': _tofloat(m.get('nozzle')), 'nozzle_t': _tofloat(m.get('nozzle_t')),
+            'bed': _tofloat(m.get('bed')), 'bed_t': _tofloat(m.get('bed_t')),
+            'remain_min': _toint(m.get('remain_min')),
+            'stage': (str(m.get('stage') or ''))[:80],
+            'error': (str(m.get('error') or ''))[:200],
+            'file': (str(m.get('file') or ''))[:160],
+            'ams': m.get('ams') if isinstance(m.get('ams'), list) else [],
+            'ts': now,
+        })
+        macs[sn] = rec
+    live['machines'] = macs
+    live['ts'] = now
+    _live_save(live)
+    return JsonResponse({'ok': True, 'server_time': now})
+
+
+@csrf_exempt
+def agent_pull(request):
+    """Agent GET (kèm khoá) -> các lệnh ĐANG CHỜ; đánh dấu 'sent' để khỏi lấy lại."""
+    if not _check_agent(request):
+        return HttpResponseForbidden('bad key')
+    cmds = _load(_CMD)
+    out, ch = [], False
+    for c in cmds:
+        if c.get('status') == 'cho':
+            c['status'] = 'sent'
+            c['luc_gui'] = time.strftime('%Y-%m-%d %H:%M:%S')
+            ch = True
+            out.append({k: c.get(k) for k in
+                        ('id', 'action', 'serial', 'file_url', 'file_name',
+                         'plate_idx', 'use_ams', 'so_luong')})
+    if ch:
+        _save(_CMD, cmds)
+    return JsonResponse({'ok': True, 'commands': out})
+
+
+@csrf_exempt
+def agent_ack(request):
+    """Agent POST kết quả lệnh: {key, id, status:xong|loi, message}."""
+    if request.method != 'POST' or not _check_agent(request):
+        return HttpResponseForbidden('bad key')
+    d = _body(request)
+    rid = str(d.get('id') or '')
+    st = d.get('status') if d.get('status') in ('xong', 'loi') else 'xong'
+    cmds = _load(_CMD)
+    for c in cmds:
+        if c.get('id') == rid:
+            c['status'] = st
+            c['message'] = (str(d.get('message') or ''))[:200]
+            c['luc_xong'] = time.strftime('%Y-%m-%d %H:%M:%S')
+            break
+    _save(_CMD, cmds)
+    return JsonResponse({'ok': True})
+
+
+# ---------------- Endpoint cho WEB (nhân viên) ----------------
+@staff_required
+def live(request):
+    """Trang realtime poll: trạng thái máy (từ heartbeat) + lệnh gần đây + khoá agent."""
+    now = time.time()
+    lv = _live_load()
+    macs = []
+    for sn, m in (lv.get('machines') or {}).items():
+        age = now - (m.get('ts') or 0)
+        mm = dict(m)
+        mm['online'] = bool(m.get('online')) and age <= STALE_S
+        mm['age_s'] = int(age)
+        macs.append(mm)
+    macs.sort(key=lambda x: x.get('serial') or '')
+    cmds = _load(_CMD)[-30:][::-1]
+    return JsonResponse({'ok': True, 'machines': macs, 'cmds': cmds,
+                         'agent_online': (now - (lv.get('ts') or 0)) <= STALE_S,
+                         'agent_key': _agent_key(), 'stale_s': STALE_S})
+
+
+@staff_required
+def dieu_khien(request):
+    """Nhân viên phát 1 lệnh cho agent: {action, may_id|serial, file_id?, plate_idx?, use_ams?, so_luong?}."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    d = _body(request)
+    action = d.get('action')
+    if action not in CMD_ACTIONS:
+        return JsonResponse({'ok': False, 'error': 'Lệnh không hợp lệ.'})
+    serial = (d.get('serial') or '').strip()
+    may_id = (d.get('may_id') or '').strip()
+    if not serial and may_id:
+        for m in _load('may.json'):
+            if m.get('id') == may_id:
+                serial = (m.get('serial') or '').strip()
+                break
+    if not serial:
+        return JsonResponse({'ok': False, 'error': 'Máy chưa có Serial — thêm Serial cho máy ở tab Máy in.'})
+    rec = {'id': _nid('C'), 'action': action, 'serial': serial, 'may_id': may_id,
+           'status': 'cho', 'message': '', 'nguoi': getattr(request.user, 'username', '') or '',
+           'luc_tao': time.strftime('%Y-%m-%d %H:%M:%S'), 'luc_xong': ''}
+    if action == 'print':
+        fid = (d.get('file_id') or '').strip()
+        f = next((x for x in _load('file.json') if x.get('id') == fid), None)
+        if not f:
+            return JsonResponse({'ok': False, 'error': 'Chọn file in (.3mf/.gcode) đã tải lên.'})
+        rec['file_id'] = fid
+        rec['file_name'] = (f.get('ten_file') or f.get('ten') or 'print.3mf')[:120]
+        rec['file_url'] = request.build_absolute_uri('/media/' + f.get('file', ''))
+        rec['plate_idx'] = _toint(d.get('plate_idx')) or 1
+        rec['use_ams'] = bool(d.get('use_ams'))
+        rec['so_luong'] = _toint(d.get('so_luong'))
+        rec['ten'] = rec['file_name']
+    cmds = _load(_CMD)
+    cmds.append(rec)
+    _save(_CMD, cmds[-_CMD_KEEP:])
+    return JsonResponse({'ok': True, 'item': rec})
+
+
+@staff_required
+def cmd_huy(request):
+    """Huỷ 1 lệnh CHƯA chạy (cho/sent). Không xoá lệnh đã xong/lỗi (giữ lịch sử)."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    rid = (_body(request).get('id') or '').strip()
+    cmds = _load(_CMD)
+    _save(_CMD, [c for c in cmds if not (c.get('id') == rid and c.get('status') in ('cho', 'sent'))])
+    return JsonResponse({'ok': True})
+
+
+@staff_required
+def agent_key_moi(request):
+    """Đổi khoá agent (khi lộ khoá). Agent phải cập nhật config theo khoá mới."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    from pha.models import AppSetting
+    k = 'ba-' + os.urandom(8).hex()
+    AppSetting.set(_AGENT_KEY, k)
+    return JsonResponse({'ok': True, 'agent_key': k})
 
 
 def _toint(v):

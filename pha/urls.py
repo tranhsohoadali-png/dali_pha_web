@@ -216,6 +216,14 @@ urlpatterns = [
     path('quan-ly-in/job-trangthai', xuongin_views.job_trangthai, name='xin_job_tt'),
     path('quan-ly-in/job-xoa', xuongin_views.job_xoa, name='xin_job_xoa'),
     path('quan-ly-in/kho-goi-y', xuongin_views.kho_goi_y, name='xin_kho_goi_y'),
+    # v3 realtime: endpoint cho AGENT xưởng (kiểm khoá) + điều khiển từ web
+    path('quan-ly-in/agent/heartbeat', xuongin_views.agent_heartbeat, name='xin_hb'),
+    path('quan-ly-in/agent/pull', xuongin_views.agent_pull, name='xin_pull'),
+    path('quan-ly-in/agent/ack', xuongin_views.agent_ack, name='xin_ack'),
+    path('quan-ly-in/live', xuongin_views.live, name='xin_live'),
+    path('quan-ly-in/dieu-khien', xuongin_views.dieu_khien, name='xin_dieu_khien'),
+    path('quan-ly-in/cmd-huy', xuongin_views.cmd_huy, name='xin_cmd_huy'),
+    path('quan-ly-in/agent-key-moi', xuongin_views.agent_key_moi, name='xin_agent_key_moi'),
 
     path('manifest.webmanifest', views.manifest, name='manifest'),
     path('sw.js', views.service_worker, name='sw'),

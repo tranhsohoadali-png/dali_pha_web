@@ -131,7 +131,50 @@
 .ksugchip{border:1px solid #F0CD97;background:#FFFBF4;color:var(--amber);border-radius:999px;padding:6px 11px;font-size:12.5px;font-weight:600;cursor:pointer;display:inline-flex;gap:6px;align-items:center;transition:.14s}
 .ksugchip:hover{filter:brightness(.97)}
 .ksugchip.het{border-color:#F0B7B1;background:#FFF6F5;color:#B23A2E}
-@media (max-width:600px){ .tabs{grid-template-columns:1fr} .frm .act{grid-column:1/-1} }
+/* v3 realtime */
+.agentbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid var(--line);border-radius:14px;
+  background:var(--surface);box-shadow:var(--shadow);padding:12px 14px;margin-top:16px}
+.agentbar .adot{width:11px;height:11px;border-radius:50%;flex:0 0 auto}
+.agentbar.on .adot{background:var(--ok);box-shadow:0 0 0 4px var(--ok-wash)}
+.agentbar.off .adot{background:#C0473B;box-shadow:0 0 0 4px #F8E3E0}
+.agentbar .atxt{font-weight:700;font-size:14.5px}
+.agentbar .asub{font-size:12px;color:var(--ink-soft)}
+.keybox{display:flex;align-items:center;gap:7px;margin-left:auto;flex-wrap:wrap}
+.keybox code{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;color:var(--accent-ink);user-select:all}
+.guide{border:1px solid var(--line);border-radius:14px;background:var(--surface);box-shadow:var(--shadow);margin-top:12px;overflow:hidden}
+.guide summary{cursor:pointer;padding:12px 14px;font-weight:700;font-size:14px;color:var(--ink);list-style:none;display:flex;align-items:center;gap:8px}
+.guide summary::-webkit-details-marker{display:none}
+.guide summary .chev{margin-left:auto;transition:.2s;color:var(--ink-soft)}
+.guide[open] summary .chev{transform:rotate(180deg)}
+.guide .gbody{padding:0 16px 16px;font-size:13.5px;color:var(--ink);line-height:1.6}
+.guide .gbody ol{margin:6px 0 6px 18px;padding:0} .guide .gbody li{margin:5px 0}
+.guide .gbody code{background:var(--surface-2);border:1px solid var(--line-soft);border-radius:6px;padding:1px 6px;font-size:12.5px}
+.lgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:6px}
+.lcard{border:1px solid var(--line);border-radius:14px;padding:13px 14px;background:var(--surface);box-shadow:var(--shadow)}
+.lcard.printing{border-color:#EAC98F;background:#FFFDF8}
+.lcard.offline{opacity:.72;background:#FAFBFB}
+.lcard.err{border-color:#F0B7B1;background:#FFF6F5}
+.ltop{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.lname{font-family:"Baloo 2";font-weight:700;font-size:16.5px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lstate{font-size:10.5px;font-weight:700;border-radius:999px;padding:3px 9px;white-space:nowrap}
+.s-RUNNING{background:var(--amber-wash);color:var(--amber)} .s-PAUSE{background:#E7E2F5;color:#5B48B6}
+.s-FINISH{background:var(--ok-wash);color:var(--ok-ink)} .s-IDLE{background:var(--grey-wash);color:var(--grey)}
+.s-FAILED{background:#FBE3E1;color:#B23A2E} .s-OFF{background:var(--grey-wash);color:var(--grey)}
+.prog{height:12px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden;position:relative}
+.prog .bar{height:100%;background:linear-gradient(90deg,#0F9C9C,#39B7A6);width:0;transition:width .5s}
+.prog .pct{position:absolute;inset:0;display:grid;place-items:center;font-size:10px;font-weight:800;color:var(--ink)}
+.lmeta{display:flex;gap:7px 12px;flex-wrap:wrap;margin-top:9px;font-size:12.5px;color:var(--ink-soft)}
+.lmeta b{color:var(--ink);font-weight:700}
+.lfile{font-size:12px;color:var(--ink-faint);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lerr{font-size:12.5px;color:#B23A2E;font-weight:600;margin-top:6px}
+.lact{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px;align-items:center}
+.lact select{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:13px;background:var(--surface-2);color:var(--ink);flex:1;min-width:120px}
+.unmatched{font-size:11px;color:var(--amber);font-weight:600;margin-left:6px}
+.cmdrow{display:flex;align-items:center;gap:8px;font-size:12.5px;border:1px solid var(--line-soft);border-radius:9px;padding:7px 10px;margin-bottom:6px;background:var(--surface)}
+.cmdrow .cst{font-weight:700;border-radius:999px;padding:1px 8px;font-size:11px;white-space:nowrap}
+.cst-cho{background:var(--surface-2);color:var(--ink-soft)} .cst-sent{background:var(--amber-wash);color:var(--amber)}
+.cst-xong{background:var(--ok-wash);color:var(--ok-ink)} .cst-loi{background:#FBE3E1;color:#B23A2E}
+@media (max-width:600px){ .tabs{grid-template-columns:1fr} .frm .act{grid-column:1/-1} .keybox{margin-left:0} }
 </style>
 </head>
 <body class="bg-body-tertiary">
@@ -155,6 +198,9 @@
     <button type="button" class="tab" role="tab" data-tab="job" aria-selected="false">
       <i class="bi bi-list-check"></i><div><div class="tn">Lệnh in</div><div class="ts">Hàng đợi &amp; lịch sử</div></div>
     </button>
+    <button type="button" class="tab" role="tab" data-tab="live" aria-selected="false">
+      <i class="bi bi-broadcast"></i><div><div class="tn">Realtime</div><div class="ts">Trạng thái máy A1 · điều khiển</div></div>
+    </button>
   </div>
 
   <!-- ===== TAB MÁY ===== -->
@@ -167,6 +213,8 @@
         <div class="fld"><label>Trạng thái</label><select id="mTrangThai">
           <option value="ranh">Rảnh</option><option value="dang_in">Đang in</option><option value="bao_tri">Bảo trì</option></select></div>
         <div class="fld"><label>Đang in gì</label><input id="mDangIn" placeholder="VD: Nút Toán ×40" autocomplete="off"></div>
+        <div class="fld"><label>Serial (để nối realtime)</label><input id="mSerial" placeholder="VD: 0309CA…" autocomplete="off"></div>
+        <div class="fld"><label>IP trong LAN (tùy chọn)</label><input id="mIP" placeholder="VD: 192.168.1.50" autocomplete="off"></div>
         <div class="fld wide"><label>Ghi chú</label><input id="mGhiChu" placeholder="Vị trí, đầu phun, AMS…" autocomplete="off"></div>
         <div class="act">
           <button type="button" class="btn primary" id="mSave"><i class="bi bi-save"></i> Lưu máy</button>
@@ -240,7 +288,45 @@
     </section>
   </div>
 
-  <p class="foot">Dữ liệu lưu trên máy chủ (media/print). Sắp tới: nối máy A1 realtime (cần agent chạy ở xưởng).<br>DALI 3D · Xưởng in</p>
+  <!-- ===== TAB REALTIME ===== -->
+  <div id="paneLive" class="hidden">
+    <div class="agentbar off" id="agentBar">
+      <span class="adot"></span>
+      <div><div class="atxt" id="agentTxt">Đang kiểm tra agent…</div>
+        <div class="asub" id="agentSub">Agent chạy ở PC xưởng đọc trạng thái máy A1 rồi báo về đây.</div></div>
+      <div class="keybox">
+        <span style="font-size:12px;color:var(--ink-soft)">Khoá agent:</span>
+        <code id="agentKey">—</code>
+        <button type="button" class="btn sm" id="agentCopy"><i class="bi bi-clipboard"></i> Chép</button>
+        <button type="button" class="btn sm" id="agentRotate" title="Đổi khoá (khi lộ)"><i class="bi bi-arrow-repeat"></i></button>
+      </div>
+    </div>
+
+    <details class="guide">
+      <summary><i class="bi bi-info-circle"></i> Cách cài agent ở xưởng (làm 1 lần) <i class="bi bi-chevron-down chev"></i></summary>
+      <div class="gbody">
+        <ol>
+          <li>Trên <b>màn hình máy A1</b>: bật <b>Cài đặt → General → LAN Only Mode</b>. Ghi lại <b>Access Code</b> (mục WLAN) và <b>Serial</b> (mục Device) của <u>từng máy</u>.</li>
+          <li>Vào tab <b>Máy in</b> ở trên, điền <b>Serial</b> cho từng máy (để web ghép đúng trạng thái). <i>Không cần nhập Access Code lên web.</i></li>
+          <li>Trên 1 <b>PC ở xưởng</b> (cùng WiFi với máy in), cài <b>Python 3</b> rồi tải gói <code>bambu_agent</code>, chạy: <code>pip install -r requirements.txt</code>.</li>
+          <li>Mở <code>config.json</code>: dán <b>Khoá agent</b> ở trên, và điền IP + Access Code + Serial từng máy. Chạy <code>python bambu_agent.py</code> (hoặc bấm <code>run.bat</code>). Để agent chạy nền là xong.</li>
+        </ol>
+        <div style="color:var(--ink-soft)">Máy A1 chỉ cho 2–3 kết nối cùng lúc — khi agent chạy, tắt Bambu Studio/Handy nếu bị rớt. Access Code chỉ nằm ở PC xưởng, không lưu trên máy chủ.</div>
+      </div>
+    </details>
+
+    <section class="card panel" style="margin-top:12px">
+      <h2><span class="pin"></span><i class="bi bi-hdd-network" style="color:var(--accent)"></i> Máy A1 realtime <span class="cnt" id="lCount">…</span></h2>
+      <div class="lgrid" id="lgrid"><div class="empty">Đang chờ agent báo trạng thái…</div></div>
+    </section>
+
+    <section class="card panel">
+      <h2><i class="bi bi-clock-history" style="color:var(--ink-soft)"></i> Lệnh điều khiển gần đây <span class="cnt" id="cCount">0</span></h2>
+      <div id="cmdlist"><div class="empty">Chưa có lệnh nào.</div></div>
+    </section>
+  </div>
+
+  <p class="foot">Dữ liệu lưu trên máy chủ (media/print). Realtime cần <b>agent</b> chạy ở PC xưởng (MQTT + FTPS tới máy A1 trong LAN).<br>DALI 3D · Xưởng in</p>
 </div>
 </div>
 <div class="toast" id="toast"><i class="bi bi-check-circle-fill"></i><span id="toastTxt"></span></div>
@@ -264,7 +350,9 @@ document.querySelectorAll(".tab").forEach(function(t){ t.addEventListener("click
   $("paneMay").classList.toggle("hidden",tab!=="may");
   $("paneFile").classList.toggle("hidden",tab!=="file");
   $("paneJob").classList.toggle("hidden",tab!=="job");
+  $("paneLive").classList.toggle("hidden",tab!=="live");
   if(tab==="job"){ loadJob(); loadKhoSuggest(); }
+  if(tab==="live"){ startLive(); } else { stopLive(); }
 }); });
 
 /* ---------- MÁY IN ---------- */
@@ -299,15 +387,17 @@ function renderMay(items){
 }
 function editMay(it){ mEdit=it.id; $("mFormTitle").textContent="Sửa máy: "+it.ten;
   $("mTen").value=it.ten||""; $("mModel").value=it.model||"A1"; $("mTrangThai").value=it.trang_thai||"ranh";
-  $("mDangIn").value=it.dang_in||""; $("mGhiChu").value=it.ghi_chu||""; $("mCancel").classList.remove("hidden");
+  $("mDangIn").value=it.dang_in||""; $("mSerial").value=it.serial||""; $("mIP").value=it.ip||"";
+  $("mGhiChu").value=it.ghi_chu||""; $("mCancel").classList.remove("hidden");
   window.scrollTo({top:0,behavior:"smooth"}); }
 function resetMayForm(){ mEdit=""; $("mFormTitle").textContent="Thêm máy in";
-  ["mTen","mDangIn","mGhiChu"].forEach(function(i){$(i).value="";}); $("mModel").value="A1"; $("mTrangThai").value="ranh";
+  ["mTen","mDangIn","mSerial","mIP","mGhiChu"].forEach(function(i){$(i).value="";}); $("mModel").value="A1"; $("mTrangThai").value="ranh";
   $("mCancel").classList.add("hidden"); }
 $("mSave").addEventListener("click",function(){
   var ten=$("mTen").value.trim(); if(!ten){ toast("Nhập tên máy",true); return; }
   postJSON("/quan-ly-in/may-luu",{id:mEdit,ten:ten,model:$("mModel").value.trim()||"A1",
-    trang_thai:$("mTrangThai").value,dang_in:$("mDangIn").value.trim(),ghi_chu:$("mGhiChu").value.trim()})
+    trang_thai:$("mTrangThai").value,dang_in:$("mDangIn").value.trim(),
+    serial:$("mSerial").value.trim(),ip:$("mIP").value.trim(),ghi_chu:$("mGhiChu").value.trim()})
    .then(function(r){ if(!r.ok){toast(r.error||"Lỗi",true);return;} toast(mEdit?"Đã cập nhật máy":"Đã thêm máy"); resetMayForm(); loadMay(); }); });
 $("mCancel").addEventListener("click",resetMayForm);
 
@@ -480,6 +570,103 @@ function prefillFromKho(ten){ $("jTen").value=ten;
   var f=FILES.filter(function(x){ var t=(x.ten||"").toLowerCase(); return t===ten.toLowerCase()||(x.nhom==="Nút môn học"&&t.indexOf(ten.toLowerCase())>=0); })[0];
   $("jFile").value=f?f.id:""; $("jUT").value=1;
   window.scrollTo({top:0,behavior:"smooth"}); $("jTen").focus(); toast("Điền lệnh in bù: "+ten); }
+
+/* ---------- REALTIME (v3) ---------- */
+var liveTimer=null, LIVEKEY="", liveSel={}, liveAms={};
+function startLive(){ if(!FILES.length) loadFile(); loadLive(); if(liveTimer) clearInterval(liveTimer); liveTimer=setInterval(loadLive,4000); }
+function stopLive(){ if(liveTimer){ clearInterval(liveTimer); liveTimer=null; } }
+var GST={RUNNING:"Đang in",PAUSE:"Tạm dừng",FINISH:"Xong",IDLE:"Rảnh",FAILED:"Lỗi",PREPARE:"Chuẩn bị",SLICING:"Đang cắt"};
+function gStateKey(s){ s=(s||"").toUpperCase();
+  if(["RUNNING","PAUSE","FINISH","IDLE","FAILED"].indexOf(s)>=0) return s;
+  return (s==="PREPARE"||s==="SLICING")?"RUNNING":"IDLE"; }
+function fmtMin(m){ m=parseInt(m,10)||0; if(m<60) return m+" phút"; return Math.floor(m/60)+"h"+(m%60?(m%60+"'"):""); }
+function tempTxt(cur,tar){ cur=cur||0; tar=tar||0; return Math.round(cur)+(tar?"→"+Math.round(tar):"")+"°"; }
+function loadLive(){ Promise.all([
+    fetch("/quan-ly-in/live").then(function(r){return r.json();}),
+    fetch("/quan-ly-in/may").then(function(r){return r.json();})
+  ]).then(function(a){ var r=a[0]||{}; MAYS=(a[1]&&a[1].items)||MAYS;
+    renderAgentBar(r); renderLive(r.machines||[]); renderCmds(r.cmds||[]);
+  }).catch(function(){}); }
+function renderAgentBar(r){ var on=!!r.agent_online;
+  $("agentBar").className="agentbar "+(on?"on":"off");
+  $("agentTxt").textContent=on?"Agent xưởng đang online":"Agent xưởng offline";
+  $("agentSub").textContent=on?"Đang nhận trạng thái máy realtime.":"Chưa nhận dữ liệu — kiểm tra agent ở PC xưởng đã chạy chưa.";
+  if(r.agent_key){ LIVEKEY=r.agent_key; $("agentKey").textContent=r.agent_key; } }
+function renderLive(macs){
+  $("lCount").textContent=macs.length+" máy";
+  var nameBySerial={}; MAYS.forEach(function(m){ if(m.serial) nameBySerial[m.serial]=m.ten; });
+  var g=$("lgrid");
+  if(!macs.length){ g.innerHTML='<div class="empty">Chưa có máy nào báo về. Điền Serial cho máy (tab Máy in) và bật agent ở xưởng.</div>'; return; }
+  g.innerHTML="";
+  macs.forEach(function(m){
+    var gk=gStateKey(m.gcode_state), off=!m.online, printing=(gk==="RUNNING"||gk==="PAUSE");
+    var hasErr=m.error&&String(m.error)!=="0";
+    var nm=nameBySerial[m.serial]||("Máy "+m.serial);
+    var unmatched=nameBySerial[m.serial]?"":'<span class="unmatched" title="Serial chưa gắn với máy nào ở tab Máy in">chưa gắn</span>';
+    var el=document.createElement("div");
+    el.className="lcard "+(off?"offline":(hasErr?"err":(printing?"printing":"")));
+    var stbadge=off?'<span class="lstate s-OFF">Mất kết nối</span>'
+      :'<span class="lstate s-'+gk+'">'+(GST[(m.gcode_state||"").toUpperCase()]||GST[gk]||"—")+'</span>';
+    var pct=m.percent||0;
+    var meta='<div class="lmeta"><span>Vòi <b>'+tempTxt(m.nozzle,m.nozzle_t)+'</b></span>'
+      +'<span>Bàn <b>'+tempTxt(m.bed,m.bed_t)+'</b></span>'
+      +(m.total_layer?'<span>Lớp <b>'+(m.layer||0)+'/'+m.total_layer+'</b></span>':'')
+      +((printing&&m.remain_min)?'<span>Còn <b>'+fmtMin(m.remain_min)+'</b></span>':'')+'</div>';
+    var body='<div class="ltop"><span class="dotst '+(off?"st-bao_tri":(printing?"st-dang_in":"st-ranh"))+'"></span>'
+      +'<span class="lname">'+esc(nm)+'</span>'+unmatched+stbadge+'</div>'
+      +'<div class="prog"><div class="bar" style="width:'+pct+'%"></div><div class="pct">'+pct+'%</div></div>'+meta
+      +(m.file?'<div class="lfile"><i class="bi bi-file-earmark"></i> '+esc(m.file)+'</div>':'')
+      +(hasErr?'<div class="lerr"><i class="bi bi-exclamation-triangle-fill"></i> Lỗi: '+esc(String(m.error))+'</div>':'');
+    var act='<div class="lact">';
+    if(off){ act+='<span class="asub">Máy offline — không điều khiển được.</span>'; }
+    else if(printing){
+      act+=(gk==="PAUSE")?'<button type="button" class="btn sm primary" data-act="resume"><i class="bi bi-play-fill"></i> Tiếp tục</button>'
+                         :'<button type="button" class="btn sm" data-act="pause"><i class="bi bi-pause-fill"></i> Tạm dừng</button>';
+      act+='<button type="button" class="btn sm" data-act="stop"><i class="bi bi-stop-fill"></i> Dừng</button>';
+    } else {
+      var cur=liveSel[m.serial]||"";
+      var opts='<option value="">— chọn file in —</option>'+FILES.map(function(f){return '<option value="'+f.id+'"'+(f.id===cur?" selected":"")+'>'+esc(f.ten)+(f.nhom?" ("+esc(f.nhom)+")":"")+'</option>';}).join("");
+      act+='<select class="lfile-sel">'+opts+'</select>'
+         +'<label style="font-size:12px;color:var(--ink-soft);display:flex;align-items:center;gap:4px"><input type="checkbox" class="lams"'+(liveAms[m.serial]?" checked":"")+'> AMS</label>'
+         +'<button type="button" class="btn sm primary" data-act="print"><i class="bi bi-printer"></i> In</button>';
+    }
+    act+='</div>';
+    el.innerHTML=body+act;
+    var selEl=el.querySelector(".lfile-sel"); if(selEl) selEl.addEventListener("change",function(){ liveSel[m.serial]=selEl.value; });
+    var amsEl=el.querySelector(".lams"); if(amsEl) amsEl.addEventListener("change",function(){ liveAms[m.serial]=amsEl.checked; });
+    el.querySelectorAll("[data-act]").forEach(function(b){ b.addEventListener("click",function(){
+      var action=b.dataset.act, payload={action:action,serial:m.serial};
+      if(action==="print"){ var sel=el.querySelector(".lfile-sel"); if(!sel.value){ toast("Chọn file in",true); return; }
+        payload.file_id=sel.value; payload.use_ams=el.querySelector(".lams").checked; }
+      if(action==="stop"&&!confirm("Dừng hẳn bản in trên "+nm+"?")) return;
+      b.disabled=true;
+      postJSON("/quan-ly-in/dieu-khien",payload).then(function(r){ b.disabled=false;
+        if(!r.ok){ toast(r.error||"Lỗi",true); return; }
+        toast("Đã gửi lệnh: "+({print:"In",pause:"Tạm dừng",resume:"Tiếp tục",stop:"Dừng"}[action]||action)); loadLive(); }); });
+    });
+    g.appendChild(el);
+  });
+}
+var CST={cho:"Chờ gửi",sent:"Đã gửi agent",xong:"Xong",loi:"Lỗi"};
+var CACT={print:"In",pause:"Tạm dừng",resume:"Tiếp tục",stop:"Dừng"};
+function renderCmds(cmds){ $("cCount").textContent=cmds.length; var box=$("cmdlist");
+  if(!cmds.length){ box.innerHTML='<div class="empty">Chưa có lệnh nào.</div>'; return; }
+  box.innerHTML="";
+  cmds.forEach(function(c){ var el=document.createElement("div"); el.className="cmdrow";
+    var can=(c.status==="cho"||c.status==="sent");
+    el.innerHTML='<span class="cst cst-'+(c.status||"cho")+'">'+(CST[c.status]||c.status)+'</span>'
+      +'<b>'+(CACT[c.action]||c.action)+'</b>'
+      +'<span style="color:var(--ink-soft);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(c.ten||c.serial||"")+'</span>'
+      +'<span style="margin-left:auto;color:var(--ink-faint);font-size:11.5px;white-space:nowrap">'+esc(c.luc_tao||"")+'</span>'
+      +(c.message?'<span style="color:#B23A2E">'+esc(c.message)+'</span>':'')
+      +(can?'<button type="button" class="iconbtn del" title="Huỷ lệnh" data-huy><i class="bi bi-x-lg"></i></button>':'');
+    var h=el.querySelector("[data-huy]"); if(h) h.addEventListener("click",function(){ postJSON("/quan-ly-in/cmd-huy",{id:c.id}).then(function(){toast("Đã huỷ lệnh");loadLive();}); });
+    box.appendChild(el); }); }
+$("agentCopy").addEventListener("click",function(){ if(!LIVEKEY) return;
+  (navigator.clipboard?navigator.clipboard.writeText(LIVEKEY):Promise.reject()).then(function(){toast("Đã chép khoá");},function(){
+    var r=document.createRange(); r.selectNode($("agentKey")); var s=window.getSelection(); s.removeAllRanges(); s.addRange(r); toast("Đã bôi đen khoá — Ctrl+C"); }); });
+$("agentRotate").addEventListener("click",function(){ if(!confirm("Đổi khoá agent? Agent ở xưởng phải cập nhật khoá mới mới báo về được.")) return;
+  postJSON("/quan-ly-in/agent-key-moi",{}).then(function(r){ if(r.ok){ LIVEKEY=r.agent_key; $("agentKey").textContent=r.agent_key; toast("Đã đổi khoá — cập nhật lại config agent"); } }); });
 
 loadMay();
 loadFile();
