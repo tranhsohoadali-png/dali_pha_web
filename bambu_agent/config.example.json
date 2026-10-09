@@ -15,5 +15,12 @@
       "serial": "SERIAL_MÁY_2",
       "access_code": "ACCESS_CODE_MÁY_2"
     }
-  ]
+  ],
+  "slicer": {
+    "bambu_exe": "C:\\Program Files\\Bambu Studio\\bambu-studio.exe",
+    "templates": {
+      "0.2": "C:\\dali\\templates\\tpl_A1_0.2.3mf",
+      "0.4": "C:\\dali\\templates\\tpl_A1_0.4.3mf"
+    }
+  }
 }

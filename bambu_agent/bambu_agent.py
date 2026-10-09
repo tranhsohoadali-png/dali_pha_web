@@ -20,6 +20,7 @@ import ftplib
 import json
 import os
 import ssl
+import subprocess
 import sys
 import threading
 import time
@@ -197,6 +198,106 @@ class Printer(object):
         }
 
 
+# ---------------- CẮT FILE bằng Bambu Studio CLI ----------------
+DEFAULT_BAMBU = r'C:\Program Files\Bambu Studio\bambu-studio.exe'
+
+
+def _dl(sess, url, dest):
+    with sess.get(url, stream=True, timeout=180) as r:
+        r.raise_for_status()
+        with open(dest, 'wb') as f:
+            for chunk in r.iter_content(65536):
+                f.write(chunk)
+    return dest
+
+
+def _read_result(workdir):
+    """Đọc result.json (nguồn tin cậy; KHÔNG dùng exit code/stdout). Trả (rc, plates)."""
+    rj = os.path.join(workdir, 'result.json')
+    if not os.path.exists(rj):
+        return None, []
+    with open(rj, encoding='utf-8') as f:
+        d = json.load(f)
+    return d.get('return_code'), (d.get('sliced_plates') or [])
+
+
+def _plate_info(plates):
+    """Tổng hợp khay 1: số vật thể, thời gian (phút), nhựa (g)."""
+    if not plates:
+        return 0, 0, 0.0
+    p = plates[0]
+    objs = len(p.get('objects') or [])
+    secs = p.get('total_predication') or 0
+    g = sum(f.get('total_used_g', 0) for f in (p.get('filaments') or []))
+    return objs, int(round(secs / 60.0)), round(float(g), 1)
+
+
+def _run_slice(exe, inputs, workdir, nozzle_t=0, bed_t=0, timeout=600):
+    """Chạy Bambu CLI: inputs (template.3mf + các STL lặp theo SL) -> out.gcode.3mf.
+    Dùng list args (không qua shell) nên không bị lỗi path. Đọc result.json để biết kết quả."""
+    os.makedirs(workdir, exist_ok=True)
+    args = [exe] + list(inputs) + ['--arrange', '1', '--slice', '1']
+    if nozzle_t:
+        args += ['--nozzle-temperature', str(int(nozzle_t)),
+                 '--nozzle-temperature-initial-layer', str(int(nozzle_t))]
+    if bed_t:
+        args += ['--hot-plate-temp', str(int(bed_t)), '--hot-plate-temp-initial-layer', str(int(bed_t))]
+    args += ['--outputdir', workdir, '--export-3mf', 'out.gcode.3mf']   # tên PHẢI tương đối khi có --outputdir
+    subprocess.run(args, capture_output=True, timeout=timeout)
+    rc, plates = _read_result(workdir)
+    out3mf = os.path.join(workdir, 'out.gcode.3mf')
+    if rc != 0 or not os.path.exists(out3mf):
+        raise RuntimeError('Cắt lỗi (Bambu rc=%s). Kiểm tra template/preset.' % rc)
+    return out3mf, plates
+
+
+def slice_tags(sl, cmd, sess, workdir):
+    """Cắt 1 lệnh slice_print. Trả (out_gcode_3mf, info{so_the,actual_phut,nhua_g})."""
+    exe = sl.get('bambu_exe') or DEFAULT_BAMBU
+    if not os.path.exists(exe):
+        raise RuntimeError('Không thấy Bambu Studio: %s' % exe)
+    dau = str(cmd.get('dau_phun') or '0.4')
+    tpl = (sl.get('templates') or {}).get(dau)
+    if not tpl or not os.path.exists(tpl):
+        raise RuntimeError('Chưa cấu hình template .3mf cho đầu phun %s (sửa config.json).' % dau)
+    items = cmd.get('items') or []
+    if not items:
+        raise RuntimeError('Lệnh không có thẻ nào.')
+    nozzle_t, bed_t = cmd.get('nhiet_do') or 0, cmd.get('bed_nhiet') or 0
+    os.makedirs(workdir, exist_ok=True)
+    # tải STL từng loại 1 lần
+    for it in items:
+        it['_local'] = _dl(sess, it['stl_url'], os.path.join(workdir, os.path.basename(it['ten_file']).replace(' ', '_')))
+
+    target = int(cmd.get('target_phut') or 0)
+    if target and len(items) == 1:
+        # CHẾ ĐỘ THỜI GIAN: tính số lượng cho vừa thời gian (1 loại thẻ)
+        it = items[0]
+        per = it.get('phut_moi_the') or 0
+        if per <= 0:                       # chưa khai phút/thẻ -> cắt thử 1 cái đo
+            _, pl = _run_slice(exe, [tpl, it['_local']], os.path.join(workdir, 'probe'), nozzle_t, bed_t)
+            _, per1, _ = _plate_info(pl)
+            per = max(1, per1)
+        qty = max(1, int(round(target / float(per))))
+        it['_qty'] = qty
+    else:
+        for it in items:
+            it['_qty'] = int(it.get('so_luong') or 0)
+        if not any(it['_qty'] for it in items):
+            raise RuntimeError('Không có số lượng.')
+
+    requested = sum(it['_qty'] for it in items)
+    inputs = [tpl]
+    for it in items:
+        inputs += [it['_local']] * it['_qty']
+    out3mf, plates = _run_slice(exe, inputs, workdir, nozzle_t, bed_t)
+    objs, mins, g = _plate_info(plates)
+    if len(plates) > 1 or objs < requested:
+        raise RuntimeError('Quá 1 khay: chỉ vừa %d/%d thẻ trên 1 khay. Giảm số lượng/thời gian rồi thử lại.'
+                           % (objs, requested))
+    return out3mf, {'so_the': objs, 'actual_phut': mins, 'nhua_g': g}
+
+
 # ---------------- Agent ----------------
 def load_cfg():
     if not os.path.exists(CFG_PATH):
@@ -216,10 +317,12 @@ def main():
     if not printers:
         sys.exit("config.json chưa khai báo máy in nào (printers).")
     by_serial = {p.serial: p for p in printers}
+    slicer = cfg.get('slicer') or {}
     for p in printers:
         p.start()
     sess = requests.Session()
-    log('Agent chạy. Server:', server, '| máy:', ', '.join(p.name for p in printers))
+    log('Agent chạy. Server:', server, '| máy:', ', '.join(p.name for p in printers),
+        '| cắt thẻ:', 'BẬT' if slicer.get('templates') else 'tắt (chưa cấu hình slicer)')
 
     while True:
         try:
@@ -240,22 +343,35 @@ def main():
             except Exception:
                 cmds = []
             for c in cmds:
-                run_command(sess, server, key, by_serial, c)
+                run_command(sess, server, key, by_serial, c, slicer)
         except Exception as e:
             log('vòng lặp lỗi:', e)
         time.sleep(hb)
 
 
-def run_command(sess, server, key, by_serial, c):
+def run_command(sess, server, key, by_serial, c, slicer):
     cid = c.get('id')
     p = by_serial.get(str(c.get('serial')))
     action = c.get('action')
     status, message = 'xong', ''
+    extra = {}
     try:
         if not p:
             status, message = 'loi', 'Agent không có máy serial này'
         elif action in ('pause', 'resume', 'stop'):
             p.cmd(action)
+        elif action == 'slice_print':
+            workdir = os.path.join(HERE, '_slice', str(cid))
+            log(p.name, 'cắt thẻ (Bambu Studio)…')
+            out3mf, info = slice_tags(slicer, c, sess, workdir)
+            remote = 'dali_%s.gcode.3mf' % str(cid)
+            log(p.name, 'cắt xong %d thẻ (~%d phút, %.0f g) — nạp FTPS…'
+                % (info['so_the'], info['actual_phut'], info['nhua_g']))
+            ftps_upload(p.ip, p.access, out3mf, remote)
+            p.print_file(remote, use_ams=False)
+            extra = info
+            message = 'Đã cắt %d thẻ (~%d phút, %.0f g) + phát lệnh in' % (
+                info['so_the'], info['actual_phut'], info['nhua_g'])
         elif action == 'print':
             url, fname = c.get('file_url'), (c.get('file_name') or 'print.3mf')
             fname = os.path.basename(fname).replace(' ', '_')
@@ -280,8 +396,9 @@ def run_command(sess, server, key, by_serial, c):
         status, message = 'loi', str(e)[:180]
     log('lệnh', action, '->', status, message)
     try:
-        sess.post(server + '/quan-ly-in/agent/ack',
-                  json={'key': key, 'id': cid, 'status': status, 'message': message}, timeout=15)
+        payload = {'key': key, 'id': cid, 'status': status, 'message': message}
+        payload.update(extra)      # slice_print: so_the / actual_phut / nhua_g
+        sess.post(server + '/quan-ly-in/agent/ack', json=payload, timeout=15)
     except Exception:
         pass
 

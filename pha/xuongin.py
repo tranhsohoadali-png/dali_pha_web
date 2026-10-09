@@ -99,6 +99,7 @@ def may_luu(request):
         'dang_in': (d.get('dang_in') or '')[:120], 'ghi_chu': (d.get('ghi_chu') or '')[:200],
         # v3: map heartbeat realtime -> máy (Serial hiện trên màn hình máy / Access Code KHÔNG lưu ở VPS)
         'serial': (d.get('serial') or '').strip()[:40], 'ip': (d.get('ip') or '').strip()[:40],
+        'dau_phun': (d.get('dau_phun') or '').strip()[:6],   # đầu phun đang lắp (0.2/0.3/0.4) để cảnh báo khi cắt thẻ
     }
     items = _load('may.json')
     for i, it in enumerate(items):
@@ -437,9 +438,8 @@ def agent_pull(request):
             c['status'] = 'sent'
             c['luc_gui'] = time.strftime('%Y-%m-%d %H:%M:%S')
             ch = True
-            out.append({k: c.get(k) for k in
-                        ('id', 'action', 'serial', 'file_url', 'file_name',
-                         'plate_idx', 'use_ams', 'so_luong')})
+            # Trả nguyên bản ghi (không có gì nhạy cảm) — agent tự đọc theo 'action'.
+            out.append({k: v for k, v in c.items() if k not in ('nguoi',)})
     if ch:
         _save(_CMD, cmds)
     return JsonResponse({'ok': True, 'commands': out})
@@ -459,6 +459,10 @@ def agent_ack(request):
             c['status'] = st
             c['message'] = (str(d.get('message') or ''))[:200]
             c['luc_xong'] = time.strftime('%Y-%m-%d %H:%M:%S')
+            # Kết quả cắt thực tế (nếu là lệnh slice_print)
+            for k in ('so_the', 'actual_phut', 'nhua_g'):
+                if k in d:
+                    c[k] = _toint(d.get(k)) if k != 'nhua_g' else _tofloat(d.get(k))
             break
     _save(_CMD, cmds)
     return JsonResponse({'ok': True})
@@ -550,3 +554,167 @@ def _toint(v):
         return max(0, int(float(v)))
     except Exception:
         return 0
+
+
+# ============================ IN THẺ TỰ CẮT (model STL + cắt theo yêu cầu) ============================
+# User có STL từng thẻ + Bambu Studio ở PC xưởng. Web quản MODEL + metadata; khi tạo "lệnh cắt",
+# server gom yêu cầu (các thẻ + số lượng HOẶC thời gian mục tiêu, đầu phun 0.2/0.3, nhiệt độ) thành
+# 1 command action='slice_print'. Agent tải STL, gọi Bambu Studio CLI cắt (profile theo đầu phun +
+# override nhiệt + số bản + auto-arrange), ra .gcode.3mf, nạp FTPS + phát lệnh in, ack kèm thời gian/nhựa thực.
+_TAGMODEL = 'tagmodel.json'
+_MODELS_SUB = 'models'
+DAU_PHUN = ('0.2', '0.3', '0.4')
+
+
+def _models_dir():
+    d = os.path.join(_dir(), _MODELS_SUB)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+@staff_required
+def tag_ds(request):
+    return JsonResponse({'ok': True, 'items': _load(_TAGMODEL)})
+
+
+@staff_required
+def tag_them(request):
+    """Tải model STL thẻ + metadata (multipart). Fields: ten, mon, dau_phun, phut, nhua, max_khay, ghi_chu."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    up = request.FILES.get('file')
+    ten = (request.POST.get('ten') or '').strip()
+    if not up:
+        return JsonResponse({'ok': False, 'error': 'Chưa chọn file model (.stl/.3mf/.step).'})
+    ext = (os.path.splitext(up.name)[1] or '').lower()
+    if ext not in ('.stl', '.3mf', '.step', '.stp', '.obj'):
+        return JsonResponse({'ok': False, 'error': 'File model phải là .stl / .3mf / .step / .obj.'})
+    if not ten:
+        ten = os.path.splitext(up.name)[0]
+    mid = _nid('T')
+    fname = '%s_%s' % (mid, _safe(up.name))
+    with open(os.path.join(_models_dir(), fname), 'wb') as f:
+        for chunk in up.chunks():
+            f.write(chunk)
+    dp = (request.POST.get('dau_phun') or '0.4').strip()
+    rec = {
+        'id': mid, 'ten': ten[:120], 'mon': (request.POST.get('mon') or '').strip()[:60],
+        'dau_phun': dp if dp in DAU_PHUN else (dp[:6] or '0.4'),
+        'file': 'print/%s/%s' % (_MODELS_SUB, fname), 'ten_file': up.name[:120], 'kieu': ext[:10],
+        'kb': round(up.size / 1024.0),
+        'phut': _toint(request.POST.get('phut')), 'nhua': _tofloat(request.POST.get('nhua')),
+        'max_khay': _toint(request.POST.get('max_khay')),
+        'ghi_chu': (request.POST.get('ghi_chu') or '').strip()[:300],
+        'luc_them': time.strftime('%Y-%m-%d %H:%M'),
+    }
+    items = _load(_TAGMODEL)
+    items.append(rec)
+    _save(_TAGMODEL, items)
+    return JsonResponse({'ok': True, 'item': rec})
+
+
+@staff_required
+def tag_sua(request):
+    """Sửa metadata model (không đổi file). JSON: {id, ten, mon, dau_phun, phut, nhua, max_khay, ghi_chu}."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    d = _body(request)
+    rid = (d.get('id') or '').strip()
+    items = _load(_TAGMODEL)
+    for it in items:
+        if it.get('id') == rid:
+            if d.get('ten'):
+                it['ten'] = d['ten'].strip()[:120]
+            it['mon'] = (d.get('mon') or it.get('mon') or '').strip()[:60]
+            if d.get('dau_phun'):
+                dp = str(d['dau_phun']).strip()
+                it['dau_phun'] = dp if dp in DAU_PHUN else dp[:6]
+            for k in ('phut', 'max_khay'):
+                if k in d:
+                    it[k] = _toint(d.get(k))
+            if 'nhua' in d:
+                it['nhua'] = _tofloat(d.get('nhua'))
+            it['ghi_chu'] = (d.get('ghi_chu') or '').strip()[:300]
+            _save(_TAGMODEL, items)
+            return JsonResponse({'ok': True, 'item': it})
+    return JsonResponse({'ok': False, 'error': 'Không thấy model.'})
+
+
+@staff_required
+def tag_xoa(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    rid = (_body(request).get('id') or '').strip()
+    items = _load(_TAGMODEL)
+    keep = []
+    for it in items:
+        if it.get('id') == rid:
+            try:
+                os.remove(os.path.join(settings.MEDIA_ROOT, it.get('file', '')))
+            except Exception:
+                pass
+        else:
+            keep.append(it)
+    _save(_TAGMODEL, keep)
+    return JsonResponse({'ok': True})
+
+
+@staff_required
+def slice_in(request):
+    """Tạo lệnh TỰ CẮT + in cho agent. JSON:
+      {items:[{model_id, so_luong}], target_phut?, dau_phun?, nhiet_do?, bed_nhiet?, may_id|serial, ten?}
+    - Có target_phut -> agent tự tính số lượng cho vừa thời gian (dựa phút/thẻ).
+    - Các thẻ phải cùng ĐẦU PHUN; cảnh báo nếu máy đang lắp đầu phun khác."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    d = _body(request)
+    models = {m.get('id'): m for m in _load(_TAGMODEL)}
+    items, dp_set = [], set()
+    for it in (d.get('items') or []):
+        m = models.get((it.get('model_id') or '').strip())
+        if not m:
+            continue
+        items.append({
+            'model_id': m['id'], 'ten': m['ten'], 'so_luong': _toint(it.get('so_luong')),
+            'stl_url': request.build_absolute_uri('/media/' + m.get('file', '')),
+            'ten_file': m.get('ten_file') or (m['ten'] + '.stl'),
+            'phut_moi_the': _toint(m.get('phut')), 'nhua_moi_the': _tofloat(m.get('nhua')),
+            'max_khay': _toint(m.get('max_khay')),
+        })
+        if m.get('dau_phun'):
+            dp_set.add(m['dau_phun'])
+    if not items:
+        return JsonResponse({'ok': False, 'error': 'Chọn ít nhất 1 thẻ.'})
+    if len(dp_set) > 1:
+        return JsonResponse({'ok': False, 'error': 'Các thẻ khác ĐẦU PHUN nhau (%s) — 1 lệnh chỉ 1 đầu phun.'
+                             % '/'.join(sorted(dp_set))})
+    dau_phun = (d.get('dau_phun') or (list(dp_set)[0] if dp_set else '0.4')).strip()
+    target_phut = _toint(d.get('target_phut'))
+    if not target_phut and not any(x['so_luong'] for x in items):
+        return JsonResponse({'ok': False, 'error': 'Nhập số lượng thẻ, hoặc đặt thời gian in mục tiêu.'})
+    serial = (d.get('serial') or '').strip()
+    may_id = (d.get('may_id') or '').strip()
+    canh_bao = ''
+    for m in _load('may.json'):
+        if (may_id and m.get('id') == may_id) or (serial and m.get('serial') == serial):
+            serial = m.get('serial') or serial
+            may_id = m.get('id') or may_id
+            if m.get('dau_phun') and m.get('dau_phun') != dau_phun:
+                canh_bao = 'Máy đang lắp đầu phun %s nhưng thẻ cần %s — đổi đầu phun trước khi in.' % (
+                    m.get('dau_phun'), dau_phun)
+            break
+    if not serial:
+        return JsonResponse({'ok': False, 'error': 'Chọn máy (có Serial) để gửi lệnh.'})
+    ten = (d.get('ten') or ('Thẻ: ' + ', '.join('%s×%d' % (x['ten'], x['so_luong']) if x['so_luong'] else x['ten']
+                                                 for x in items)))[:140]
+    rec = {
+        'id': _nid('C'), 'action': 'slice_print', 'serial': serial, 'may_id': may_id, 'ten': ten,
+        'dau_phun': dau_phun, 'nhiet_do': _toint(d.get('nhiet_do')), 'bed_nhiet': _toint(d.get('bed_nhiet')),
+        'target_phut': target_phut, 'items': items, 'status': 'cho', 'message': '',
+        'nguoi': getattr(request.user, 'username', '') or '',
+        'luc_tao': time.strftime('%Y-%m-%d %H:%M:%S'), 'luc_xong': '',
+    }
+    cmds = _load(_CMD)
+    cmds.append(rec)
+    _save(_CMD, cmds[-_CMD_KEEP:])
+    return JsonResponse({'ok': True, 'item': rec, 'canh_bao': canh_bao})

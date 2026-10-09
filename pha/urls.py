@@ -224,6 +224,12 @@ urlpatterns = [
     path('quan-ly-in/dieu-khien', xuongin_views.dieu_khien, name='xin_dieu_khien'),
     path('quan-ly-in/cmd-huy', xuongin_views.cmd_huy, name='xin_cmd_huy'),
     path('quan-ly-in/agent-key-moi', xuongin_views.agent_key_moi, name='xin_agent_key_moi'),
+    # In thẻ tự cắt: thư viện model STL + tạo lệnh cắt (agent dùng Bambu Studio CLI)
+    path('quan-ly-in/tag', xuongin_views.tag_ds, name='xin_tag_ds'),
+    path('quan-ly-in/tag-them', xuongin_views.tag_them, name='xin_tag_them'),
+    path('quan-ly-in/tag-sua', xuongin_views.tag_sua, name='xin_tag_sua'),
+    path('quan-ly-in/tag-xoa', xuongin_views.tag_xoa, name='xin_tag_xoa'),
+    path('quan-ly-in/slice-in', xuongin_views.slice_in, name='xin_slice_in'),
 
     path('manifest.webmanifest', views.manifest, name='manifest'),
     path('sw.js', views.service_worker, name='sw'),

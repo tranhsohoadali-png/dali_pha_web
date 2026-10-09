@@ -47,6 +47,18 @@ tiếp tục / dừng từ web để điều khiển máy.
 - **Agent offline trên web**: kiểm tra PC xưởng có mạng ra Internet không, `key` đã đúng chưa
   (nếu bấm "Đổi khoá" trên web thì phải cập nhật lại `config.json`).
 
+## In thẻ tự cắt (tab "In thẻ" trên web)
+Agent tự cắt file bằng **Bambu Studio** đã cài trên PC xưởng, rồi gửi thẳng máy in. Chuẩn bị 1 lần:
+
+1. **Tạo template .3mf cho mỗi đầu phun** (bake sẵn cấu hình). Mở Bambu Studio → chọn máy A1 + đầu phun (0.2 hoặc 0.4) + nhựa + thông số (nhiệt mặc định…) → **để khay TRỐNG (xoá hết vật thể)** → `File → Save Project As` ra ví dụ `C:\dali\templates\tpl_A1_0.4.3mf`. Làm tương tự cho 0.2.
+   - ⚠ **Máy A1 KHÔNG có đầu phun 0.3 chính hãng** (chỉ 0.2/0.4/0.6/0.8). Nếu bên anh ghi "0.3": hoặc thực ra là 0.4, hoặc anh lắp đầu 0.3 bên thứ 3 → khi đó tự tạo máy tùy chỉnh trong Bambu Studio (đặt `nozzle_diameter`=0.3) rồi lưu template `tpl_A1_0.3.3mf`.
+2. Trong `config.json`, phần `"slicer"`:
+   - `"bambu_exe"`: đường dẫn `bambu-studio.exe` (mặc định `C:\Program Files\Bambu Studio\bambu-studio.exe`).
+   - `"templates"`: map đầu phun → file template, ví dụ `{"0.2": "C:\\dali\\templates\\tpl_A1_0.2.3mf", "0.4": "C:\\dali\\templates\\tpl_A1_0.4.3mf"}`.
+3. Trên web tab **In thẻ**: tải **model STL** từng thẻ + khai môn, đầu phun, phút/thẻ, nhựa g/thẻ, tối đa/khay. Rồi tạo lệnh: chọn thẻ + số lượng (trộn nhiều thẻ được) hoặc đặt thời gian → agent tự cắt (đúng số lượng, đặt nhiệt nếu nhập) → gửi máy in. Kết quả (số thẻ, phút, nhựa) báo về web.
+
+> Agent cắt bằng cách: `bambu-studio.exe <template.3mf> <stl…lặp theo số lượng> --arrange 1 --slice 1 [--nozzle-temperature …] --outputdir <tmp> --export-3mf out.gcode.3mf`, đọc `result.json` để lấy thời gian/nhựa, rồi nạp FTPS + lệnh in. Nếu 1 lệnh quá 1 khay sẽ báo "giảm số lượng".
+
 ## Bảo mật
 - **Access Code** chỉ nằm trong `config.json` trên PC xưởng, không gửi lên web.
 - `config.json` chứa mật khẩu máy in — đừng chia sẻ, đừng commit lên git.
