@@ -174,6 +174,12 @@
 .cmdrow .cst{font-weight:700;border-radius:999px;padding:1px 8px;font-size:11px;white-space:nowrap}
 .cst-cho{background:var(--surface-2);color:var(--ink-soft)} .cst-sent{background:var(--amber-wash);color:var(--amber)}
 .cst-xong{background:var(--ok-wash);color:var(--ok-ink)} .cst-loi{background:#FBE3E1;color:#B23A2E}
+/* Bảo trì */
+.btstep{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13.5px;border-top:1px solid var(--line-soft)}
+.btdot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.btdot.ok{background:var(--ok)} .btdot.bad{background:#D64545}
+.btstep .ck{margin-left:auto;font-size:12px;color:var(--ink-soft);white-space:nowrap}
+.btstep .ck.bad{color:#D64545;font-weight:600}
 @media (max-width:600px){ .tabs{grid-template-columns:1fr} .frm .act{grid-column:1/-1} .keybox{margin-left:0} }
 </style>
 </head>
@@ -204,6 +210,9 @@
     <button type="button" class="tab" role="tab" data-tab="tag" aria-selected="false">
       <i class="bi bi-tags"></i><div><div class="tn">In thẻ (tự cắt)</div><div class="ts">Model thẻ → cắt &amp; gửi máy</div></div>
     </button>
+    <button type="button" class="tab" role="tab" data-tab="bt" aria-selected="false">
+      <i class="bi bi-tools"></i><div><div class="tn">Bảo trì</div><div class="ts">Nhắc &amp; tích bước bảo trì máy</div></div>
+    </button>
   </div>
 
   <!-- ===== TAB MÁY ===== -->
@@ -217,7 +226,7 @@
           <option value="ranh">Rảnh</option><option value="dang_in">Đang in</option><option value="bao_tri">Bảo trì</option></select></div>
         <div class="fld"><label>Serial (để nối realtime)</label><input id="mSerial" placeholder="VD: 0309CA…" autocomplete="off"></div>
         <div class="fld"><label>IP trong LAN (tùy chọn)</label><input id="mIP" placeholder="VD: 192.168.1.50" autocomplete="off"></div>
-        <div class="fld"><label>Đầu phun đang lắp</label><select id="mDauPhun"><option value="">— chưa rõ —</option><option value="0.2">0.2</option><option value="0.3">0.3</option><option value="0.4">0.4</option></select></div>
+        <div class="fld"><label>Đầu phun đang lắp</label><select id="mDauPhun"><option value="">— chưa rõ —</option><option value="0.2">0.2</option><option value="0.4">0.4</option></select></div>
         <div class="fld wide"><label>Ghi chú</label><input id="mGhiChu" placeholder="Vị trí, đầu phun, AMS…" autocomplete="off"></div>
         <div class="act">
           <button type="button" class="btn primary" id="mSave"><i class="bi bi-save"></i> Lưu máy</button>
@@ -335,7 +344,7 @@
       <h2><span class="pin">◆</span> Tạo lệnh in thẻ — tự cắt rồi gửi máy</h2>
       <div class="frm">
         <div class="fld"><label>Máy in</label><select id="tMay"></select></div>
-        <div class="fld"><label>Đầu phun</label><select id="tDauPhun"><option value="0.2">0.2</option><option value="0.3">0.3</option><option value="0.4">0.4</option></select></div>
+        <div class="fld"><label>Đầu phun</label><select id="tDauPhun"><option value="0.2">0.2</option><option value="0.4">0.4</option></select></div>
         <div class="fld"><label>Chế độ</label><select id="tMode"><option value="qty">Theo số lượng</option><option value="time">Theo thời gian</option></select></div>
         <div class="fld"><label>Nhiệt vòi (°C)</label><input id="tNhiet" type="number" min="0" inputmode="numeric" placeholder="mặc định"></div>
         <div class="fld"><label>Nhiệt bàn (°C)</label><input id="tBed" type="number" min="0" inputmode="numeric" placeholder="mặc định"></div>
@@ -357,7 +366,7 @@
         <div class="fld wide" id="tgFileWrap"><label>File model (.stl / .3mf / .step)</label><input id="tgFile" type="file" accept=".stl,.3mf,.step,.stp,.obj"></div>
         <div class="fld"><label>Tên thẻ</label><input id="tgTen" placeholder="VD: Thẻ Toán" autocomplete="off"></div>
         <div class="fld"><label>Môn</label><input id="tgMon" placeholder="VD: Toán" autocomplete="off"></div>
-        <div class="fld"><label>Đầu phun</label><select id="tgDauPhun"><option value="0.2">0.2</option><option value="0.3">0.3</option><option value="0.4" selected>0.4</option></select></div>
+        <div class="fld"><label>Đầu phun</label><select id="tgDauPhun"><option value="0.2">0.2</option><option value="0.4" selected>0.4</option></select></div>
         <div class="fld"><label>Phút / thẻ</label><input id="tgPhut" type="number" min="0" inputmode="numeric" placeholder="phút"></div>
         <div class="fld"><label>Nhựa (g) / thẻ</label><input id="tgNhua" type="number" min="0" step="0.1" inputmode="decimal" placeholder="g"></div>
         <div class="fld"><label>Tối đa / khay</label><input id="tgMax" type="number" min="0" inputmode="numeric" placeholder="con"></div>
@@ -371,6 +380,27 @@
     <section class="card panel">
       <h2><span class="pin">◆</span> Thư viện model thẻ <span class="cnt" id="tgCount">…</span></h2>
       <div id="tglist"><div class="empty">Đang tải…</div></div>
+    </section>
+  </div>
+
+  <!-- ===== TAB BẢO TRÌ ===== -->
+  <div id="paneBT" class="hidden">
+    <section class="card panel">
+      <h2><span class="pin">◆</span> Trạng thái bảo trì máy <span class="cnt" id="btCount">…</span></h2>
+      <div class="lgrid" id="btgrid"><div class="empty">Đang tải…</div></div>
+    </section>
+    <section class="card panel">
+      <h2><i class="bi bi-clock-history" style="color:var(--ink-soft)"></i> Lịch sử bảo trì gần đây <span class="cnt" id="btHistCount">0</span></h2>
+      <div id="btHist"><div class="empty">Chưa có.</div></div>
+    </section>
+    <section class="card panel">
+      <h2><span class="pin">◆</span> Các bước bảo trì (chu kỳ ngày) <span class="cnt" id="btBuocCount">…</span></h2>
+      <div class="frm" style="margin-bottom:10px">
+        <div class="fld" style="flex:2;grid-column:span 2"><label>Thêm bước</label><input id="btbTen" placeholder="VD: Thay lưỡi/vòi phun" autocomplete="off"></div>
+        <div class="fld"><label>Chu kỳ (ngày)</label><input id="btbChuKy" type="number" min="0" inputmode="numeric" placeholder="VD: 30"></div>
+        <div class="act"><button type="button" class="btn primary" id="btbAdd"><i class="bi bi-plus-lg"></i> Thêm bước</button></div>
+      </div>
+      <div id="btBuocList"></div>
     </section>
   </div>
 
@@ -400,9 +430,11 @@ document.querySelectorAll(".tab").forEach(function(t){ t.addEventListener("click
   $("paneJob").classList.toggle("hidden",tab!=="job");
   $("paneLive").classList.toggle("hidden",tab!=="live");
   $("paneTag").classList.toggle("hidden",tab!=="tag");
+  $("paneBT").classList.toggle("hidden",tab!=="bt");
   if(tab==="job"){ loadJob(); loadKhoSuggest(); }
   if(tab==="live"){ startLive(); } else { stopLive(); }
   if(tab==="tag"){ startTag(); }
+  if(tab==="bt"){ startBT(); }
 }); });
 
 /* ---------- MÁY IN ---------- */
@@ -807,6 +839,73 @@ $("tgSave").addEventListener("click",function(){
   fetch("/quan-ly-in/tag-them",{method:"POST",headers:{"X-CSRFToken":CSRF},body:fd}).then(function(r){return r.json();}).then(function(r){ $("tgSave").disabled=false;
     if(!r.ok){ toast(r.error||"Tải lỗi",true); return; } toast("Đã tải model"); resetTagForm(); loadTagModels(); })
    .catch(function(){ $("tgSave").disabled=false; toast("Tải lỗi (file lớn?)",true); }); });
+
+/* ---------- BẢO TRÌ MÁY (v5) ---------- */
+var BTBUOC=[];
+function startBT(){ fetch("/quan-ly-in/may").then(function(r){return r.json();}).then(function(r){ MAYS=(r&&r.items)||MAYS; })
+  .finally(function(){ loadBTBuoc(function(){ loadBT(); loadBTHist(); }); }); }
+function dsText(ds,never){ if(never) return "chưa làm"; if(ds===0) return "hôm nay"; if(ds===1) return "hôm qua"; return ds+" ngày trước"; }
+function loadBT(){ fetch("/quan-ly-in/bt").then(function(r){return r.json();}).then(function(r){ if(r.buoc) BTBUOC=r.buoc; renderBT(r.items||[]); })
+  .catch(function(){ $("btgrid").innerHTML='<div class="empty">Không tải được.</div>'; }); }
+function renderBT(items){
+  $("btCount").textContent=items.length+" máy";
+  var g=$("btgrid");
+  if(!items.length){ g.innerHTML='<div class="empty">Chưa có máy nào — thêm máy ở tab Máy in.</div>'; return; }
+  g.innerHTML="";
+  items.forEach(function(m){
+    var el=document.createElement("div"); el.className="lcard"+(m.so_qua_han?" err":"");
+    var head='<div class="ltop"><span class="lname">'+esc(m.ten)+'</span>'
+      +(m.so_qua_han?'<span class="lstate s-FAILED">'+m.so_qua_han+' quá hạn</span>':'<span class="lstate s-FINISH">OK</span>')+'</div>'
+      +'<div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:6px">Bảo trì gần nhất: <b>'+(m.last_any?dsText(m.days_since_any,false):'chưa bảo trì')+'</b></div>';
+    var steps=m.buoc.map(function(b){ return '<div class="btstep"><span class="btdot '+(b.overdue?"bad":"ok")+'"></span>'
+      +'<span>'+esc(b.ten)+(b.chu_ky?'<span style="color:var(--ink-faint);font-size:11px"> · '+b.chu_ky+'ng</span>':'')+'</span>'
+      +'<span class="ck'+(b.overdue?" bad":"")+'">'+dsText(b.days_since,b.never)+'</span></div>'; }).join("");
+    var ghiBtn='<div style="margin-top:10px"><button type="button" class="btn sm primary" data-ghi><i class="bi bi-check2-square"></i> Ghi bảo trì</button></div>';
+    var form='<div class="btform hidden" style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">'
+      +'<div style="font-size:12px;color:var(--ink-soft);margin-bottom:6px">Tích bước đã làm hôm nay (sẵn tích bước quá hạn):</div>'
+      +'<div class="btchecks">'+m.buoc.map(function(b){ return '<label style="display:flex;align-items:center;gap:7px;padding:3px 0;font-size:13.5px"><input type="checkbox" value="'+b.buoc_id+'"'+(b.overdue?" checked":"")+'> '+esc(b.ten)+'</label>'; }).join("")+'</div>'
+      +'<input class="btnote" placeholder="Ghi chú (tùy chọn)" style="width:100%;margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface-2);color:var(--ink)">'
+      +'<div style="margin-top:8px;display:flex;gap:7px"><button type="button" class="btn sm primary" data-save><i class="bi bi-save"></i> Lưu bảo trì</button><button type="button" class="btn sm" data-cancel>Hủy</button></div></div>';
+    el.innerHTML=head+steps+ghiBtn+form;
+    var fe=el.querySelector(".btform");
+    el.querySelector("[data-ghi]").addEventListener("click",function(){ fe.classList.toggle("hidden"); });
+    el.querySelector("[data-cancel]").addEventListener("click",function(){ fe.classList.add("hidden"); });
+    el.querySelector("[data-save]").addEventListener("click",function(){
+      var ids=Array.prototype.slice.call(el.querySelectorAll(".btchecks input:checked")).map(function(c){return c.value;});
+      if(!ids.length){ toast("Tích ít nhất 1 bước",true); return; }
+      postJSON("/quan-ly-in/bt-ghi",{may_id:m.may_id,buoc_ids:ids,ghi_chu:el.querySelector(".btnote").value.trim()})
+        .then(function(r){ if(!r.ok){toast(r.error||"Lỗi",true);return;} toast("Đã ghi bảo trì"); loadBT(); loadBTHist(); }); });
+    g.appendChild(el);
+  });
+}
+function loadBTHist(){ fetch("/quan-ly-in/bt-log").then(function(r){return r.json();}).then(function(r){
+  var items=r.items||[]; $("btHistCount").textContent=items.length; var box=$("btHist");
+  if(!items.length){ box.innerHTML='<div class="empty">Chưa có.</div>'; return; }
+  var mayName={}; MAYS.forEach(function(m){mayName[m.id]=m.ten;});
+  var buocName={}; BTBUOC.forEach(function(b){buocName[b.id]=b.ten;});
+  box.innerHTML="";
+  items.slice(0,20).forEach(function(l){ var el=document.createElement("div"); el.className="cmdrow";
+    var bnames=(l.buoc_ids||[]).map(function(id){return buocName[id]||id;}).join(", ");
+    el.innerHTML='<b style="white-space:nowrap">'+esc(mayName[l.may_id]||l.may_id)+'</b>'
+      +'<span style="color:var(--ink-soft);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(bnames)+'</span>'
+      +'<span style="margin-left:auto;color:var(--ink-faint);font-size:11.5px;white-space:nowrap">'+esc(l.luc||"")+(l.nguoi?" · "+esc(l.nguoi):"")+'</span>'
+      +'<button type="button" class="iconbtn del" title="Xóa" data-del><i class="bi bi-x-lg"></i></button>';
+    el.querySelector("[data-del]").addEventListener("click",function(){ if(!confirm("Xóa bản ghi bảo trì này?"))return; postJSON("/quan-ly-in/bt-log-xoa",{id:l.id}).then(function(){toast("Đã xóa");loadBT();loadBTHist();}); });
+    box.appendChild(el); }); }).catch(function(){}); }
+function loadBTBuoc(cb){ fetch("/quan-ly-in/bt-buoc").then(function(r){return r.json();}).then(function(r){
+  BTBUOC=r.items||[]; $("btBuocCount").textContent=BTBUOC.length+" bước"; var box=$("btBuocList"); box.innerHTML="";
+  BTBUOC.forEach(function(b){ var el=document.createElement("div"); el.className="fitem";
+    el.innerHTML='<div class="fmain"><div class="fname">'+esc(b.ten)+'</div></div>'
+      +'<div class="fact" style="align-items:center"><input type="number" min="0" value="'+(b.chu_ky||0)+'" class="bck" style="width:70px;border:1px solid var(--line);border-radius:8px;padding:6px;background:var(--surface-2);color:var(--ink)" title="Chu kỳ ngày"><span style="font-size:11.5px;color:var(--ink-faint)">ngày</span>'
+      +'<button type="button" class="iconbtn" data-save title="Lưu chu kỳ"><i class="bi bi-save"></i></button>'
+      +'<button type="button" class="iconbtn del" data-del title="Xóa"><i class="bi bi-trash"></i></button></div>';
+    el.querySelector("[data-save]").addEventListener("click",function(){ postJSON("/quan-ly-in/bt-buoc-luu",{id:b.id,ten:b.ten,chu_ky:el.querySelector(".bck").value,ghi_chu:b.ghi_chu||""}).then(function(r){ if(r.ok){toast("Đã lưu chu kỳ");loadBTBuoc();loadBT();} }); });
+    el.querySelector("[data-del]").addEventListener("click",function(){ if(!confirm('Xóa bước "'+(b.ten||"")+'"?'))return; postJSON("/quan-ly-in/bt-buoc-xoa",{id:b.id}).then(function(){toast("Đã xóa");loadBTBuoc();loadBT();}); });
+    box.appendChild(el); });
+  if(typeof cb==="function") cb();
+}).catch(function(){ if(typeof cb==="function") cb(); }); }
+$("btbAdd").addEventListener("click",function(){ var ten=$("btbTen").value.trim(); if(!ten){toast("Nhập tên bước",true);return;}
+  postJSON("/quan-ly-in/bt-buoc-luu",{ten:ten,chu_ky:$("btbChuKy").value}).then(function(r){ if(!r.ok){toast(r.error||"Lỗi",true);return;} toast("Đã thêm bước"); $("btbTen").value="";$("btbChuKy").value=""; loadBTBuoc(); loadBT(); }); });
 
 loadMay();
 loadFile();

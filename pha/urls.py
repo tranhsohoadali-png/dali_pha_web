@@ -230,6 +230,14 @@ urlpatterns = [
     path('quan-ly-in/tag-sua', xuongin_views.tag_sua, name='xin_tag_sua'),
     path('quan-ly-in/tag-xoa', xuongin_views.tag_xoa, name='xin_tag_xoa'),
     path('quan-ly-in/slice-in', xuongin_views.slice_in, name='xin_slice_in'),
+    # Bảo trì máy: trạng thái + bước (chu kỳ) + ghi bảo trì + lịch sử
+    path('quan-ly-in/bt', xuongin_views.bt_trangthai, name='xin_bt'),
+    path('quan-ly-in/bt-buoc', xuongin_views.bt_buoc_ds, name='xin_bt_buoc'),
+    path('quan-ly-in/bt-buoc-luu', xuongin_views.bt_buoc_luu, name='xin_bt_buoc_luu'),
+    path('quan-ly-in/bt-buoc-xoa', xuongin_views.bt_buoc_xoa, name='xin_bt_buoc_xoa'),
+    path('quan-ly-in/bt-ghi', xuongin_views.bt_ghi, name='xin_bt_ghi'),
+    path('quan-ly-in/bt-log', xuongin_views.bt_log_ds, name='xin_bt_log'),
+    path('quan-ly-in/bt-log-xoa', xuongin_views.bt_log_xoa, name='xin_bt_log_xoa'),
 
     path('manifest.webmanifest', views.manifest, name='manifest'),
     path('sw.js', views.service_worker, name='sw'),

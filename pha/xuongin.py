@@ -12,6 +12,7 @@ import json
 import os
 import re
 import time
+from datetime import datetime
 
 from django.conf import settings
 from django.http import JsonResponse, HttpResponseForbidden
@@ -563,7 +564,7 @@ def _toint(v):
 # override nhiệt + số bản + auto-arrange), ra .gcode.3mf, nạp FTPS + phát lệnh in, ack kèm thời gian/nhựa thực.
 _TAGMODEL = 'tagmodel.json'
 _MODELS_SUB = 'models'
-DAU_PHUN = ('0.2', '0.3', '0.4')
+DAU_PHUN = ('0.2', '0.4')
 
 
 def _models_dir():
@@ -718,3 +719,147 @@ def slice_in(request):
     cmds.append(rec)
     _save(_CMD, cmds[-_CMD_KEEP:])
     return JsonResponse({'ok': True, 'item': rec, 'canh_bao': canh_bao})
+
+
+# ============================ BẢO TRÌ MÁY ============================
+# Theo dõi bảo trì từng máy: danh sách BƯỚC (mỗi bước có chu kỳ ngày) + GHI bảo trì (tích
+# bước đã làm) -> biết máy nào bảo trì bao giờ, bao lâu rồi chưa, bước nào quá hạn (tránh
+# quên bảo trì & thiếu bước). Lưu JSON media/print (baotri_buoc.json, baotri_log.json).
+_BT_BUOC, _BT_LOG = 'baotri_buoc.json', 'baotri_log.json'
+_BT_MAC_DINH = [
+    ('Vệ sinh mặt bàn (tấm PEI)', 3),
+    ('Lau sạch trục trượt X/Y/Z', 7),
+    ('Vệ sinh đầu phun + quạt làm mát', 14),
+    ('Bôi trơn trục & vít me Z', 30),
+    ('Kiểm tra / căng lại dây đai', 30),
+    ('Vệ sinh bánh răng cấp nhựa (extruder)', 30),
+    ('Kiểm tra AMS lite (bánh cuốn, cảm biến)', 30),
+    ('Cân bàn + hiệu chỉnh flow', 30),
+]
+
+
+def _bt_buoc():
+    items = _load(_BT_BUOC)
+    if not items:
+        items = [{'id': 'B%d' % i, 'ten': t, 'chu_ky': ck, 'ghi_chu': ''}
+                 for i, (t, ck) in enumerate(_BT_MAC_DINH)]
+        _save(_BT_BUOC, items)
+    return items
+
+
+def _days_since(iso):
+    try:
+        return (datetime.now() - datetime.strptime(iso[:16], '%Y-%m-%d %H:%M')).days
+    except Exception:
+        return None
+
+
+@staff_required
+def bt_buoc_ds(request):
+    return JsonResponse({'ok': True, 'items': _bt_buoc()})
+
+
+@staff_required
+def bt_buoc_luu(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    d = _body(request)
+    ten = (d.get('ten') or '').strip()
+    if not ten:
+        return JsonResponse({'ok': False, 'error': 'Nhập tên bước.'})
+    items = _bt_buoc()
+    rid = (d.get('id') or '').strip()
+    rec = {'id': rid or _nid('B'), 'ten': ten[:120],
+           'chu_ky': _toint(d.get('chu_ky')), 'ghi_chu': (d.get('ghi_chu') or '').strip()[:200]}
+    for i, it in enumerate(items):
+        if it.get('id') == rid:
+            items[i] = rec
+            break
+    else:
+        items.append(rec)
+    _save(_BT_BUOC, items)
+    return JsonResponse({'ok': True, 'item': rec})
+
+
+@staff_required
+def bt_buoc_xoa(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    rid = (_body(request).get('id') or '').strip()
+    _save(_BT_BUOC, [it for it in _bt_buoc() if it.get('id') != rid])
+    return JsonResponse({'ok': True})
+
+
+@staff_required
+def bt_ghi(request):
+    """Ghi 1 lần bảo trì cho 1 máy. JSON: {may_id, buoc_ids:[...], ghi_chu}."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    d = _body(request)
+    may_id = (d.get('may_id') or '').strip()
+    buoc_ids = [str(x) for x in (d.get('buoc_ids') or [])]
+    if not may_id:
+        return JsonResponse({'ok': False, 'error': 'Chọn máy.'})
+    if not buoc_ids:
+        return JsonResponse({'ok': False, 'error': 'Tích ít nhất 1 bước đã làm.'})
+    rec = {'id': _nid('L'), 'may_id': may_id, 'buoc_ids': buoc_ids,
+           'luc': time.strftime('%Y-%m-%d %H:%M'), 'nguoi': getattr(request.user, 'username', '') or '',
+           'ghi_chu': (d.get('ghi_chu') or '').strip()[:300]}
+    logs = _load(_BT_LOG)
+    logs.append(rec)
+    _save(_BT_LOG, logs[-2000:])
+    return JsonResponse({'ok': True, 'item': rec})
+
+
+@staff_required
+def bt_log_ds(request):
+    may_id = (request.GET.get('may_id') or '').strip()
+    logs = _load(_BT_LOG)
+    if may_id:
+        logs = [l for l in logs if l.get('may_id') == may_id]
+    logs = sorted(logs, key=lambda x: x.get('luc', ''), reverse=True)[:100]
+    return JsonResponse({'ok': True, 'items': logs})
+
+
+@staff_required
+def bt_log_xoa(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    rid = (_body(request).get('id') or '').strip()
+    _save(_BT_LOG, [l for l in _load(_BT_LOG) if l.get('id') != rid])
+    return JsonResponse({'ok': True})
+
+
+@staff_required
+def bt_trangthai(request):
+    """Trạng thái bảo trì từng máy: mỗi bước lần cuối làm khi nào, mấy ngày rồi, quá hạn chưa."""
+    buoc = _bt_buoc()
+    logs = _load(_BT_LOG)
+    mays = _load('may.json')
+    last = {}
+    for l in logs:
+        mid = l.get('may_id')
+        for b in (l.get('buoc_ids') or []):
+            k = (mid, str(b))
+            if k not in last or l.get('luc', '') > last[k]:
+                last[k] = l.get('luc', '')
+    out = []
+    for m in mays:
+        rows, worst, last_any = [], -1, ''
+        for b in buoc:
+            ld = last.get((m['id'], b['id']), '')
+            ds = _days_since(ld) if ld else None
+            ck = b.get('chu_ky') or 0
+            overdue = (ld == '') or bool(ck and ds is not None and ds >= ck)
+            if ld and ld > last_any:
+                last_any = ld
+            qua = 9999 if ld == '' else ((ds - ck) if (ds is not None and ck) else 0)
+            if overdue and qua > worst:
+                worst = qua
+            rows.append({'buoc_id': b['id'], 'ten': b['ten'], 'chu_ky': ck, 'last_done': ld,
+                         'days_since': ds, 'overdue': overdue, 'never': ld == ''})
+        out.append({'may_id': m['id'], 'ten': m.get('ten'), 'trang_thai': m.get('trang_thai'),
+                    'last_any': last_any, 'days_since_any': _days_since(last_any) if last_any else None,
+                    'so_qua_han': sum(1 for r in rows if r['overdue']), 'buoc': rows})
+    out.sort(key=lambda x: (-x['so_qua_han'], x['ten'] or ''))
+    return JsonResponse({'ok': True, 'items': out, 'buoc': buoc})
