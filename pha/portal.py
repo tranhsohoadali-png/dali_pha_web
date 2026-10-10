@@ -50,13 +50,13 @@ CATALOG = [
         {'name': 'Thống kê', 'desc': 'Báo cáo tổng hợp (tranh)', 'url': '/thong-ke', 'icon': 'bi-bar-chart-line', 'staff': True},
         # 3 SỔ KẾ TOÁN RIÊNG theo mảng kinh doanh (tranh / bóng bay / 3D) — màu riêng từng mảng
         {'name': 'Kế toán Tranh', 'desc': 'ketoan.tranhdali.vn ↗', 'url': 'https://ketoan.tranhdali.vn', 'icon': 'bi-calculator', 'ext': True, 'staff': True, 'accent': 'green'},
-        {'name': 'Kế toán Bóng bay', 'desc': 'Sổ sách mảng bóng bay', 'url': '#', 'icon': 'bi-calculator', 'dev': True, 'tag': 'chờ link', 'staff': True, 'accent': 'red'},
-        {'name': 'Kế toán In 3D', 'desc': 'Sổ sách mảng in 3D', 'url': '#', 'icon': 'bi-calculator', 'dev': True, 'tag': 'chờ link', 'staff': True, 'accent': 'blue'},
+        {'name': 'Kế toán Bóng bay', 'desc': 'ktparty.tranhdali.vn ↗', 'url': 'https://ktparty.tranhdali.vn', 'icon': 'bi-calculator', 'ext': True, 'staff': True, 'accent': 'red'},
+        {'name': 'Kế toán In 3D', 'desc': 'kt3d.tranhdali.vn ↗', 'url': 'https://kt3d.tranhdali.vn', 'icon': 'bi-calculator', 'ext': True, 'staff': True, 'accent': 'blue'},
     ]},
     {'title': 'Bán hàng', 'icon': 'bi-shop', 'accent': 'red', 'apps': [
         {'name': 'Web bán Tranh', 'desc': 'tranhdali.vn ↗', 'url': 'https://tranhdali.vn', 'icon': 'bi-globe2', 'ext': True, 'accent': 'green'},
-        {'name': 'Web bán Bóng bay', 'desc': 'Website mảng bóng bay', 'url': '#', 'icon': 'bi-globe2', 'dev': True, 'tag': 'chờ link', 'accent': 'red'},
-        {'name': 'Web In 3D', 'desc': 'Website mảng in 3D', 'url': '#', 'icon': 'bi-globe2', 'dev': True, 'tag': 'chờ link', 'accent': 'blue'},
+        {'name': 'Web bán Bóng bay', 'desc': 'daliparty.tranhdali.vn ↗', 'url': 'https://daliparty.tranhdali.vn', 'icon': 'bi-globe2', 'ext': True, 'accent': 'red'},
+        {'name': 'Web In 3D', 'desc': '3d.tranhdali.vn ↗', 'url': 'https://3d.tranhdali.vn', 'icon': 'bi-globe2', 'ext': True, 'accent': 'blue'},
     ]},
     {'title': 'Mảng kinh doanh khác', 'icon': 'bi-grid-1x2', 'accent': 'slate', 'apps': [
         {'name': 'Xưởng in 3D', 'desc': 'Máy Bambu · file in', 'url': '/quan-ly-in', 'icon': 'bi-box', 'staff': True},
