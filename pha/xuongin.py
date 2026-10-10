@@ -573,6 +573,39 @@ def _models_dir():
     return d
 
 
+def _read_3mf_config(path):
+    """Tự đọc cấu hình trong file .3mf (Metadata/project_settings.config): nhiệt vòi/bàn,
+    đầu phun, loại nhựa, độ dày lớp. Không cần cắt. Lỗi/không phải .3mf -> {}."""
+    import zipfile
+    out = {}
+    try:
+        with zipfile.ZipFile(path) as z:
+            cn = [n for n in z.namelist() if n.endswith('project_settings.config')]
+            if not cn:
+                return out
+            cfg = json.loads(z.read(cn[0]).decode('utf-8', 'ignore'))
+
+            def g1(k):
+                v = cfg.get(k)
+                return v[0] if isinstance(v, list) and v else v
+            try:
+                out['nhiet'] = int(float(g1('nozzle_temperature') or 0)) or ''
+            except Exception:
+                pass
+            try:
+                out['bed'] = int(float(g1('hot_plate_temp') or g1('textured_plate_temp') or 0)) or ''
+            except Exception:
+                pass
+            lop = g1('layer_height')
+            out['lop'] = str(lop) if lop else ''
+            out['nhua_loai'] = (g1('filament_type') or '')[:20]
+            nd = g1('nozzle_diameter')
+            out['nozzle'] = str(nd) if nd else ''
+    except Exception:
+        pass
+    return out
+
+
 @staff_required
 def tag_ds(request):
     return JsonResponse({'ok': True, 'items': _load(_TAGMODEL)})
@@ -597,7 +630,8 @@ def tag_them(request):
     with open(os.path.join(_models_dir(), fname), 'wb') as f:
         for chunk in up.chunks():
             f.write(chunk)
-    dp = (request.POST.get('dau_phun') or '0.4').strip()
+    conf = _read_3mf_config(os.path.join(_models_dir(), fname))   # tự đọc cấu hình trong .3mf
+    dp = (request.POST.get('dau_phun') or conf.get('nozzle') or '0.4').strip()
     rec = {
         'id': mid, 'ten': ten[:120], 'mon': (request.POST.get('mon') or '').strip()[:60],
         'dau_phun': dp if dp in DAU_PHUN else (dp[:6] or '0.4'),
@@ -605,6 +639,9 @@ def tag_them(request):
         'kb': round(up.size / 1024.0),
         'phut': _toint(request.POST.get('phut')), 'nhua': _tofloat(request.POST.get('nhua')),
         'max_khay': _toint(request.POST.get('max_khay')),
+        # tự phân tích từ .3mf (nhiệt/bàn/lớp/loại nhựa); thời gian/nhựa cần cắt mới có (để 0)
+        'nhiet': conf.get('nhiet', ''), 'bed': conf.get('bed', ''),
+        'lop': conf.get('lop', ''), 'nhua_loai': conf.get('nhua_loai', ''), 'so_the': 0,
         'ghi_chu': (request.POST.get('ghi_chu') or '').strip()[:300],
         'luc_them': time.strftime('%Y-%m-%d %H:%M'),
     }
@@ -630,7 +667,7 @@ def tag_sua(request):
             if d.get('dau_phun'):
                 dp = str(d['dau_phun']).strip()
                 it['dau_phun'] = dp if dp in DAU_PHUN else dp[:6]
-            for k in ('phut', 'max_khay'):
+            for k in ('phut', 'max_khay', 'nhiet', 'bed'):
                 if k in d:
                     it[k] = _toint(d.get(k))
             if 'nhua' in d:

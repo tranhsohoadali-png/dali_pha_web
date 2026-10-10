@@ -771,7 +771,11 @@ function addTagRow(selId,qty){ var wrap=document.createElement("div"); wrap.clas
     +(timeMode?'':'<input class="tqty" type="number" min="0" inputmode="numeric" placeholder="SL" value="'+(qty||"")+'" style="width:84px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface-2);color:var(--ink)">')
     +'<button type="button" class="iconbtn del" title="Bỏ"><i class="bi bi-x-lg"></i></button>';
   wrap.querySelector(".del").addEventListener("click",function(){ wrap.remove(); updateEstimate(); });
-  wrap.querySelector(".tsel").addEventListener("change",updateEstimate);
+  wrap.querySelector(".tsel").addEventListener("change",function(){
+    var mm=TAGMODELS.filter(function(x){return x.id===wrap.querySelector(".tsel").value;})[0];
+    if(mm){ if(mm.nhiet&&!$("tNhiet").value) $("tNhiet").value=mm.nhiet; if(mm.bed&&!$("tBed").value) $("tBed").value=mm.bed; }
+    updateEstimate();
+  });
   var q=wrap.querySelector(".tqty"); if(q) q.addEventListener("input",updateEstimate);
   $("tRows").appendChild(wrap); updateEstimate(); }
 function rebuildTagRows(){ var prev=[]; document.querySelectorAll("#tRows .trow").forEach(function(w){ var s=w.querySelector(".tsel"), q=w.querySelector(".tqty"); prev.push({id:s?s.value:"",qty:q?q.value:""}); });
@@ -813,6 +817,9 @@ function renderTagLib(){ $("tgCount").textContent=TAGMODELS.length+" model"; var
       if(m.mon) tags+='<span class="mtag">'+esc(m.mon)+'</span>';
       if(m.phut) tags+='<span class="mtag"><b>'+m.phut+'</b> ph/thẻ</span>';
       if(m.nhua) tags+='<span class="mtag"><b>'+m.nhua+'</b> g/thẻ</span>';
+      if(m.nhiet) tags+='<span class="mtag"><b>'+m.nhiet+'</b>° vòi</span>';
+      if(m.nhua_loai) tags+='<span class="mtag">'+esc(m.nhua_loai)+'</span>';
+      if(m.so_the) tags+='<span class="mtag"><b>'+m.so_the+'</b> thẻ/file</span>';
       if(m.max_khay) tags+='<span class="mtag">≤<b>'+m.max_khay+'</b>/khay</span>';
       tags+='<span class="mtag">'+esc(m.kieu||"")+'</span>';
       el.innerHTML='<div class="fico"><i class="bi bi-box"></i></div><div class="fmain"><div class="fname">'+esc(m.ten)+'</div><div class="fmeta">'+tags+'</div>'+(m.ghi_chu?'<div class="fnote">'+esc(m.ghi_chu)+'</div>':'')+'</div>'
