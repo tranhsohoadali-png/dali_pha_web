@@ -71,7 +71,7 @@
       {% for a in cat.apps %}
       <div class="col-6 col-md-4 col-xl-3" data-tile data-key="{{ a.name|lower }} {{ a.desc|lower }}">
         <a href="{% if a.dev %}#{% else %}{{ a.url }}{% endif %}"
-           class="app-tile accent-{{ cat.accent }}{% if a.dev %} is-dev{% endif %}"
+           class="app-tile accent-{{ a.accent|default:cat.accent }}{% if a.dev %} is-dev{% endif %}"
            {% if a.dev %}onclick="return false" title="Đang phát triển"{% endif %}
            {% if a.ext %} target="_blank" rel="noopener"{% endif %}>
           <div class="app-ico"><i class="bi {{ a.icon }}"></i></div>
@@ -80,7 +80,7 @@
             <div class="app-desc">{{ a.desc }}</div>
           </div>
           {% if a.badge_text %}<span class="badge {{ a.badge_cls }} app-badge">{{ a.badge_text }}</span>
-          {% elif a.dev %}<span class="badge text-bg-secondary app-badge">đang làm</span>{% endif %}
+          {% elif a.dev %}<span class="badge text-bg-secondary app-badge">{{ a.tag|default:"đang làm" }}</span>{% endif %}
         </a>
       </div>
       {% endfor %}

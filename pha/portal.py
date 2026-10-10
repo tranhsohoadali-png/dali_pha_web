@@ -45,13 +45,18 @@ CATALOG = [
         {'name': 'Thi đua', 'desc': 'Bảng xếp hạng', 'url': '/thi-dua', 'icon': 'bi-trophy'},
     ]},
     {'title': 'Kế toán & Tài chính', 'icon': 'bi-cash-coin', 'accent': 'amber', 'apps': [
-        {'name': 'Bảng điều khiển', 'desc': 'Chi phí · tồn · dự báo', 'url': '/dashboard', 'icon': 'bi-speedometer2', 'staff': True},
-        {'name': 'Lợi nhuận', 'desc': 'Lãi/lỗ theo kỳ', 'url': '/loi-nhuan', 'icon': 'bi-cash-stack', 'staff': True},
-        {'name': 'Thống kê', 'desc': 'Báo cáo tổng hợp', 'url': '/thong-ke', 'icon': 'bi-bar-chart-line', 'staff': True},
-        {'name': 'Phần mềm Kế toán', 'desc': 'ketoan.tranhdali.vn ↗', 'url': 'https://ketoan.tranhdali.vn', 'icon': 'bi-calculator', 'ext': True, 'staff': True},
+        {'name': 'Bảng điều khiển', 'desc': 'Chi phí · tồn · dự báo (tranh)', 'url': '/dashboard', 'icon': 'bi-speedometer2', 'staff': True},
+        {'name': 'Lợi nhuận', 'desc': 'Lãi/lỗ theo kỳ (tranh)', 'url': '/loi-nhuan', 'icon': 'bi-cash-stack', 'staff': True},
+        {'name': 'Thống kê', 'desc': 'Báo cáo tổng hợp (tranh)', 'url': '/thong-ke', 'icon': 'bi-bar-chart-line', 'staff': True},
+        # 3 SỔ KẾ TOÁN RIÊNG theo mảng kinh doanh (tranh / bóng bay / 3D) — màu riêng từng mảng
+        {'name': 'Kế toán Tranh', 'desc': 'ketoan.tranhdali.vn ↗', 'url': 'https://ketoan.tranhdali.vn', 'icon': 'bi-calculator', 'ext': True, 'staff': True, 'accent': 'green'},
+        {'name': 'Kế toán Bóng bay', 'desc': 'Sổ sách mảng bóng bay', 'url': '#', 'icon': 'bi-calculator', 'dev': True, 'tag': 'chờ link', 'staff': True, 'accent': 'red'},
+        {'name': 'Kế toán In 3D', 'desc': 'Sổ sách mảng in 3D', 'url': '#', 'icon': 'bi-calculator', 'dev': True, 'tag': 'chờ link', 'staff': True, 'accent': 'blue'},
     ]},
     {'title': 'Bán hàng', 'icon': 'bi-shop', 'accent': 'red', 'apps': [
-        {'name': 'Website bán hàng', 'desc': 'tranhdali.vn ↗', 'url': 'https://tranhdali.vn', 'icon': 'bi-globe2', 'ext': True},
+        {'name': 'Web bán Tranh', 'desc': 'tranhdali.vn ↗', 'url': 'https://tranhdali.vn', 'icon': 'bi-globe2', 'ext': True, 'accent': 'green'},
+        {'name': 'Web bán Bóng bay', 'desc': 'Website mảng bóng bay', 'url': '#', 'icon': 'bi-globe2', 'dev': True, 'tag': 'chờ link', 'accent': 'red'},
+        {'name': 'Web In 3D', 'desc': 'Website mảng in 3D', 'url': '#', 'icon': 'bi-globe2', 'dev': True, 'tag': 'chờ link', 'accent': 'blue'},
     ]},
     {'title': 'Mảng kinh doanh khác', 'icon': 'bi-grid-1x2', 'accent': 'slate', 'apps': [
         {'name': 'Xưởng in 3D', 'desc': 'Máy Bambu · file in', 'url': '/quan-ly-in', 'icon': 'bi-box', 'staff': True},
