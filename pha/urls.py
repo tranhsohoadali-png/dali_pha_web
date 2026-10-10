@@ -26,8 +26,10 @@ from pha import a3_sheet
 from pha import shopee_export
 from pha import tkb as tkb_views
 from pha import xuongin as xuongin_views
+from pha import portal
 
 urlpatterns = [
+    path('trung-tam', portal.trung_tam, name='trung_tam'),   # Portal lưới (web tổng)
     path('inbox', inbox_views.inbox, name='inbox'),
     path('inbox/api/list', inbox_views.api_list, name='inbox_list'),
     path('inbox/api/mo', inbox_views.api_mo, name='inbox_mo'),
