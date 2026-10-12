@@ -206,6 +206,7 @@ urlpatterns = [
 
     # QUẢN LÝ XƯỞNG IN 3D (Bambu A1) — máy in + thư viện file in
     path('quan-ly-in', xuongin_views.quan_ly_in, name='quan_ly_in'),
+    path('manifest-xuong.webmanifest', xuongin_views.manifest_xuong, name='manifest_xuong'),
     path('quan-ly-in/may', xuongin_views.may_ds, name='xin_may_ds'),
     path('quan-ly-in/may-luu', xuongin_views.may_luu, name='xin_may_luu'),
     path('quan-ly-in/may-xoa', xuongin_views.may_xoa, name='xin_may_xoa'),

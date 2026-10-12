@@ -78,6 +78,25 @@ def quan_ly_in(request):
     return render(request, 'quan_ly_in.html')
 
 
+def manifest_xuong(request):
+    """Manifest PWA app 'Xưởng in' — cài màn hình chính, mở thẳng /quan-ly-in."""
+    data = {
+        "name": "DALI Xưởng in 3D", "short_name": "Xưởng in",
+        "start_url": "/quan-ly-in", "scope": "/", "display": "standalone", "orientation": "portrait",
+        "background_color": "#EEF2F5", "theme_color": "#0F9C9C",
+        "icons": [
+            {"src": "/media/icon-xuong-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/media/icon-xuong-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ],
+        "shortcuts": [
+            {"name": "Realtime máy", "short_name": "Realtime", "url": "/quan-ly-in?tab=live"},
+            {"name": "Xuất file thẻ", "short_name": "Xuất file", "url": "/quan-ly-in?tab=file"},
+            {"name": "Bảo trì máy", "short_name": "Bảo trì", "url": "/quan-ly-in?tab=bt"},
+        ],
+    }
+    return JsonResponse(data, content_type='application/manifest+json')
+
+
 # ============================ MÁY IN ============================
 TRANG_THAI = ('ranh', 'dang_in', 'bao_tri')
 

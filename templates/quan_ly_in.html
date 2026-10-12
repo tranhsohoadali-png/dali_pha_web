@@ -2,8 +2,14 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Quản lý xưởng in · DALI</title>
+  <link rel="manifest" href="/manifest-xuong.webmanifest">
+  <meta name="theme-color" content="#0F9C9C">
+  <link rel="apple-touch-icon" href="/media/icon-xuong-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Xưởng in">
+  <meta name="mobile-web-app-capable" content="yes">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -192,6 +198,10 @@
       <span class="logo"><i class="bi bi-printer-fill"></i></span>
       <div><h1>Quản lý xưởng in 3D</h1><div class="sub">Máy Bambu Lab A1 · thư viện file in</div></div>
     </div>
+    <button type="button" class="btn primary" id="installBtn" style="display:none"><i class="bi bi-phone"></i> Cài app</button>
+  </div>
+  <div id="iosTip" style="display:none;margin-top:8px;background:#E1F3F3;border:1px solid #BfE6E6;border-radius:10px;padding:9px 12px;font-size:13px;color:#0B7A7A">
+    <i class="bi bi-phone"></i> Cài app vào màn hình chính: bấm nút <b>Chia sẻ</b> <i class="bi bi-box-arrow-up"></i> → <b>Thêm vào MH chính</b>.
   </div>
 
   <div class="tabs" role="tablist">
@@ -862,6 +872,16 @@ loadMay();
 loadFile();
 loadJob();
 loadKhoSuggest();
+</script>
+<script>
+/* ---------- PWA: app "Xưởng in" (cài màn hình chính) ---------- */
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(function(){}); }
+var _pwaDefer=null;
+window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); _pwaDefer=e; var b=document.getElementById('installBtn'); if(b) b.style.display=''; });
+(function(){ var b=document.getElementById('installBtn'); if(b) b.addEventListener('click',function(){ if(_pwaDefer){ _pwaDefer.prompt(); _pwaDefer=null; this.style.display='none'; } }); })();
+(function(){ var iOS=/iphone|ipad|ipod/i.test(navigator.userAgent); var sa=window.navigator.standalone===true||window.matchMedia('(display-mode: standalone)').matches; if(iOS&&!sa){ var t=document.getElementById('iosTip'); if(t) t.style.display=''; } })();
+/* mở thẳng 1 tab qua ?tab=live|file|job|bt (dùng cho shortcut app) */
+(function(){ var m=(location.search.match(/[?&]tab=([a-z]+)/)||[])[1]; if(m){ var btn=document.querySelector('.tab[data-tab="'+m+'"]'); if(btn) btn.click(); } })();
 </script>
 </body>
 </html>
