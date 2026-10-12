@@ -985,10 +985,15 @@ def xuat_file(request):
     if len(dp_set) > 1:
         return JsonResponse({'ok': False, 'error': 'Các thẻ khác ĐẦU PHUN nhau (%s) — 1 file chỉ 1 đầu phun.'
                              % '/'.join(sorted(dp_set))}, status=400)
+    want = sum(q for _, q, _ in specs)
     try:
         data, got, chi_tiet = _merge_3mf_bytes(specs)
     except Exception as e:
         return JsonResponse({'ok': False, 'error': 'Lỗi tạo file: %s' % str(e)[:140]}, status=500)
+    if got < want:   # tràn sức chứa 1 khay -> KHÔNG xuất file thiếu thẻ (báo rõ thay vì âm thầm bỏ)
+        return JsonResponse({'ok': False, 'error':
+                             'Tổng %d thẻ vượt sức chứa 1 khay (tối đa %d thẻ/khay cho các loại này). '
+                             'Giảm số lượng hoặc tách thành nhiều file.' % (want, got)}, status=400)
 
     if len(specs) == 1:
         fn = '%s_%dthe.3mf' % (specs[0][2].replace(' ', '_'), got)

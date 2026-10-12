@@ -780,9 +780,10 @@ function sugHi(d){ var items=$("tSug").querySelectorAll(".sugit"); if(!items.len
   sugActive=(sugActive+d+items.length)%items.length;
   items.forEach(function(el,i){ el.classList.toggle("on",i===sugActive); if(i===sugActive) el.scrollIntoView({block:"nearest"}); }); }
 function pickSug(i){ var m=SUG[i]; if(!m) return;
-  var tgt=null, rows=document.querySelectorAll("#tRows .trow");
-  for(var k=0;k<rows.length;k++){ if(!rows[k].querySelector(".tsel").value){ tgt=rows[k].querySelector(".tsel"); break; } }
-  if(tgt){ tgt.value=m.id; } else { addTagRow(m.id); }
+  var trow=null, rows=document.querySelectorAll("#tRows .trow");
+  for(var k=0;k<rows.length;k++){ if(!rows[k].querySelector(".tsel").value){ trow=rows[k]; break; } }
+  if(trow){ trow.querySelector(".tsel").value=m.id; var q=trow.querySelector(".tqty"); if(q&&!(parseInt(q.value,10)>0)) q.value=1; }
+  else { addTagRow(m.id,1); }   // chọn thẻ = mặc định 1 (khỏi để trống rồi bị bỏ khi xuất)
   $("tSearch").value=""; applyTagFilter(); renderSug(); updateEstimate();
   toast("Đã thêm thẻ: "+m.ten); $("tSearch").focus(); }
 function addTagRow(selId,qty){ var wrap=document.createElement("div"); wrap.className="trow"; wrap.style.cssText="display:flex;gap:8px;margin-bottom:8px;align-items:center";
@@ -829,11 +830,19 @@ document.addEventListener("click",function(e){ if(!e.target.closest("#tSug")&&e.
 $("tXuat").addEventListener("click",function(){
   var qs=[],totN=0,nloai=0;
   document.querySelectorAll("#tRows .trow").forEach(function(w){ var id=w.querySelector(".tsel").value; if(!id) return;
-    var qty=parseInt(w.querySelector(".tqty").value,10)||0; if(!qty) return;
+    var qty=parseInt(w.querySelector(".tqty").value,10)||0; if(qty<1) qty=1;   // đã chọn thẻ = ít nhất 1 (khớp backend)
     qs.push("f="+encodeURIComponent(id)+"&q="+qty); totN+=qty; nloai++; });
-  if(!qs.length){ toast("Chọn thẻ + nhập giờ in hoặc số lượng",true); return; }
+  if(!qs.length){ toast("Chọn ít nhất 1 thẻ",true); return; }
   toast("Đang tạo file tải về… ("+totN+" thẻ"+(nloai>1?", "+nloai+" loại trộn":"")+")");
-  window.location="/quan-ly-in/xuat-file?"+qs.join("&");
+  var btn=$("tXuat"); btn.disabled=true;
+  fetch("/quan-ly-in/xuat-file?"+qs.join("&")).then(function(r){
+    if(!r.ok){ return r.json().then(function(j){ throw new Error((j&&j.error)||"Lỗi tạo file"); }); }
+    var cd=r.headers.get("Content-Disposition")||"", mm=cd.match(/filename\*=UTF-8''([^;]+)/);
+    var fn=mm?decodeURIComponent(mm[1]):"the.3mf";
+    return r.blob().then(function(b){ var a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=fn;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(a.href);},1500);
+      toast("Đã tạo file: "+fn); });
+  }).catch(function(e){ toast(e.message||"Lỗi tạo file",true); }).then(function(){ btn.disabled=false; });
 });
 $("tSend").addEventListener("click",function(){
   var may=$("tMay").value; if(!may){ toast("Chọn máy in",true); return; }
