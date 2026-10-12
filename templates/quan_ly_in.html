@@ -279,7 +279,7 @@
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button type="button" class="btn primary" id="tXuat"><i class="bi bi-download"></i> Xuất file (tải về máy)</button>
         <button type="button" class="btn" id="tSend"><i class="bi bi-printer"></i> Gửi cắt &amp; in (cần máy)</button>
-        <span style="font-size:12px;color:var(--ink-faint)">Xuất file = tải .3mf đúng số thẻ về, mở Bambu Studio in. Dùng loại thẻ ở dòng đầu.</span>
+        <span style="font-size:12px;color:var(--ink-faint)">Xuất file = tải .3mf đúng số thẻ về, mở Bambu Studio in. <b>Trộn tất cả loại thẻ đang chọn vào 1 file.</b></span>
       </div>
     </section>
 
@@ -827,10 +827,13 @@ $("tSearch").addEventListener("keydown",function(e){
 $("tSug").addEventListener("mousedown",function(e){ var it=e.target.closest(".sugit"); if(it){ e.preventDefault(); pickSug(+it.getAttribute("data-i")); } });
 document.addEventListener("click",function(e){ if(!e.target.closest("#tSug")&&e.target!==$("tSearch")) $("tSug").style.display="none"; });
 $("tXuat").addEventListener("click",function(){
-  var row=document.querySelector("#tRows .trow"); var fid=row?row.querySelector(".tsel").value:"";
-  if(!fid){ toast("Chọn thẻ (dòng đầu)",true); return; }
-  var qty=parseInt(row.querySelector(".tqty").value,10)||0; if(!qty){ toast("Nhập giờ in hoặc số lượng",true); return; }
-  toast("Đang tạo file tải về…"); window.location="/quan-ly-in/xuat-file?file_id="+encodeURIComponent(fid)+"&so_luong="+qty;
+  var qs=[],totN=0,nloai=0;
+  document.querySelectorAll("#tRows .trow").forEach(function(w){ var id=w.querySelector(".tsel").value; if(!id) return;
+    var qty=parseInt(w.querySelector(".tqty").value,10)||0; if(!qty) return;
+    qs.push("f="+encodeURIComponent(id)+"&q="+qty); totN+=qty; nloai++; });
+  if(!qs.length){ toast("Chọn thẻ + nhập giờ in hoặc số lượng",true); return; }
+  toast("Đang tạo file tải về… ("+totN+" thẻ"+(nloai>1?", "+nloai+" loại trộn":"")+")");
+  window.location="/quan-ly-in/xuat-file?"+qs.join("&");
 });
 $("tSend").addEventListener("click",function(){
   var may=$("tMay").value; if(!may){ toast("Chọn máy in",true); return; }

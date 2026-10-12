@@ -830,27 +830,170 @@ def _trim_3mf_bytes(src_abs, M):
     return buf.getvalue(), len(keep)
 
 
+def _merge_3mf_bytes(specs):
+    """TRỘN nhiều loại thẻ .3mf (mỗi file là 1 khay cùng template, chỉ khác mesh) thành 1 .3mf —
+    THUẦN PYTHON, không cần slicer. Cách: giữ scaffold của file ĐẦU (các ô lưới sẵn vị trí), cắt
+    tới N ô; với các ô thuộc thẻ khác thì TRÁO con trỏ mesh (p:path) sang mesh của file đó (thêm
+    mesh file mới + relationship) và đổi tên ô theo tên thẻ.
+    specs = [(src_abs, so_luong, ten), ...]  (phần tử đầu = base).
+    Trả (bytes, tong_the, chi_tiet) với chi_tiet=[(ten, so_the_thuc), ...]."""
+    base_abs = specs[0][0]
+    zbase = zipfile.ZipFile(base_abs)
+    names = zbase.namelist()
+    mt = zbase.read('3D/3dmodel.model').decode('utf-8')
+    order = re.findall(r'<item\b[^>]*objectid="(\d+)"', mt)   # thứ tự ô trên khay
+    cap = len(order) or 1
+    want = sum(max(1, q) for _, q, _ in specs)
+    N = max(1, min(want, cap))
+    keep_ids = order[:N]
+    keep = set(keep_ids)
+
+    def _oid(s):
+        m = re.search(r'objectid="(\d+)"', s)
+        return m.group(1) if m else None
+    mt = re.sub(r'<item\b[^>]*/>', lambda m: (m.group(0) if _oid(m.group(0)) in keep else ''), mt)
+    mt = re.sub(r'<object id="(\d+)"[^>]*>.*?</object>',
+                lambda m: (m.group(0) if m.group(1) in keep else ''), mt, flags=re.S)
+
+    # phân ô cho từng file (theo thứ tự chọn)
+    assign, off = [], 0
+    for _, q, _ in specs:
+        q = max(1, q)
+        assign.append(keep_ids[off:off + q] if off < N else [])
+        off += q
+    base_mesh_paths = sorted(set(re.findall(r'p:path="([^"]+)"', mt)))
+
+    new_members, new_rels = {}, []
+    for i in range(1, len(specs)):
+        ids = assign[i] if i < len(assign) else []
+        if not ids:
+            continue
+        if os.path.abspath(specs[i][0]) == os.path.abspath(base_abs):
+            continue   # cùng file base -> mesh đã đúng, khỏi tráo
+        zf = zipfile.ZipFile(specs[i][0])
+        fpaths = sorted(set(re.findall(r'p:path="([^"]+)"', zf.read('3D/3dmodel.model').decode('utf-8'))))
+        pmap = {}
+        for k, bp in enumerate(base_mesh_paths):
+            newpath = '/3D/Objects/object_mg%d_%s' % (i, os.path.basename(bp))
+            try:
+                data = zf.read(bp.lstrip('/'))
+            except KeyError:
+                data = zf.read(fpaths[k].lstrip('/')) if k < len(fpaths) else None
+            if data is None:
+                continue
+            new_members[newpath.lstrip('/')] = data
+            new_rels.append(newpath)
+            pmap[bp] = newpath
+        zf.close()
+
+        def _swap(mo, pmap=pmap):
+            block = mo.group(0)
+            for old, new in pmap.items():
+                block = block.replace('p:path="%s"' % old, 'p:path="%s"' % new)
+            return block
+        for oid in ids:
+            mt = re.sub(r'<object id="%s"[^>]*>.*?</object>' % re.escape(oid), _swap, mt, flags=re.S)
+
+    out_members = {'3D/3dmodel.model': mt}
+    if 'Metadata/model_settings.config' in names:
+        ms = zbase.read('Metadata/model_settings.config').decode('utf-8')
+        ms = re.sub(r'<object id="(\d+)">.*?</object>',
+                    lambda m: (m.group(0) if m.group(1) in keep else ''), ms, flags=re.S)
+
+        def _mi(m):
+            o = re.search(r'key="object_id"\s+value="(\d+)"', m.group(0))
+            return m.group(0) if (o and o.group(1) in keep) else ''
+        ms = re.sub(r'<model_instance>.*?</model_instance>', _mi, ms, flags=re.S)
+        ms = re.sub(r'<assemble_item object_id="(\d+)"[^>]*/>\s*',
+                    lambda m: (m.group(0) if m.group(1) in keep else ''), ms)
+        for i, ids in enumerate(assign):
+            ten = (specs[i][2] or '').strip()
+            if not ten:
+                continue
+            for oid in ids:
+                def _rename(mo, ten=ten, oid=oid):
+                    return re.sub(r'(<object id="%s">\s*<metadata key="name" value=")[^"]*(")' % oid,
+                                  lambda x: x.group(1) + ten + x.group(2), mo.group(0), count=1)
+                ms = re.sub(r'<object id="%s">.*?</object>' % oid, _rename, ms, flags=re.S)
+        out_members['Metadata/model_settings.config'] = ms
+
+    rels_name = '3D/_rels/3dmodel.model.rels'
+    if rels_name in names and new_rels:
+        rl = zbase.read(rels_name).decode('utf-8')
+        add = ''.join('<Relationship Target="%s" Id="rel-mg%d" '
+                      'Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>' % (t, k + 1)
+                      for k, t in enumerate(new_rels))
+        out_members[rels_name] = rl.replace('</Relationships>', add + '</Relationships>')
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as o:
+        for n in names:
+            if n in out_members:
+                o.writestr(n, out_members[n])
+            elif n == 'Metadata/slice_info.config':
+                continue
+            else:
+                o.writestr(n, zbase.read(n))
+        for p, data in new_members.items():
+            o.writestr(p, data)
+    zbase.close()
+    chi_tiet = [(specs[i][2], len(assign[i])) for i in range(len(specs))]
+    return buf.getvalue(), len(keep), chi_tiet
+
+
 @staff_required
 def xuat_file(request):
-    """Xuất .3mf CHỈ với số lượng thẻ phù hợp (cắt bớt từ file khay) để TẢI VỀ — không cần máy in.
-    GET: file_id, so_luong? target_phut?  -> tải .3mf (mở Bambu Studio để in)."""
+    """Xuất .3mf để TẢI VỀ (không cần máy in) với đúng số lượng — TRỘN được NHIỀU loại thẻ vào 1 file.
+    GET nhiều dòng:  f=<id>&q=<sl>&f=<id>&q=<sl>...   (q = số lượng mỗi loại)
+    GET 1 dòng (cũ): file_id=<id>&so_luong=<sl>   hoặc  file_id=<id>&target_phut=<phút>
+    Các thẻ phải cùng ĐẦU PHUN (1 file in = 1 đầu phun)."""
     from django.http import HttpResponse
     from urllib.parse import quote
-    fid = (request.GET.get('file_id') or '').strip()
-    f = next((x for x in _load('file.json') if x.get('id') == fid), None)
-    if not f:
-        return JsonResponse({'ok': False, 'error': 'Không thấy file.'}, status=404)
-    src = os.path.join(settings.MEDIA_ROOT, f.get('file', ''))
-    if not (src.lower().endswith('.3mf') and os.path.exists(src)):
-        return JsonResponse({'ok': False, 'error': 'File không phải .3mf nên không cắt số lượng được.'}, status=400)
-    tp, sl = _toint(request.GET.get('target_phut')), _toint(request.GET.get('so_luong'))
-    per = _toint(f.get('phut'))
-    M = max(1, int(round(tp / float(per)))) if (tp and per) else max(1, sl or 1)
+    lib = _load('file.json')
+    fids = request.GET.getlist('f')
+    qtys = request.GET.getlist('q')
+    rows = []   # (id, qty)
+    if fids:
+        for i, fid in enumerate(fids):
+            fid = (fid or '').strip()
+            if fid:
+                rows.append((fid, _toint(qtys[i]) if i < len(qtys) else 0))
+    else:   # tương thích cũ: 1 dòng
+        fid = (request.GET.get('file_id') or '').strip()
+        tp = _toint(request.GET.get('target_phut'))
+        sl = _toint(request.GET.get('so_luong'))
+        f = next((x for x in lib if x.get('id') == fid), None)
+        per = _toint(f.get('phut')) if f else 0
+        q = max(1, int(round(tp / float(per)))) if (tp and per) else max(1, sl or 1)
+        if fid:
+            rows.append((fid, q))
+    if not rows:
+        return JsonResponse({'ok': False, 'error': 'Chọn ít nhất 1 thẻ.'}, status=400)
+
+    specs, dp_set = [], set()
+    for fid, q in rows:
+        f = next((x for x in lib if x.get('id') == fid), None)
+        if not f:
+            return JsonResponse({'ok': False, 'error': 'Không thấy thẻ (%s).' % fid}, status=404)
+        src = os.path.join(settings.MEDIA_ROOT, f.get('file', ''))
+        if not (src.lower().endswith('.3mf') and os.path.exists(src)):
+            return JsonResponse({'ok': False, 'error': 'Thẻ "%s" không phải .3mf nên không cắt/trộn được.'
+                                 % f.get('ten', fid)}, status=400)
+        if f.get('dau_phun'):
+            dp_set.add(f['dau_phun'])
+        specs.append((src, max(1, q or 1), (f.get('ten') or 'the').strip()))
+    if len(dp_set) > 1:
+        return JsonResponse({'ok': False, 'error': 'Các thẻ khác ĐẦU PHUN nhau (%s) — 1 file chỉ 1 đầu phun.'
+                             % '/'.join(sorted(dp_set))}, status=400)
     try:
-        data, got = _trim_3mf_bytes(src, M)
+        data, got, chi_tiet = _merge_3mf_bytes(specs)
     except Exception as e:
-        return JsonResponse({'ok': False, 'error': 'Lỗi tạo file: %s' % str(e)[:120]}, status=500)
-    fn = '%s_%dthe.3mf' % ((f.get('ten') or 'the').strip().replace(' ', '_'), got)
+        return JsonResponse({'ok': False, 'error': 'Lỗi tạo file: %s' % str(e)[:140]}, status=500)
+
+    if len(specs) == 1:
+        fn = '%s_%dthe.3mf' % (specs[0][2].replace(' ', '_'), got)
+    else:
+        fn = 'Tron_%dloai_%dthe.3mf' % (len(specs), got)
     resp = HttpResponse(data, content_type='application/octet-stream')
     resp['Content-Disposition'] = "attachment; filename*=UTF-8''%s" % quote(fn)
     resp['X-So-The'] = str(got)
