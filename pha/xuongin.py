@@ -8,10 +8,12 @@ model/migration (đúng quy ước dự án; deploy = git pull + restart). File 
 v2 (sau): lệnh in / hàng đợi + lịch sử + nối kho /soan-tkb.
 """
 import hmac
+import io
 import json
 import os
 import re
 import time
+import zipfile
 from datetime import datetime
 
 from django.conf import settings
@@ -768,6 +770,72 @@ def slice_in(request):
     cmds.append(rec)
     _save(_CMD, cmds[-_CMD_KEEP:])
     return JsonResponse({'ok': True, 'item': rec, 'canh_bao': canh_bao})
+
+
+def _trim_3mf_bytes(src_abs, M):
+    """Tạo .3mf chỉ giữ M thẻ đầu (cắt bớt instance trong file khay) — THUẦN PYTHON, không
+    cần slicer. Giữ nguyên mesh/2 màu/cấu hình; chỉ bỏ object/item/model_instance/assemble_item
+    của các thẻ dư. Trả (bytes, số_thẻ_thực). Nếu M >= số thẻ có sẵn thì giữ tất cả."""
+    zin = zipfile.ZipFile(src_abs)
+    names = zin.namelist()
+    mt = zin.read('3D/3dmodel.model').decode('utf-8')
+    order = re.findall(r'<item\b[^>]*objectid="(\d+)"', mt)
+    keep = set(order[:max(1, M)]) if order else set()
+
+    def _oid(s):
+        m = re.search(r'objectid="(\d+)"', s)
+        return m.group(1) if m else None
+    mt = re.sub(r'<item\b[^>]*/>', lambda m: (m.group(0) if _oid(m.group(0)) in keep else ''), mt)
+    mt = re.sub(r'<object id="(\d+)"[^>]*>.*?</object>', lambda m: (m.group(0) if m.group(1) in keep else ''), mt, flags=re.S)
+    out_members = {'3D/3dmodel.model': mt}
+    if 'Metadata/model_settings.config' in names:
+        ms = zin.read('Metadata/model_settings.config').decode('utf-8')
+        ms = re.sub(r'<object id="(\d+)">.*?</object>', lambda m: (m.group(0) if m.group(1) in keep else ''), ms, flags=re.S)
+
+        def _mi(m):
+            o = re.search(r'key="object_id"\s+value="(\d+)"', m.group(0))
+            return m.group(0) if (o and o.group(1) in keep) else ''
+        ms = re.sub(r'<model_instance>.*?</model_instance>', _mi, ms, flags=re.S)
+        ms = re.sub(r'<assemble_item object_id="(\d+)"[^>]*/>\s*', lambda m: (m.group(0) if m.group(1) in keep else ''), ms)
+        out_members['Metadata/model_settings.config'] = ms
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as o:
+        for n in names:
+            if n in out_members:
+                o.writestr(n, out_members[n])
+            elif n == 'Metadata/slice_info.config':
+                continue   # bỏ info cắt cũ; Bambu Studio sẽ tự cắt lại
+            else:
+                o.writestr(n, zin.read(n))
+    zin.close()
+    return buf.getvalue(), len(keep)
+
+
+@staff_required
+def xuat_file(request):
+    """Xuất .3mf CHỈ với số lượng thẻ phù hợp (cắt bớt từ file khay) để TẢI VỀ — không cần máy in.
+    GET: file_id, so_luong? target_phut?  -> tải .3mf (mở Bambu Studio để in)."""
+    from django.http import HttpResponse
+    from urllib.parse import quote
+    fid = (request.GET.get('file_id') or '').strip()
+    f = next((x for x in _load('file.json') if x.get('id') == fid), None)
+    if not f:
+        return JsonResponse({'ok': False, 'error': 'Không thấy file.'}, status=404)
+    src = os.path.join(settings.MEDIA_ROOT, f.get('file', ''))
+    if not (src.lower().endswith('.3mf') and os.path.exists(src)):
+        return JsonResponse({'ok': False, 'error': 'File không phải .3mf nên không cắt số lượng được.'}, status=400)
+    tp, sl = _toint(request.GET.get('target_phut')), _toint(request.GET.get('so_luong'))
+    per = _toint(f.get('phut'))
+    M = max(1, int(round(tp / float(per)))) if (tp and per) else max(1, sl or 1)
+    try:
+        data, got = _trim_3mf_bytes(src, M)
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': 'Lỗi tạo file: %s' % str(e)[:120]}, status=500)
+    fn = '%s_%dthe.3mf' % ((f.get('ten') or 'the').strip().replace(' ', '_'), got)
+    resp = HttpResponse(data, content_type='application/octet-stream')
+    resp['Content-Disposition'] = "attachment; filename*=UTF-8''%s" % quote(fn)
+    resp['X-So-The'] = str(got)
+    return resp
 
 
 # ============================ BẢO TRÌ MÁY ============================

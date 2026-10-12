@@ -256,7 +256,11 @@
       <div id="tRows" style="margin-top:12px"></div>
       <div style="margin-top:8px"><button type="button" class="btn sm" id="tAddRow"><i class="bi bi-plus-lg"></i> Thêm loại thẻ (trộn trong 1 file)</button></div>
       <div id="tEstimate" style="font-size:13px;color:var(--ink-soft);margin-top:12px"></div>
-      <div style="margin-top:12px"><button type="button" class="btn primary" id="tSend"><i class="bi bi-scissors"></i> Gửi cắt &amp; in</button></div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button type="button" class="btn primary" id="tXuat"><i class="bi bi-download"></i> Xuất file (tải về máy)</button>
+        <button type="button" class="btn" id="tSend"><i class="bi bi-printer"></i> Gửi cắt &amp; in (cần máy)</button>
+        <span style="font-size:12px;color:var(--ink-faint)">Xuất file = tải .3mf đúng số thẻ về, mở Bambu Studio in. Dùng loại thẻ ở dòng đầu.</span>
+      </div>
     </section>
 
     <section class="card panel">
@@ -766,6 +770,14 @@ $("tDauPhun").addEventListener("change",rebuildTagRows);
 $("tMode").addEventListener("change",function(){ $("tTimeWrap").classList.toggle("hidden",$("tMode").value!=="time"); rebuildTagRows(); });
 $("tMay").addEventListener("change",syncNozzleFromMachine);
 $("tAddRow").addEventListener("click",function(){ addTagRow(); });
+$("tXuat").addEventListener("click",function(){
+  var row=document.querySelector("#tRows .trow"); var fid=row?row.querySelector(".tsel").value:"";
+  if(!fid){ toast("Chọn thẻ (dòng đầu)",true); return; }
+  var url="/quan-ly-in/xuat-file?file_id="+encodeURIComponent(fid);
+  if($("tMode").value==="time"){ var tp=(parseInt($("tHours").value,10)||0)*60+(parseInt($("tMins").value,10)||0); if(!tp){ toast("Nhập thời gian mục tiêu",true); return; } url+="&target_phut="+tp; }
+  else { var qty=parseInt(row.querySelector(".tqty").value,10)||0; if(!qty){ toast("Nhập số lượng thẻ",true); return; } url+="&so_luong="+qty; }
+  toast("Đang tạo file tải về…"); window.location=url;
+});
 $("tSend").addEventListener("click",function(){
   var may=$("tMay").value; if(!may){ toast("Chọn máy in",true); return; }
   var items=[]; document.querySelectorAll("#tRows .trow").forEach(function(w){ var id=w.querySelector(".tsel").value; if(!id) return;
