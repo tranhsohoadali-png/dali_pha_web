@@ -130,7 +130,8 @@ def file_ds(request):
 
 @staff_required
 def file_them(request):
-    """Tải file in + metadata (multipart form). Fields: nhom, ten, phut, nhua, con, mau, ghi_chu."""
+    """Tải file in + metadata (multipart). Fields: nhom, ten, dau_phun, phut, nhua, con, mau, ghi_chu.
+    Nếu là .3mf: TỰ ĐỌC cấu hình (nhiệt vòi/bàn, đầu phun, loại nhựa, lớp) khỏi phải nhập tay."""
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
     up = request.FILES.get('file')
@@ -144,14 +145,20 @@ def file_them(request):
     with open(os.path.join(_files_dir(), fname), 'wb') as f:
         for chunk in up.chunks():
             f.write(chunk)
+    conf = _read_3mf_config(os.path.join(_files_dir(), fname))   # tự đọc cấu hình trong .3mf
+    dp = (request.POST.get('dau_phun') or conf.get('nozzle') or '').strip()
     rec = {
         'id': fid, 'ten': ten[:120],
         'nhom': (request.POST.get('nhom') or 'Khác').strip()[:60],
         'file': 'print/files/' + fname, 'ten_file': up.name[:120],
         'kieu': (os.path.splitext(up.name)[1] or '').lower()[:10],
         'kb': round(up.size / 1024.0),
-        'phut': _toint(request.POST.get('phut')), 'nhua': _toint(request.POST.get('nhua')),
+        'dau_phun': dp if dp in DAU_PHUN else dp[:6],
+        'phut': _toint(request.POST.get('phut')), 'nhua': _tofloat(request.POST.get('nhua')),
         'con': _toint(request.POST.get('con')), 'mau': (request.POST.get('mau') or '').strip()[:40],
+        'nhiet': conf.get('nhiet', ''), 'bed': conf.get('bed', ''),
+        'lop': conf.get('lop', ''), 'nhua_loai': conf.get('nhua_loai', ''),
+        'so_the': _toint(request.POST.get('so_the')), 'max_khay': _toint(request.POST.get('max_khay')),
         'ghi_chu': (request.POST.get('ghi_chu') or '').strip()[:300],
         'luc_them': time.strftime('%Y-%m-%d %H:%M'),
     }
@@ -163,7 +170,7 @@ def file_them(request):
 
 @staff_required
 def file_sua(request):
-    """Sửa metadata (không đổi file). JSON: {id, ten, nhom, phut, nhua, con, mau, ghi_chu}."""
+    """Sửa metadata (không đổi file)."""
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
     d = _body(request)
@@ -175,10 +182,15 @@ def file_sua(request):
                 it['ten'] = d['ten'].strip()[:120]
             it['nhom'] = (d.get('nhom') or it.get('nhom') or 'Khác').strip()[:60]
             it['mau'] = (d.get('mau') or '').strip()[:40]
+            if d.get('dau_phun'):
+                dp = str(d['dau_phun']).strip()
+                it['dau_phun'] = dp if dp in DAU_PHUN else dp[:6]
             it['ghi_chu'] = (d.get('ghi_chu') or '').strip()[:300]
-            for k in ('phut', 'nhua', 'con'):
+            for k in ('phut', 'con', 'nhiet', 'bed', 'so_the', 'max_khay'):
                 if k in d:
                     it[k] = _toint(d.get(k))
+            if 'nhua' in d:
+                it['nhua'] = _tofloat(d.get('nhua'))
             _save('file.json', items)
             return JsonResponse({'ok': True, 'item': it})
     return JsonResponse({'ok': False, 'error': 'Không thấy file.'})
@@ -706,7 +718,7 @@ def slice_in(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
     d = _body(request)
-    models = {m.get('id'): m for m in _load(_TAGMODEL)}
+    models = {m.get('id'): m for m in _load('file.json')}   # gộp: thẻ nằm trong Thư viện file in
     items, dp_set = [], set()
     for it in (d.get('items') or []):
         m = models.get((it.get('model_id') or '').strip())
