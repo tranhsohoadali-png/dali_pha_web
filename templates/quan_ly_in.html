@@ -257,7 +257,11 @@
         <div class="fld"><label>Nhiệt vòi (°C)</label><input id="tNhiet" type="number" min="0" inputmode="numeric" placeholder="tự theo file"></div>
         <div class="fld"><label>Nhiệt bàn (°C)</label><input id="tBed" type="number" min="0" inputmode="numeric" placeholder="tự theo file"></div>
       </div>
-      <div style="display:flex;gap:8px;margin:14px 0 6px;font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em">
+      <div style="position:relative;margin-top:14px">
+        <i class="bi bi-search" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--ink-faint);font-size:14px"></i>
+        <input id="tSearch" placeholder="Tìm nhanh thẻ (gõ tên môn)…" autocomplete="off" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 11px 9px 34px;background:var(--surface-2);color:var(--ink);font-size:14px">
+      </div>
+      <div style="display:flex;gap:8px;margin:12px 0 6px;font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em">
         <span style="flex:2">Thẻ</span><span style="width:96px">Giờ in</span><span style="width:84px">Số lượng</span><span style="width:34px"></span>
       </div>
       <div id="tRows"></div>
@@ -745,9 +749,13 @@ function loadTagMachines(){ fetch("/quan-ly-in/may").then(function(r){return r.j
   syncNozzleFromMachine();
 }).catch(function(){}); }
 function syncNozzleFromMachine(){ var m=MAYS.filter(function(x){return x.id===$("tMay").value;})[0]; if(m&&m.dau_phun){ $("tDauPhun").value=m.dau_phun; rebuildTagRows(); } }
-function modelsForNozzle(){ var dp=$("tDauPhun").value; return FILES.filter(function(m){return (m.dau_phun||"")===dp;}); }
-function tagOptionsHTML(selId){ return '<option value="">— chọn thẻ —</option>'+modelsForNozzle().map(function(m){
+function tagMatch(m){ if((m.dau_phun||"")!==$("tDauPhun").value) return false;
+  var q=(($("tSearch")||{}).value||"").toLowerCase().trim(); if(!q) return true;
+  return ((m.ten||"")+" "+(m.nhom||"")+" "+(m.mon||"")).toLowerCase().indexOf(q)>=0; }
+function tagOptionsHTML(selId){ var list=FILES.filter(function(m){ return tagMatch(m)||m.id===selId; });
+  return '<option value="">— chọn thẻ —</option>'+list.map(function(m){
   return '<option value="'+m.id+'"'+(m.id===selId?" selected":"")+'>'+esc(m.ten)+(m.nhom?" ("+esc(m.nhom)+")":"")+(m.phut?" · "+m.phut+"ph/thẻ":"")+'</option>'; }).join(""); }
+function applyTagFilter(){ document.querySelectorAll("#tRows .tsel").forEach(function(sel){ var cur=sel.value; sel.innerHTML=tagOptionsHTML(cur); sel.value=cur; }); }
 function addTagRow(selId,qty){ var wrap=document.createElement("div"); wrap.className="trow"; wrap.style.cssText="display:flex;gap:8px;margin-bottom:8px;align-items:center";
   var inp="border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface-2);color:var(--ink)";
   wrap.innerHTML='<select class="tsel" style="flex:2;'+inp+'">'+tagOptionsHTML(selId)+'</select>'
@@ -780,6 +788,7 @@ function updateEstimate(){ var box=$("tEstimate");
 $("tDauPhun").addEventListener("change",rebuildTagRows);
 $("tMay").addEventListener("change",syncNozzleFromMachine);
 $("tAddRow").addEventListener("click",function(){ addTagRow(); });
+$("tSearch").addEventListener("input",applyTagFilter);
 $("tXuat").addEventListener("click",function(){
   var row=document.querySelector("#tRows .trow"); var fid=row?row.querySelector(".tsel").value:"";
   if(!fid){ toast("Chọn thẻ (dòng đầu)",true); return; }
