@@ -254,16 +254,14 @@
       <div class="frm">
         <div class="fld"><label>Máy in</label><select id="tMay"></select></div>
         <div class="fld"><label>Đầu phun</label><select id="tDauPhun"><option value="0.2">0.2</option><option value="0.4">0.4</option></select></div>
-        <div class="fld"><label>Chế độ</label><select id="tMode"><option value="qty">Theo số lượng</option><option value="time">Theo thời gian</option></select></div>
         <div class="fld"><label>Nhiệt vòi (°C)</label><input id="tNhiet" type="number" min="0" inputmode="numeric" placeholder="tự theo file"></div>
         <div class="fld"><label>Nhiệt bàn (°C)</label><input id="tBed" type="number" min="0" inputmode="numeric" placeholder="tự theo file"></div>
       </div>
-      <div id="tTimeWrap" class="hidden" style="margin-top:10px">
-        <div class="frm"><div class="fld"><label>Thời gian in mục tiêu</label>
-          <div style="display:flex;gap:6px"><input id="tHours" type="number" min="0" inputmode="numeric" placeholder="giờ" style="flex:1"><input id="tMins" type="number" min="0" max="59" inputmode="numeric" placeholder="phút" style="flex:1"></div></div></div>
-        <div class="asub" style="font-size:12px;color:var(--ink-soft);margin-top:4px">Chế độ thời gian dùng 1 loại thẻ — agent tự tính số lượng cho vừa thời gian.</div>
+      <div style="display:flex;gap:8px;margin:14px 0 6px;font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em">
+        <span style="flex:2">Thẻ</span><span style="width:96px">Giờ in</span><span style="width:84px">Số lượng</span><span style="width:34px"></span>
       </div>
-      <div id="tRows" style="margin-top:12px"></div>
+      <div id="tRows"></div>
+      <div style="font-size:12px;color:var(--ink-faint);margin-top:2px">Gõ <b>Giờ in</b> → tự tính Số lượng (theo phút/thẻ); hoặc gõ thẳng Số lượng.</div>
       <div style="margin-top:8px"><button type="button" class="btn sm" id="tAddRow"><i class="bi bi-plus-lg"></i> Thêm loại thẻ (trộn trong 1 file)</button></div>
       <div id="tEstimate" style="font-size:13px;color:var(--ink-soft);margin-top:12px"></div>
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -751,25 +749,28 @@ function modelsForNozzle(){ var dp=$("tDauPhun").value; return FILES.filter(func
 function tagOptionsHTML(selId){ return '<option value="">— chọn thẻ —</option>'+modelsForNozzle().map(function(m){
   return '<option value="'+m.id+'"'+(m.id===selId?" selected":"")+'>'+esc(m.ten)+(m.nhom?" ("+esc(m.nhom)+")":"")+(m.phut?" · "+m.phut+"ph/thẻ":"")+'</option>'; }).join(""); }
 function addTagRow(selId,qty){ var wrap=document.createElement("div"); wrap.className="trow"; wrap.style.cssText="display:flex;gap:8px;margin-bottom:8px;align-items:center";
-  var timeMode=$("tMode").value==="time";
-  wrap.innerHTML='<select class="tsel" style="flex:2;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface-2);color:var(--ink)">'+tagOptionsHTML(selId)+'</select>'
-    +(timeMode?'':'<input class="tqty" type="number" min="0" inputmode="numeric" placeholder="SL" value="'+(qty||"")+'" style="width:84px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface-2);color:var(--ink)">')
+  var inp="border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface-2);color:var(--ink)";
+  wrap.innerHTML='<select class="tsel" style="flex:2;'+inp+'">'+tagOptionsHTML(selId)+'</select>'
+    +'<input class="tgio" type="number" min="0" step="0.5" inputmode="decimal" placeholder="giờ" style="width:96px;'+inp+'">'
+    +'<input class="tqty" type="number" min="0" inputmode="numeric" placeholder="SL" value="'+(qty||"")+'" style="width:84px;'+inp+'">'
     +'<button type="button" class="iconbtn del" title="Bỏ"><i class="bi bi-x-lg"></i></button>';
-  wrap.querySelector(".del").addEventListener("click",function(){ wrap.remove(); updateEstimate(); });
-  wrap.querySelector(".tsel").addEventListener("change",function(){
-    var mm=FILES.filter(function(x){return x.id===wrap.querySelector(".tsel").value;})[0];
+  var sel=wrap.querySelector(".tsel"), gio=wrap.querySelector(".tgio"), qel=wrap.querySelector(".tqty");
+  function fromGio(){ var m=FILES.filter(function(x){return x.id===sel.value;})[0], h=parseFloat(gio.value)||0;
+    if(m&&m.phut>0&&h>0){ qel.value=Math.max(1,Math.round(h*60/m.phut)); } updateEstimate(); }
+  sel.addEventListener("change",function(){
+    var mm=FILES.filter(function(x){return x.id===sel.value;})[0];
     if(mm){ if(mm.nhiet&&!$("tNhiet").value) $("tNhiet").value=mm.nhiet; if(mm.bed&&!$("tBed").value) $("tBed").value=mm.bed; }
-    updateEstimate();
+    if(gio.value) fromGio(); else updateEstimate();
   });
-  var q=wrap.querySelector(".tqty"); if(q) q.addEventListener("input",updateEstimate);
+  gio.addEventListener("input",fromGio);
+  qel.addEventListener("input",function(){ gio.value=""; updateEstimate(); });
+  wrap.querySelector(".del").addEventListener("click",function(){ wrap.remove(); updateEstimate(); });
   $("tRows").appendChild(wrap); updateEstimate(); }
 function rebuildTagRows(){ var prev=[]; document.querySelectorAll("#tRows .trow").forEach(function(w){ var s=w.querySelector(".tsel"), q=w.querySelector(".tqty"); prev.push({id:s?s.value:"",qty:q?q.value:""}); });
   $("tRows").innerHTML="";
-  if($("tMode").value==="time"){ addTagRow(prev[0]&&prev[0].id,""); $("tAddRow").classList.add("hidden"); }
-  else { if(!prev.length) prev=[{}]; prev.forEach(function(p){ addTagRow(p.id,p.qty); }); $("tAddRow").classList.remove("hidden"); } }
+  if(!prev.length) prev=[{}]; prev.forEach(function(p){ addTagRow(p.id,p.qty); }); }
 function fmtMinFull(m){ m=Math.round(m||0); if(m<60) return m+" phút"; return Math.floor(m/60)+"h"+(m%60?(m%60)+"'":""); }
 function updateEstimate(){ var box=$("tEstimate");
-  if($("tMode").value==="time"){ box.innerHTML='<i class="bi bi-magic"></i> Agent sẽ tự tính số lượng thẻ cho vừa thời gian mục tiêu.'; return; }
   var totMin=0,totG=0,totN=0,warn="";
   document.querySelectorAll("#tRows .trow").forEach(function(w){ var id=w.querySelector(".tsel").value, qty=parseInt(w.querySelector(".tqty").value,10)||0;
     var m=FILES.filter(function(x){return x.id===id;})[0]; if(!m||!qty) return;
@@ -777,25 +778,21 @@ function updateEstimate(){ var box=$("tEstimate");
     if(m.max_khay&&qty>m.max_khay) warn+=' ⚠ '+esc(m.ten)+' > '+m.max_khay+'/khay (chia nhiều khay).'; });
   box.innerHTML= totN? ('<i class="bi bi-calculator"></i> Ước tính: <b>'+totN+'</b> thẻ · ~<b>'+fmtMinFull(totMin)+'</b> · ~<b>'+(Math.round(totG*10)/10)+'</b> g nhựa.'+(warn?'<span style="color:var(--amber)">'+warn+'</span>':'')) : 'Chọn thẻ + số lượng để xem ước tính.'; }
 $("tDauPhun").addEventListener("change",rebuildTagRows);
-$("tMode").addEventListener("change",function(){ $("tTimeWrap").classList.toggle("hidden",$("tMode").value!=="time"); rebuildTagRows(); });
 $("tMay").addEventListener("change",syncNozzleFromMachine);
 $("tAddRow").addEventListener("click",function(){ addTagRow(); });
 $("tXuat").addEventListener("click",function(){
   var row=document.querySelector("#tRows .trow"); var fid=row?row.querySelector(".tsel").value:"";
   if(!fid){ toast("Chọn thẻ (dòng đầu)",true); return; }
-  var url="/quan-ly-in/xuat-file?file_id="+encodeURIComponent(fid);
-  if($("tMode").value==="time"){ var tp=(parseInt($("tHours").value,10)||0)*60+(parseInt($("tMins").value,10)||0); if(!tp){ toast("Nhập thời gian mục tiêu",true); return; } url+="&target_phut="+tp; }
-  else { var qty=parseInt(row.querySelector(".tqty").value,10)||0; if(!qty){ toast("Nhập số lượng thẻ",true); return; } url+="&so_luong="+qty; }
-  toast("Đang tạo file tải về…"); window.location=url;
+  var qty=parseInt(row.querySelector(".tqty").value,10)||0; if(!qty){ toast("Nhập giờ in hoặc số lượng",true); return; }
+  toast("Đang tạo file tải về…"); window.location="/quan-ly-in/xuat-file?file_id="+encodeURIComponent(fid)+"&so_luong="+qty;
 });
 $("tSend").addEventListener("click",function(){
   var may=$("tMay").value; if(!may){ toast("Chọn máy in",true); return; }
   var items=[]; document.querySelectorAll("#tRows .trow").forEach(function(w){ var id=w.querySelector(".tsel").value; if(!id) return;
     var qel=w.querySelector(".tqty"); items.push({model_id:id,so_luong:qel?(parseInt(qel.value,10)||0):0}); });
   if(!items.length){ toast("Chọn ít nhất 1 thẻ",true); return; }
+  if(!items.some(function(x){return x.so_luong;})){ toast("Nhập giờ in hoặc số lượng",true); return; }
   var payload={may_id:may,dau_phun:$("tDauPhun").value,items:items,nhiet_do:parseInt($("tNhiet").value,10)||0,bed_nhiet:parseInt($("tBed").value,10)||0};
-  if($("tMode").value==="time"){ var tp=(parseInt($("tHours").value,10)||0)*60+(parseInt($("tMins").value,10)||0); if(!tp){ toast("Nhập thời gian mục tiêu",true); return; } payload.target_phut=tp; }
-  else if(!items.some(function(x){return x.so_luong;})){ toast("Nhập số lượng thẻ",true); return; }
   $("tSend").disabled=true;
   postJSON("/quan-ly-in/slice-in",payload).then(function(r){ $("tSend").disabled=false;
     if(!r.ok){ toast(r.error||"Lỗi",true); return; }
