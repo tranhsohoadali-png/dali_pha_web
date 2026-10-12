@@ -109,6 +109,13 @@
 .iconbtn:hover{color:var(--accent);border-color:var(--accent)}
 .iconbtn.del:hover{color:#D64545;border-color:#D64545}
 .empty{font-size:13.5px;color:var(--ink-faint);padding:14px 2px}
+.sugit{display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--line-soft);font-size:14px}
+.sugit:last-child{border-bottom:0}
+.sugit:hover,.sugit.on{background:var(--surface-2)}
+.sugit .sugname{font-weight:600;color:var(--ink)}
+.sugit .sugnhom{font-size:11px;color:var(--ink-soft);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:1px 8px}
+.sugit .sugmeta{margin-left:auto;font-size:11.5px;color:var(--ink-faint);white-space:nowrap}
+.sugempty{padding:12px;font-size:13px;color:var(--ink-faint)}
 
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;
   padding:11px 18px;border-radius:12px;font-weight:600;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.28);
@@ -257,9 +264,10 @@
         <div class="fld"><label>Nhiệt vòi (°C)</label><input id="tNhiet" type="number" min="0" inputmode="numeric" placeholder="tự theo file"></div>
         <div class="fld"><label>Nhiệt bàn (°C)</label><input id="tBed" type="number" min="0" inputmode="numeric" placeholder="tự theo file"></div>
       </div>
-      <div style="position:relative;margin-top:14px">
-        <i class="bi bi-search" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--ink-faint);font-size:14px"></i>
+      <div style="position:relative;margin-top:14px;z-index:20">
+        <i class="bi bi-search" style="position:absolute;left:11px;top:19px;transform:translateY(-50%);color:var(--ink-faint);font-size:14px;pointer-events:none"></i>
         <input id="tSearch" placeholder="Tìm nhanh thẻ (gõ tên môn)…" autocomplete="off" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 11px 9px 34px;background:var(--surface-2);color:var(--ink);font-size:14px">
+        <div id="tSug" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);max-height:300px;overflow-y:auto;background:var(--surface,#fff);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
       </div>
       <div style="display:flex;gap:8px;margin:12px 0 6px;font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em">
         <span style="flex:2">Thẻ</span><span style="width:96px">Giờ in</span><span style="width:84px">Số lượng</span><span style="width:34px"></span>
@@ -749,13 +757,34 @@ function loadTagMachines(){ fetch("/quan-ly-in/may").then(function(r){return r.j
   syncNozzleFromMachine();
 }).catch(function(){}); }
 function syncNozzleFromMachine(){ var m=MAYS.filter(function(x){return x.id===$("tMay").value;})[0]; if(m&&m.dau_phun){ $("tDauPhun").value=m.dau_phun; rebuildTagRows(); } }
+function dnorm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/đ/g,"d"); }
 function tagMatch(m){ if((m.dau_phun||"")!==$("tDauPhun").value) return false;
-  var q=(($("tSearch")||{}).value||"").toLowerCase().trim(); if(!q) return true;
-  return ((m.ten||"")+" "+(m.nhom||"")+" "+(m.mon||"")).toLowerCase().indexOf(q)>=0; }
+  var q=dnorm((($("tSearch")||{}).value||"").trim()); if(!q) return true;
+  return dnorm((m.ten||"")+" "+(m.nhom||"")+" "+(m.mon||"")).indexOf(q)>=0; }
 function tagOptionsHTML(selId){ var list=FILES.filter(function(m){ return tagMatch(m)||m.id===selId; });
   return '<option value="">— chọn thẻ —</option>'+list.map(function(m){
   return '<option value="'+m.id+'"'+(m.id===selId?" selected":"")+'>'+esc(m.ten)+(m.nhom?" ("+esc(m.nhom)+")":"")+(m.phut?" · "+m.phut+"ph/thẻ":"")+'</option>'; }).join(""); }
 function applyTagFilter(){ document.querySelectorAll("#tRows .tsel").forEach(function(sel){ var cur=sel.value; sel.innerHTML=tagOptionsHTML(cur); sel.value=cur; }); }
+var SUG=[], sugActive=-1;
+function renderSug(){ var box=$("tSug"), q=($("tSearch").value||"").trim();
+  if(!q){ box.style.display="none"; box.innerHTML=""; SUG=[]; sugActive=-1; return; }
+  SUG=FILES.filter(tagMatch).slice(0,12);
+  if(!SUG.length){ box.innerHTML='<div class="sugempty">Không có thẻ nào khớp (đầu phun '+esc($("tDauPhun").value)+')</div>'; box.style.display="block"; sugActive=-1; return; }
+  box.innerHTML=SUG.map(function(m,i){ return '<div class="sugit" data-i="'+i+'">'
+    +'<span class="sugname">'+esc(m.ten)+'</span>'
+    +(m.nhom?'<span class="sugnhom">'+esc(m.nhom)+'</span>':'')
+    +(m.phut?'<span class="sugmeta">'+m.phut+'ph/thẻ'+(m.max_khay?' · '+m.max_khay+' thẻ/khay':'')+'</span>':'')
+    +'</div>'; }).join("");
+  box.style.display="block"; sugActive=-1; }
+function sugHi(d){ var items=$("tSug").querySelectorAll(".sugit"); if(!items.length) return;
+  sugActive=(sugActive+d+items.length)%items.length;
+  items.forEach(function(el,i){ el.classList.toggle("on",i===sugActive); if(i===sugActive) el.scrollIntoView({block:"nearest"}); }); }
+function pickSug(i){ var m=SUG[i]; if(!m) return;
+  var tgt=null, rows=document.querySelectorAll("#tRows .trow");
+  for(var k=0;k<rows.length;k++){ if(!rows[k].querySelector(".tsel").value){ tgt=rows[k].querySelector(".tsel"); break; } }
+  if(tgt){ tgt.value=m.id; } else { addTagRow(m.id); }
+  $("tSearch").value=""; applyTagFilter(); renderSug(); updateEstimate();
+  toast("Đã thêm thẻ: "+m.ten); $("tSearch").focus(); }
 function addTagRow(selId,qty){ var wrap=document.createElement("div"); wrap.className="trow"; wrap.style.cssText="display:flex;gap:8px;margin-bottom:8px;align-items:center";
   var inp="border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface-2);color:var(--ink)";
   wrap.innerHTML='<select class="tsel" style="flex:2;'+inp+'">'+tagOptionsHTML(selId)+'</select>'
@@ -788,7 +817,15 @@ function updateEstimate(){ var box=$("tEstimate");
 $("tDauPhun").addEventListener("change",rebuildTagRows);
 $("tMay").addEventListener("change",syncNozzleFromMachine);
 $("tAddRow").addEventListener("click",function(){ addTagRow(); });
-$("tSearch").addEventListener("input",applyTagFilter);
+$("tSearch").addEventListener("input",function(){ applyTagFilter(); renderSug(); });
+$("tSearch").addEventListener("focus",renderSug);
+$("tSearch").addEventListener("keydown",function(e){
+  if(e.key==="ArrowDown"){ e.preventDefault(); sugHi(1); }
+  else if(e.key==="ArrowUp"){ e.preventDefault(); sugHi(-1); }
+  else if(e.key==="Enter"){ if($("tSug").style.display!=="none"&&SUG.length){ e.preventDefault(); pickSug(sugActive>=0?sugActive:0); } }
+  else if(e.key==="Escape"){ $("tSug").style.display="none"; } });
+$("tSug").addEventListener("mousedown",function(e){ var it=e.target.closest(".sugit"); if(it){ e.preventDefault(); pickSug(+it.getAttribute("data-i")); } });
+document.addEventListener("click",function(e){ if(!e.target.closest("#tSug")&&e.target!==$("tSearch")) $("tSug").style.display="none"; });
 $("tXuat").addEventListener("click",function(){
   var row=document.querySelector("#tRows .trow"); var fid=row?row.querySelector(".tsel").value:"";
   if(!fid){ toast("Chọn thẻ (dòng đầu)",true); return; }
