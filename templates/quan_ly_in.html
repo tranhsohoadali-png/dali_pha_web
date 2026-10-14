@@ -761,7 +761,7 @@ function loadTagMachines(){ fetch("/quan-ly-in/may").then(function(r){return r.j
   if(cur&&Array.prototype.some.call(sel.options,function(o){return o.value===cur;})) sel.value=cur;  // giữ máy cũ nếu còn, không thì để option đầu
   syncNozzleFromMachine();
 }).catch(function(){}); }
-function syncNozzleFromMachine(){ var m=MAYS.filter(function(x){return x.id===$("tMay").value;})[0]; if(m&&m.dau_phun){ $("tDauPhun").value=m.dau_phun; rebuildTagRows(); } }
+function syncNozzleFromMachine(){ var m=MAYS.filter(function(x){return x.id===$("tMay").value;})[0]; if(m&&m.dau_phun){ $("tDauPhun").value=m.dau_phun; rebuildTagRows(); if(typeof applyNhietForNozzle==="function") applyNhietForNozzle(); } }
 function dnorm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/đ/g,"d"); }
 function tagMatch(m){ if((m.dau_phun||"")!==$("tDauPhun").value) return false;
   var q=dnorm((($("tSearch")||{}).value||"").trim()); if(!q) return true;
@@ -801,8 +801,8 @@ function addTagRow(selId,qty){ var wrap=document.createElement("div"); wrap.clas
   function fromGio(){ var m=FILES.filter(function(x){return x.id===sel.value;})[0], h=parseFloat(gio.value)||0;
     if(m&&m.phut>0&&h>0){ qel.value=Math.max(1,Math.round(h*60/m.phut)); } updateEstimate(); }
   sel.addEventListener("change",function(){
-    var mm=FILES.filter(function(x){return x.id===sel.value;})[0];
-    if(mm){ if(mm.nhiet){ if(!$("tThan").value) $("tThan").value=mm.nhiet; if(!$("tChu").value) $("tChu").value=mm.nhiet; } if(mm.bed&&!$("tBed").value) $("tBed").value=mm.bed; }
+    // KHÔNG prefill nhiệt từ thẻ: để trống = backend giữ nhiệt per-filament gốc của file (đúng);
+    // điền 1 giá trị cho cả thân+chữ sẽ ghi sai khi file có thân≠chữ. Nhiệt lấy từ "Lưu nhiệt mặc định" hoặc nhập tay.
     if(gio.value) fromGio(); else updateEstimate();
   });
   gio.addEventListener("input",fromGio);
@@ -828,8 +828,11 @@ var CATSET=[];
 function loadCatSettings(){ fetch("/quan-ly-in/cat-settings").then(function(r){return r.json();})
   .then(function(r){ CATSET=(r&&r.items)||[]; applyNhietForNozzle(); }).catch(function(){}); }
 function applyNhietForNozzle(){ var dp=$("tDauPhun").value;
-  var s=CATSET.filter(function(x){return x.dau_phun===dp;})[0]; if(!s) return;
-  if(s.than) $("tThan").value=s.than; if(s.chu) $("tChu").value=s.chu; if(s.bed) $("tBed").value=s.bed; }
+  var s=CATSET.filter(function(x){return x.dau_phun===dp;})[0]||{};
+  // LUÔN đặt lại cả 3 ô theo đầu phun đang chọn (trống = theo file) — tránh giữ nhiệt của đầu phun cũ -> xuất sai.
+  $("tThan").value=(s.than>0)?s.than:"";
+  $("tChu").value =(s.chu>0) ?s.chu :"";
+  $("tBed").value =(s.bed>0) ?s.bed :""; }
 $("tLuuNhiet").addEventListener("click",function(){
   var dp=$("tDauPhun").value, b=$("tLuuNhiet");
   var payload={dau_phun:dp, than:parseInt($("tThan").value,10)||0, chu:parseInt($("tChu").value,10)||0, bed:parseInt($("tBed").value,10)||0};
