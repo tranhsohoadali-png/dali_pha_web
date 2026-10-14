@@ -167,6 +167,7 @@ def file_them(request):
         for chunk in up.chunks():
             f.write(chunk)
     conf = _read_3mf_config(os.path.join(_files_dir(), fname))   # tự đọc cấu hình trong .3mf
+    _th, _ch, _bd = _read_than_chu_temp(os.path.join(_files_dir(), fname))   # nhiệt thân/chữ riêng
     dp = (request.POST.get('dau_phun') or conf.get('nozzle') or '').strip()
     rec = {
         'id': fid, 'ten': ten[:120],
@@ -177,7 +178,8 @@ def file_them(request):
         'dau_phun': dp if dp in DAU_PHUN else dp[:6],
         'phut': _toint(request.POST.get('phut')), 'nhua': _tofloat(request.POST.get('nhua')),
         'con': _toint(request.POST.get('con')), 'mau': (request.POST.get('mau') or '').strip()[:40],
-        'nhiet': conf.get('nhiet', ''), 'bed': conf.get('bed', ''),
+        'nhiet': conf.get('nhiet', ''), 'bed': _bd or conf.get('bed', ''),
+        'nhiet_than': _th, 'nhiet_chu': _ch,
         'lop': conf.get('lop', ''), 'nhua_loai': conf.get('nhua_loai', ''),
         'so_the': _toint(request.POST.get('so_the')), 'max_khay': _toint(request.POST.get('max_khay')),
         'ghi_chu': (request.POST.get('ghi_chu') or '').strip()[:300],
@@ -207,7 +209,7 @@ def file_sua(request):
                 dp = str(d['dau_phun']).strip()
                 it['dau_phun'] = dp if dp in DAU_PHUN else dp[:6]
             it['ghi_chu'] = (d.get('ghi_chu') or '').strip()[:300]
-            for k in ('phut', 'con', 'nhiet', 'bed', 'so_the', 'max_khay'):
+            for k in ('phut', 'con', 'nhiet', 'bed', 'so_the', 'max_khay', 'nhiet_than', 'nhiet_chu'):
                 if k in d:
                     it[k] = _toint(d.get(k))
             if 'nhua' in d:
@@ -637,6 +639,36 @@ def _read_3mf_config(path):
     except Exception:
         pass
     return out
+
+
+def _read_than_chu_temp(path):
+    """Đọc nhiệt vòi THÂN/CHỮ + bàn từ .3mf theo index cuộn (thân=extruder2, chữ=extruder1).
+    Trả (than, chu, bed) int hoặc ''. Lỗi/không phải .3mf -> ('','','')."""
+    import zipfile
+    than = chu = bed = ''
+    try:
+        with zipfile.ZipFile(path) as z:
+            names = z.namelist()
+            pn = next((n for n in names if n.endswith('project_settings.config')), None)
+            if not pn:
+                return than, chu, bed
+            cfg = json.loads(z.read(pn).decode('utf-8', 'ignore'))
+            nt = cfg.get('nozzle_temperature') or []
+            mn = next((n for n in names if n.endswith('model_settings.config')), None)
+            ms = z.read(mn).decode('utf-8', 'ignore') if mn else ''
+            th_idx, ch_idx = _than_chu_idx(ms)
+
+            def gi(arr, i):
+                try:
+                    return int(float(arr[i])) if isinstance(arr, list) and 0 <= i < len(arr) else ''
+                except Exception:
+                    return ''
+            than, chu = gi(nt, th_idx), gi(nt, ch_idx)
+            bt = cfg.get('hot_plate_temp') or cfg.get('textured_plate_temp') or []
+            bed = gi(bt, 0)
+    except Exception:
+        pass
+    return than, chu, bed
 
 
 @staff_required
@@ -1186,12 +1218,18 @@ def xuat_file(request):
         return JsonResponse({'ok': False, 'error': 'Các thẻ khác ĐẦU PHUN nhau (%s) — 1 file chỉ 1 đầu phun.'
                              % '/'.join(sorted(dp_set))}, status=400)
     want = sum(q for _, q, _ in specs)
-    t_than = _toint(request.GET.get('t_than'))
-    t_chu = _toint(request.GET.get('t_chu'))
-    t_bed = _toint(request.GET.get('bed'))
+    # Nhiệt vòi THÂN/CHỮ lấy từ CHÍNH THẺ (mỗi thẻ có nhiệt riêng, sửa ở Thư viện file in).
+    # Chỉ áp khi xuất 1 loại thẻ (để không áp nhầm nhiệt thẻ này lên thẻ khác khi trộn);
+    # trộn nhiều loại -> giữ nhiệt gốc trong từng file.
+    t_than = t_chu = t_bed = None
+    if len(rows) == 1:
+        bf = next((x for x in lib if x.get('id') == rows[0][0]), None)
+        if bf:
+            t_than = _toint(bf.get('nhiet_than')) or None
+            t_chu = _toint(bf.get('nhiet_chu')) or None
+            t_bed = _toint(bf.get('bed')) or None
     try:
-        data, got, chi_tiet = _merge_3mf_bytes(specs, t_than=t_than or None,
-                                               t_chu=t_chu or None, t_bed=t_bed or None)
+        data, got, chi_tiet = _merge_3mf_bytes(specs, t_than=t_than, t_chu=t_chu, t_bed=t_bed)
     except Exception as e:
         return JsonResponse({'ok': False, 'error': 'Lỗi tạo file: %s' % str(e)[:140]}, status=500)
     if got < want:   # tràn sức chứa 1 khay -> KHÔNG xuất file thiếu thẻ (báo rõ thay vì âm thầm bỏ)
@@ -1207,38 +1245,6 @@ def xuat_file(request):
     resp['Content-Disposition'] = "attachment; filename*=UTF-8''%s" % quote(fn)
     resp['X-So-The'] = str(got)
     return resp
-
-
-# ============================ NHIỆT MẶC ĐỊNH (lưu theo đầu phun) ============================
-# Lưu nhiệt vòi thân/chữ + nhiệt bàn mặc định theo ĐẦU PHUN để lần sau tự điền (khỏi nhập lại).
-# File media/print/cat_settings.json = list [{dau_phun, than, chu, bed}].
-_CATSET = 'cat_settings.json'
-
-
-@staff_required
-def cat_settings(request):
-    return JsonResponse({'ok': True, 'items': _load(_CATSET)})
-
-
-@staff_required
-def cat_settings_luu(request):
-    if request.method != 'POST':
-        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
-    d = _body(request)
-    dp = (d.get('dau_phun') or '').strip()
-    if not dp:
-        return JsonResponse({'ok': False, 'error': 'Thiếu đầu phun.'}, status=400)
-    rec = {'dau_phun': dp, 'than': _toint(d.get('than')), 'chu': _toint(d.get('chu')),
-           'bed': _toint(d.get('bed'))}
-    items = _load(_CATSET)
-    for i, it in enumerate(items):
-        if it.get('dau_phun') == dp:
-            items[i] = rec
-            break
-    else:
-        items.append(rec)
-    _save(_CATSET, items)
-    return JsonResponse({'ok': True, 'item': rec})
 
 
 # ============================ BẢO TRÌ MÁY ============================

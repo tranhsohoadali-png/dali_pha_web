@@ -230,8 +230,6 @@ urlpatterns = [
     # Cắt & gửi máy (gộp trong Thư viện file in): agent dùng Bambu Studio CLI
     path('quan-ly-in/slice-in', xuongin_views.slice_in, name='xin_slice_in'),
     path('quan-ly-in/xuat-file', xuongin_views.xuat_file, name='xin_xuat_file'),
-    path('quan-ly-in/cat-settings', xuongin_views.cat_settings, name='xin_cat_settings'),
-    path('quan-ly-in/cat-settings-luu', xuongin_views.cat_settings_luu, name='xin_cat_settings_luu'),
     # Bảo trì máy: trạng thái + bước (chu kỳ) + ghi bảo trì + lịch sử
     path('quan-ly-in/bt', xuongin_views.bt_trangthai, name='xin_bt'),
     path('quan-ly-in/bt-buoc', xuongin_views.bt_buoc_ds, name='xin_bt_buoc'),

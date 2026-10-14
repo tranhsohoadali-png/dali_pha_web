@@ -261,14 +261,8 @@
       <div class="frm">
         <div class="fld"><label>Máy in</label><select id="tMay"></select></div>
         <div class="fld"><label>Đầu phun</label><select id="tDauPhun"><option value="0.2">0.2</option><option value="0.4">0.4</option></select></div>
-        <div class="fld"><label>Nhiệt vòi · thân (°C)</label><input id="tThan" type="number" min="0" inputmode="numeric" placeholder="tự theo file"></div>
-        <div class="fld"><label>Nhiệt vòi · chữ (°C)</label><input id="tChu" type="number" min="0" inputmode="numeric" placeholder="tự theo file"></div>
-        <div class="fld"><label>Nhiệt bàn (°C)</label><input id="tBed" type="number" min="0" inputmode="numeric" placeholder="tự theo file"></div>
       </div>
-      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <button type="button" class="btn sm" id="tLuuNhiet"><i class="bi bi-save"></i> Lưu nhiệt mặc định</button>
-        <span id="tNhietHint" style="font-size:12px;color:var(--ink-faint)">Lưu nhiệt thân/chữ/bàn theo <b>đầu phun</b> — lần sau tự điền, khỏi nhập lại.</span>
-      </div>
+      <div style="font-size:12px;color:var(--ink-faint);margin-top:8px"><i class="bi bi-thermometer-half"></i> Nhiệt vòi thân/chữ in theo <b>từng thẻ</b> — sửa ở mục "Sửa thông tin" của thẻ bên dưới (Thư viện file in).</div>
       <div style="position:relative;margin-top:14px;z-index:20">
         <i class="bi bi-search" style="position:absolute;left:11px;top:19px;transform:translateY(-50%);color:var(--ink-faint);font-size:14px;pointer-events:none"></i>
         <input id="tSearch" placeholder="Tìm nhanh thẻ (gõ tên môn)…" autocomplete="off" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 11px 9px 34px;background:var(--surface-2);color:var(--ink);font-size:14px">
@@ -298,6 +292,9 @@
         <div class="fld"><label>Phút / thẻ</label><input id="fPhut" type="number" min="0" inputmode="numeric" placeholder="phút"></div>
         <div class="fld"><label>Nhựa (g) / thẻ</label><input id="fNhua" type="number" min="0" step="0.1" inputmode="decimal" placeholder="gam"></div>
         <div class="fld"><label>Số thẻ / file</label><input id="fCon" type="number" min="0" inputmode="numeric" placeholder="thẻ"></div>
+        <div class="fld"><label>Nhiệt vòi · thân (°C)</label><input id="fThan" type="number" min="0" inputmode="numeric" placeholder="tự đọc file"></div>
+        <div class="fld"><label>Nhiệt vòi · chữ (°C)</label><input id="fChu" type="number" min="0" inputmode="numeric" placeholder="tự đọc file"></div>
+        <div class="fld"><label>Nhiệt bàn (°C)</label><input id="fBed" type="number" min="0" inputmode="numeric" placeholder="tự đọc file"></div>
         <div class="fld"><label>Màu gợi ý</label><input id="fMau" placeholder="VD: Xanh dương" autocomplete="off"></div>
         <div class="fld wide"><label>Ghi chú</label><input id="fGhiChu" placeholder="Đầu phun, tốc độ, lưu ý…" autocomplete="off"></div>
         <div class="act">
@@ -511,7 +508,9 @@ function renderFile(){
       if(f.dau_phun) tags+='<span class="mtag">đầu <b>'+esc(f.dau_phun)+'</b></span>';
       if(f.phut) tags+='<span class="mtag"><b>'+f.phut+'</b> ph/thẻ</span>';
       if(f.nhua) tags+='<span class="mtag"><b>'+f.nhua+'</b> g/thẻ</span>';
-      if(f.nhiet) tags+='<span class="mtag"><b>'+f.nhiet+'</b>° vòi</span>';
+      if(f.nhiet_than||f.nhiet_chu) tags+='<span class="mtag">vòi <b>'+(f.nhiet_than||f.nhiet||"?")+'</b>/<b>'+(f.nhiet_chu||f.nhiet||"?")+'</b>° thân/chữ</span>';
+      else if(f.nhiet) tags+='<span class="mtag"><b>'+f.nhiet+'</b>° vòi</span>';
+      if(f.bed) tags+='<span class="mtag"><b>'+f.bed+'</b>° bàn</span>';
       if(f.nhua_loai) tags+='<span class="mtag">'+esc(f.nhua_loai)+'</span>';
       if(f.so_the||f.con) tags+='<span class="mtag"><b>'+(f.so_the||f.con)+'</b> thẻ/file</span>';
       if(f.mau) tags+='<span class="mtag">'+esc(f.mau)+'</span>';
@@ -534,16 +533,18 @@ function editFile(f){ fEdit=f.id; $("fFormTitle").textContent="Sửa thông tin:
   $("fFileWrap").classList.add("hidden");
   $("fNhom").value=f.nhom||""; $("fTen").value=f.ten||""; $("fPhut").value=f.phut||"";
   $("fNhua").value=f.nhua||""; $("fCon").value=f.so_the||f.con||""; $("fMau").value=f.mau||""; $("fGhiChu").value=f.ghi_chu||""; $("fDauPhun").value=f.dau_phun||"";
+  $("fThan").value=f.nhiet_than||""; $("fChu").value=f.nhiet_chu||""; $("fBed").value=f.bed||"";
   $("fSave").innerHTML='<i class="bi bi-save"></i> Lưu sửa'; $("fCancel").classList.remove("hidden");
   window.scrollTo({top:0,behavior:"smooth"}); }
 function resetFileForm(){ fEdit=""; $("fFormTitle").textContent="Thêm file in"; $("fFileWrap").classList.remove("hidden");
-  ["fFile","fTen","fPhut","fNhua","fCon","fMau","fGhiChu"].forEach(function(i){$(i).value="";}); $("fDauPhun").value="";
+  ["fFile","fTen","fPhut","fNhua","fCon","fMau","fGhiChu","fThan","fChu","fBed"].forEach(function(i){$(i).value="";}); $("fDauPhun").value="";
   $("fSave").innerHTML='<i class="bi bi-cloud-arrow-up"></i> Tải lên'; $("fCancel").classList.add("hidden"); }
 $("fCancel").addEventListener("click",resetFileForm);
 $("fSave").addEventListener("click",function(){
   if(fEdit){
     postJSON("/quan-ly-in/file-sua",{id:fEdit,ten:$("fTen").value.trim(),nhom:$("fNhom").value.trim(),dau_phun:$("fDauPhun").value,
-      phut:$("fPhut").value,nhua:$("fNhua").value,con:$("fCon").value,so_the:$("fCon").value,mau:$("fMau").value.trim(),ghi_chu:$("fGhiChu").value.trim()})
+      phut:$("fPhut").value,nhua:$("fNhua").value,con:$("fCon").value,so_the:$("fCon").value,mau:$("fMau").value.trim(),ghi_chu:$("fGhiChu").value.trim(),
+      nhiet_than:$("fThan").value,nhiet_chu:$("fChu").value,bed:$("fBed").value})
      .then(function(r){ if(!r.ok){toast(r.error||"Lỗi",true);return;} toast("Đã lưu thông tin"); resetFileForm(); loadFile(); });
     return;
   }
@@ -761,7 +762,7 @@ function loadTagMachines(){ fetch("/quan-ly-in/may").then(function(r){return r.j
   if(cur&&Array.prototype.some.call(sel.options,function(o){return o.value===cur;})) sel.value=cur;  // giữ máy cũ nếu còn, không thì để option đầu
   syncNozzleFromMachine();
 }).catch(function(){}); }
-function syncNozzleFromMachine(){ var m=MAYS.filter(function(x){return x.id===$("tMay").value;})[0]; if(m&&m.dau_phun){ $("tDauPhun").value=m.dau_phun; rebuildTagRows(); if(typeof applyNhietForNozzle==="function") applyNhietForNozzle(); } }
+function syncNozzleFromMachine(){ var m=MAYS.filter(function(x){return x.id===$("tMay").value;})[0]; if(m&&m.dau_phun){ $("tDauPhun").value=m.dau_phun; rebuildTagRows(); } }
 function dnorm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/đ/g,"d"); }
 function tagMatch(m){ if((m.dau_phun||"")!==$("tDauPhun").value) return false;
   var q=dnorm((($("tSearch")||{}).value||"").trim()); if(!q) return true;
@@ -820,28 +821,10 @@ function updateEstimate(){ var box=$("tEstimate");
     totMin+=(m.phut||0)*qty; totG+=(m.nhua||0)*qty; totN+=qty;
     if(m.max_khay&&qty>m.max_khay) warn+=' ⚠ '+esc(m.ten)+' > '+m.max_khay+'/khay (chia nhiều khay).'; });
   box.innerHTML= totN? ('<i class="bi bi-calculator"></i> Ước tính: <b>'+totN+'</b> thẻ · ~<b>'+fmtMinFull(totMin)+'</b> · ~<b>'+(Math.round(totG*10)/10)+'</b> g nhựa.'+(warn?'<span style="color:var(--amber)">'+warn+'</span>':'')) : 'Chọn thẻ + số lượng để xem ước tính.'; }
-$("tDauPhun").addEventListener("change",function(){ rebuildTagRows(); applyNhietForNozzle(); });
+$("tDauPhun").addEventListener("change",rebuildTagRows);
 $("tMay").addEventListener("change",syncNozzleFromMachine);
 $("tAddRow").addEventListener("click",function(){ addTagRow(); });
-/* ---------- Nhiệt mặc định theo đầu phun (lưu server, tự điền lần sau) ---------- */
-var CATSET=[];
-function loadCatSettings(){ fetch("/quan-ly-in/cat-settings").then(function(r){return r.json();})
-  .then(function(r){ CATSET=(r&&r.items)||[]; applyNhietForNozzle(); }).catch(function(){}); }
-function applyNhietForNozzle(){ var dp=$("tDauPhun").value;
-  var s=CATSET.filter(function(x){return x.dau_phun===dp;})[0]||{};
-  // LUÔN đặt lại cả 3 ô theo đầu phun đang chọn (trống = theo file) — tránh giữ nhiệt của đầu phun cũ -> xuất sai.
-  $("tThan").value=(s.than>0)?s.than:"";
-  $("tChu").value =(s.chu>0) ?s.chu :"";
-  $("tBed").value =(s.bed>0) ?s.bed :""; }
-$("tLuuNhiet").addEventListener("click",function(){
-  var dp=$("tDauPhun").value, b=$("tLuuNhiet");
-  var payload={dau_phun:dp, than:parseInt($("tThan").value,10)||0, chu:parseInt($("tChu").value,10)||0, bed:parseInt($("tBed").value,10)||0};
-  b.disabled=true;
-  postJSON("/quan-ly-in/cat-settings-luu",payload).then(function(r){ b.disabled=false;
-    if(!r.ok){ toast(r.error||"Lỗi lưu",true); return; }
-    var i=-1; CATSET.forEach(function(x,k){ if(x.dau_phun===dp) i=k; }); if(i>=0) CATSET[i]=r.item; else CATSET.push(r.item);
-    toast("Đã lưu nhiệt mặc định cho đầu phun "+dp+" (thân "+(r.item.than||"—")+"/chữ "+(r.item.chu||"—")+"/bàn "+(r.item.bed||"—")+")"); })
-    .catch(function(){ b.disabled=false; toast("Lỗi lưu",true); }); });
+/* Nhiệt vòi thân/chữ in theo TỪNG THẺ (sửa ở mục Sửa thông tin của thẻ) — không còn nhiệt chung ở đây. */
 $("tSearch").addEventListener("input",function(){ applyTagFilter(); renderSug(); });
 $("tSearch").addEventListener("focus",renderSug);
 $("tSearch").addEventListener("keydown",function(e){
@@ -857,9 +840,7 @@ $("tXuat").addEventListener("click",function(){
     var qty=parseInt(w.querySelector(".tqty").value,10)||0; if(qty<1) qty=1;   // đã chọn thẻ = ít nhất 1 (khớp backend)
     qs.push("f="+encodeURIComponent(id)+"&q="+qty); totN+=qty; nloai++; });
   if(!qs.length){ toast("Chọn ít nhất 1 thẻ",true); return; }
-  var th=parseInt($("tThan").value,10)||0, ch=parseInt($("tChu").value,10)||0, bd=parseInt($("tBed").value,10)||0;
-  if(th>0) qs.push("t_than="+th); if(ch>0) qs.push("t_chu="+ch); if(bd>0) qs.push("bed="+bd);
-  toast("Đang tạo file tải về… ("+totN+" thẻ"+(nloai>1?", "+nloai+" loại trộn":"")+(th||ch?", nhiệt thân "+(th||"file")+"/chữ "+(ch||"file"):"")+")");
+  toast("Đang tạo file tải về… ("+totN+" thẻ"+(nloai>1?", "+nloai+" loại trộn":"")+")");
   var btn=$("tXuat"); btn.disabled=true;
   fetch("/quan-ly-in/xuat-file?"+qs.join("&")).then(function(r){
     if(!r.ok){ return r.json().then(function(j){ throw new Error((j&&j.error)||"Lỗi tạo file"); }); }
@@ -876,8 +857,7 @@ $("tSend").addEventListener("click",function(){
     var qel=w.querySelector(".tqty"); items.push({model_id:id,so_luong:qel?(parseInt(qel.value,10)||0):0}); });
   if(!items.length){ toast("Chọn ít nhất 1 thẻ",true); return; }
   if(!items.some(function(x){return x.so_luong;})){ toast("Nhập giờ in hoặc số lượng",true); return; }
-  var th=parseInt($("tThan").value,10)||0, ch=parseInt($("tChu").value,10)||0;
-  var payload={may_id:may,dau_phun:$("tDauPhun").value,items:items,t_than:th,t_chu:ch,nhiet_do:th||ch||0,bed_nhiet:parseInt($("tBed").value,10)||0};
+  var payload={may_id:may,dau_phun:$("tDauPhun").value,items:items};
   $("tSend").disabled=true;
   postJSON("/quan-ly-in/slice-in",payload).then(function(r){ $("tSend").disabled=false;
     if(!r.ok){ toast(r.error||"Lỗi",true); return; }
@@ -954,7 +934,6 @@ loadMay();
 loadFile();
 loadJob();
 loadKhoSuggest();
-loadCatSettings();
 </script>
 <script>
 /* ---------- PWA: app "Xưởng in" (cài màn hình chính) ---------- */
