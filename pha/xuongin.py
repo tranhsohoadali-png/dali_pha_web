@@ -1209,6 +1209,38 @@ def xuat_file(request):
     return resp
 
 
+# ============================ NHIỆT MẶC ĐỊNH (lưu theo đầu phun) ============================
+# Lưu nhiệt vòi thân/chữ + nhiệt bàn mặc định theo ĐẦU PHUN để lần sau tự điền (khỏi nhập lại).
+# File media/print/cat_settings.json = list [{dau_phun, than, chu, bed}].
+_CATSET = 'cat_settings.json'
+
+
+@staff_required
+def cat_settings(request):
+    return JsonResponse({'ok': True, 'items': _load(_CATSET)})
+
+
+@staff_required
+def cat_settings_luu(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST'}, status=405)
+    d = _body(request)
+    dp = (d.get('dau_phun') or '').strip()
+    if not dp:
+        return JsonResponse({'ok': False, 'error': 'Thiếu đầu phun.'}, status=400)
+    rec = {'dau_phun': dp, 'than': _toint(d.get('than')), 'chu': _toint(d.get('chu')),
+           'bed': _toint(d.get('bed'))}
+    items = _load(_CATSET)
+    for i, it in enumerate(items):
+        if it.get('dau_phun') == dp:
+            items[i] = rec
+            break
+    else:
+        items.append(rec)
+    _save(_CATSET, items)
+    return JsonResponse({'ok': True, 'item': rec})
+
+
 # ============================ BẢO TRÌ MÁY ============================
 # Theo dõi bảo trì từng máy: danh sách BƯỚC (mỗi bước có chu kỳ ngày) + GHI bảo trì (tích
 # bước đã làm) -> biết máy nào bảo trì bao giờ, bao lâu rồi chưa, bước nào quá hạn (tránh
