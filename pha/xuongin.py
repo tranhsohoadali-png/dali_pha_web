@@ -1059,6 +1059,18 @@ def _merge_3mf_bytes(specs, t_than=None, t_chu=None, t_bed=None):
                 ps[k] = newv
             ps['filament_colour'] = list(merged_cols)
             ps['filament_self_index'] = [str(j + 1) for j in range(Nf)]
+            # nới khoá cấu trúc [process, filament×NB, printer] (dài NB+2) -> Nf+2.
+            # THIẾU mục filament mới ở đây làm Bambu SLICE TREO (file mở được nhưng cắt không ra).
+            for k in ('different_settings_to_system', 'inherits_group'):
+                v = ps.get(k)
+                if isinstance(v, list) and len(v) == NB + 2:
+                    head, tail = v[:1 + NB], v[1 + NB:]
+                    ins = []
+                    for (mi, si, l) in added:
+                        sv = (spec_ps[si] or {}).get(k)
+                        ins.append(sv[1 + l] if isinstance(sv, list) and 1 + l < len(sv) - 1
+                                   else (head[-1] if len(head) > 1 else ''))
+                    ps[k] = head + ins + tail
             ps.pop('flush_volumes_matrix', None)
             ps.pop('flush_volumes_vector', None)
             out_members[ps_name] = _json.dumps(ps, ensure_ascii=False, indent=4)
@@ -1129,23 +1141,6 @@ def _merge_3mf_bytes(specs, t_than=None, t_chu=None, t_bed=None):
     return buf.getvalue(), len(keep), chi_tiet
 
 
-def _spec_colors(src):
-    """Đọc filament_colour (chữ hoa, bỏ khoảng trắng) của 1 file .3mf — để biết trộn có sinh thêm màu không."""
-    import json as _j
-    try:
-        zf = zipfile.ZipFile(src)
-        try:
-            for n in zf.namelist():
-                if n.endswith('project_settings.config'):
-                    d = _j.loads(zf.read(n).decode('utf-8'))
-                    return [(c or '').strip().upper() for c in (d.get('filament_colour') or [])]
-        finally:
-            zf.close()
-    except Exception:
-        pass
-    return []
-
-
 @staff_required
 def xuat_file(request):
     """Xuất .3mf để TẢI VỀ (không cần máy in) với đúng số lượng — TRỘN được NHIỀU loại thẻ vào 1 file.
@@ -1190,17 +1185,6 @@ def xuat_file(request):
     if len(dp_set) > 1:
         return JsonResponse({'ok': False, 'error': 'Các thẻ khác ĐẦU PHUN nhau (%s) — 1 file chỉ 1 đầu phun.'
                              % '/'.join(sorted(dp_set))}, status=400)
-    # CHẶN AN TOÀN: trộn thẻ KHÁC MÀU (>2 màu) hiện làm Bambu TREO khi cắt (lỗi gộp màu đang sửa).
-    # Thẻ 1 loại hoặc nhiều thẻ CÙNG MÀU vẫn cắt tốt -> cho qua.
-    if len(specs) > 1:
-        allcols = set()
-        for src, _, _ in specs:
-            allcols.update(c for c in _spec_colors(src) if c)
-        if len(allcols) > 2:
-            return JsonResponse({'ok': False, 'error':
-                                 'Hiện chưa trộn được các thẻ KHÁC MÀU vào 1 file (file in bị treo khi cắt — '
-                                 'đang sửa). Tạm thời: xuất riêng từng loại, hoặc chỉ trộn các thẻ CÙNG MÀU.'},
-                                status=400)
     want = sum(q for _, q, _ in specs)
     t_than = _toint(request.GET.get('t_than'))
     t_chu = _toint(request.GET.get('t_chu'))
