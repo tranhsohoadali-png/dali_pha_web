@@ -261,7 +261,8 @@
       <div class="frm">
         <div class="fld"><label>Máy in</label><select id="tMay"></select></div>
         <div class="fld"><label>Đầu phun</label><select id="tDauPhun"><option value="0.2">0.2</option><option value="0.4">0.4</option></select></div>
-        <div class="fld"><label>Nhiệt vòi (°C)</label><input id="tNhiet" type="number" min="0" inputmode="numeric" placeholder="tự theo file"></div>
+        <div class="fld"><label>Nhiệt vòi · thân (°C)</label><input id="tThan" type="number" min="0" inputmode="numeric" placeholder="tự theo file"></div>
+        <div class="fld"><label>Nhiệt vòi · chữ (°C)</label><input id="tChu" type="number" min="0" inputmode="numeric" placeholder="tự theo file"></div>
         <div class="fld"><label>Nhiệt bàn (°C)</label><input id="tBed" type="number" min="0" inputmode="numeric" placeholder="tự theo file"></div>
       </div>
       <div style="position:relative;margin-top:14px;z-index:20">
@@ -797,7 +798,7 @@ function addTagRow(selId,qty){ var wrap=document.createElement("div"); wrap.clas
     if(m&&m.phut>0&&h>0){ qel.value=Math.max(1,Math.round(h*60/m.phut)); } updateEstimate(); }
   sel.addEventListener("change",function(){
     var mm=FILES.filter(function(x){return x.id===sel.value;})[0];
-    if(mm){ if(mm.nhiet&&!$("tNhiet").value) $("tNhiet").value=mm.nhiet; if(mm.bed&&!$("tBed").value) $("tBed").value=mm.bed; }
+    if(mm){ if(mm.nhiet){ if(!$("tThan").value) $("tThan").value=mm.nhiet; if(!$("tChu").value) $("tChu").value=mm.nhiet; } if(mm.bed&&!$("tBed").value) $("tBed").value=mm.bed; }
     if(gio.value) fromGio(); else updateEstimate();
   });
   gio.addEventListener("input",fromGio);
@@ -833,7 +834,9 @@ $("tXuat").addEventListener("click",function(){
     var qty=parseInt(w.querySelector(".tqty").value,10)||0; if(qty<1) qty=1;   // đã chọn thẻ = ít nhất 1 (khớp backend)
     qs.push("f="+encodeURIComponent(id)+"&q="+qty); totN+=qty; nloai++; });
   if(!qs.length){ toast("Chọn ít nhất 1 thẻ",true); return; }
-  toast("Đang tạo file tải về… ("+totN+" thẻ"+(nloai>1?", "+nloai+" loại trộn":"")+")");
+  var th=parseInt($("tThan").value,10)||0, ch=parseInt($("tChu").value,10)||0, bd=parseInt($("tBed").value,10)||0;
+  if(th>0) qs.push("t_than="+th); if(ch>0) qs.push("t_chu="+ch); if(bd>0) qs.push("bed="+bd);
+  toast("Đang tạo file tải về… ("+totN+" thẻ"+(nloai>1?", "+nloai+" loại trộn":"")+(th||ch?", nhiệt thân "+(th||"file")+"/chữ "+(ch||"file"):"")+")");
   var btn=$("tXuat"); btn.disabled=true;
   fetch("/quan-ly-in/xuat-file?"+qs.join("&")).then(function(r){
     if(!r.ok){ return r.json().then(function(j){ throw new Error((j&&j.error)||"Lỗi tạo file"); }); }
@@ -850,7 +853,8 @@ $("tSend").addEventListener("click",function(){
     var qel=w.querySelector(".tqty"); items.push({model_id:id,so_luong:qel?(parseInt(qel.value,10)||0):0}); });
   if(!items.length){ toast("Chọn ít nhất 1 thẻ",true); return; }
   if(!items.some(function(x){return x.so_luong;})){ toast("Nhập giờ in hoặc số lượng",true); return; }
-  var payload={may_id:may,dau_phun:$("tDauPhun").value,items:items,nhiet_do:parseInt($("tNhiet").value,10)||0,bed_nhiet:parseInt($("tBed").value,10)||0};
+  var th=parseInt($("tThan").value,10)||0, ch=parseInt($("tChu").value,10)||0;
+  var payload={may_id:may,dau_phun:$("tDauPhun").value,items:items,t_than:th,t_chu:ch,nhiet_do:th||ch||0,bed_nhiet:parseInt($("tBed").value,10)||0};
   $("tSend").disabled=true;
   postJSON("/quan-ly-in/slice-in",payload).then(function(r){ $("tSend").disabled=false;
     if(!r.ok){ toast(r.error||"Lỗi",true); return; }

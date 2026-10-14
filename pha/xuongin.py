@@ -830,18 +830,77 @@ def _trim_3mf_bytes(src_abs, M):
     return buf.getvalue(), len(keep)
 
 
-def _merge_3mf_bytes(specs):
-    """TRỘN nhiều loại thẻ .3mf (mỗi file là 1 khay cùng template, chỉ khác mesh) thành 1 .3mf —
-    THUẦN PYTHON, không cần slicer. Cách: giữ scaffold của file ĐẦU (các ô lưới sẵn vị trí), cắt
-    tới N ô; với các ô thuộc thẻ khác thì TRÁO con trỏ mesh (p:path) sang mesh của file đó (thêm
-    mesh file mới + relationship) và đổi tên ô theo tên thẻ.
-    specs = [(src_abs, so_luong, ten), ...]  (phần tử đầu = base).
-    Trả (bytes, tong_the, chi_tiet) với chi_tiet=[(ten, so_the_thuc), ...]."""
+def _xml_esc(s):
+    return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+
+
+def _mkuuid(seed):
+    h = '%032x' % (seed & ((1 << 128) - 1))
+    return '%s-%s-%s-%s-%s' % (h[:8], h[8:12], h[12:16], h[16:20], h[20:32])
+
+
+def _reuuid(block, base_seed, attr):
+    cnt = [0]
+
+    def rep(m):
+        cnt[0] += 1
+        return '%s="%s"' % (attr, _mkuuid(base_seed * 1000 + cnt[0]))
+    return re.sub(r'(?<![\w])%s="[^"]*"' % attr, rep, block)
+
+
+def _than_chu_idx(ms_text):
+    """Dò index cuộn nhựa (0-based) cho phần THÂN và phần CHỮ theo tên part -> extruder.
+    Dữ liệu xưởng: part 'The mon hoc' (thân)=extruder 2; part 'Ten mon' (chữ)=extruder 1.
+    Fallback quy ước: thân=cuộn2 (idx1), chữ=cuộn1 (idx0)."""
+    than_ex, chu_ex = None, None
+    mo = re.search(r'<object id="\d+">.*?</object>', ms_text or '', re.S)
+    scope = mo.group(0) if mo else (ms_text or '')
+    for pm in re.finditer(r'<part id="\d+"[^>]*>(.*?)</part>', scope, re.S):
+        body = pm.group(1)
+        nm = re.search(r'key="name" value="([^"]*)"', body)
+        ex = re.search(r'key="extruder" value="(\d+)"', body)
+        if not ex:
+            continue
+        e = int(ex.group(1))
+        name = (nm.group(1) if nm else '').lower()
+        if ('ten' in name) or ('chu' in name) or ('text' in name) or ('name' in name) or ('so ' in name):
+            chu_ex = e
+        else:
+            than_ex = e
+    if chu_ex is None:
+        chu_ex = 1
+    if than_ex is None:
+        than_ex = 2
+    return than_ex - 1, chu_ex - 1
+
+
+def _merge_3mf_bytes(specs, t_than=None, t_chu=None, t_bed=None):
+    """TRỘN nhiều loại thẻ .3mf thành 1 .3mf (thuần Python). Giữ scaffold (vị trí ô) của file ĐẦU;
+    với ô thuộc thẻ KHÁC thì CLONE nguyên thẻ đại diện của file đó (components + inner-objectid +
+    part/extruder của chính nó, mesh copy sang path namespace), chỉ giữ object-id & transform của ô base.
+    => trộn được cả thẻ khác CẤU TRÚC mesh (thẻ ít dùng khác môn) lẫn thẻ khác MÀU (CLB đỏ/xanh).
+    specs=[(src_abs, so_luong, ten),...] (phần tử đầu=base). Trả (bytes, tong_the, chi_tiet)."""
+    import json as _json
+
+    # chọn BASE = file NHIỀU Ô nhất (để chứa được nhiều thẻ khi trộn, không bị kẹt sức chứa của file chọn đầu)
+    def _capof(src):
+        try:
+            zf = zipfile.ZipFile(src)
+            n = len(re.findall(r'<item\b', zf.read('3D/3dmodel.model').decode('utf-8')))
+            zf.close()
+            return n
+        except Exception:
+            return 1
+    if len(specs) > 1:
+        caps0 = [_capof(s[0]) for s in specs]
+        bi = max(range(len(specs)), key=lambda i: caps0[i])
+        if bi != 0:
+            specs = [specs[bi]] + specs[:bi] + specs[bi + 1:]
     base_abs = specs[0][0]
     zbase = zipfile.ZipFile(base_abs)
     names = zbase.namelist()
     mt = zbase.read('3D/3dmodel.model').decode('utf-8')
-    order = re.findall(r'<item\b[^>]*objectid="(\d+)"', mt)   # thứ tự ô trên khay
+    order = re.findall(r'<item\b[^>]*objectid="(\d+)"', mt)
     cap = len(order) or 1
     want = sum(max(1, q) for _, q, _ in specs)
     N = max(1, min(want, cap))
@@ -855,46 +914,95 @@ def _merge_3mf_bytes(specs):
     mt = re.sub(r'<object id="(\d+)"[^>]*>.*?</object>',
                 lambda m: (m.group(0) if m.group(1) in keep else ''), mt, flags=re.S)
 
-    # phân ô cho từng file (theo thứ tự chọn)
     assign, off = [], 0
     for _, q, _ in specs:
         q = max(1, q)
         assign.append(keep_ids[off:off + q] if off < N else [])
         off += q
-    base_mesh_paths = sorted(set(re.findall(r'p:path="([^"]+)"', mt)))
+    slot_spec = {}
+    for i, ids in enumerate(assign):
+        for oid in ids:
+            slot_spec[oid] = i
 
-    new_members, new_rels = {}, []
+    # ---- gộp màu ----
+    def _read_ps(zf):
+        for n in zf.namelist():
+            if n.endswith('project_settings.config'):
+                try:
+                    return _json.loads(zf.read(n).decode('utf-8'))
+                except Exception:
+                    return None
+        return None
+    base_ps = _read_ps(zbase)
+    spec_ps = [base_ps]
     for i in range(1, len(specs)):
-        ids = assign[i] if i < len(assign) else []
-        if not ids:
-            continue
+        zf = zipfile.ZipFile(specs[i][0]); spec_ps.append(_read_ps(zf)); zf.close()
+    base_cols = list((base_ps or {}).get('filament_colour', []) or [])
+    NB = len(base_cols)
+    merged_cols = list(base_cols)
+    col_idx = {}
+    for k, c in enumerate(merged_cols):
+        col_idx.setdefault((c or '').strip().upper(), k)
+    spec_fmap = [list(range(NB))]
+    added = []
+    for i in range(1, len(specs)):
+        cols = list((spec_ps[i] or {}).get('filament_colour', []) or [])
+        fmap = []
+        for l, c in enumerate(cols):
+            key = (c or '').strip().upper()
+            if key in col_idx:
+                fmap.append(col_idx[key])
+            else:
+                mi = len(merged_cols); merged_cols.append(c); col_idx[key] = mi
+                added.append((mi, i, l)); fmap.append(mi)
+        spec_fmap.append(fmap)
+    Nf = len(merged_cols)
+    do_colour = bool(base_ps) and NB >= 2 and Nf > NB
+
+    # ---- nạp thẻ đại diện cho các spec KHÁC base (có ô) ----
+    specs_used = sorted(set(slot_spec[o] for o in keep_ids if slot_spec.get(o, 0) != 0))
+    new_members, new_rels = {}, []
+    spec_card = {}
+    for i in specs_used:
         if os.path.abspath(specs[i][0]) == os.path.abspath(base_abs):
-            continue   # cùng file base -> mesh đã đúng, khỏi tráo
+            spec_card[i] = None   # cùng file base -> cấu trúc giống hệt, dùng scaffold base
+            continue
         zf = zipfile.ZipFile(specs[i][0])
-        fpaths = sorted(set(re.findall(r'p:path="([^"]+)"', zf.read('3D/3dmodel.model').decode('utf-8'))))
-        pmap = {}
-        for k, bp in enumerate(base_mesh_paths):
+        s_mt = zf.read('3D/3dmodel.model').decode('utf-8')
+        s_ms = zf.read('Metadata/model_settings.config').decode('utf-8')
+        im = re.search(r'<item\b[^>]*objectid="(\d+)"', s_mt)
+        s0 = im.group(1) if im else None
+        objm = re.search(r'<object id="%s"[^>]*>\s*<components>(.*?)</components>\s*</object>' % s0, s_mt, re.S) if s0 else None
+        if not objm:
+            spec_card[i] = None; zf.close(); continue
+        comps = objm.group(1)
+        for bp in sorted(set(re.findall(r'p:path="([^"]+)"', comps))):
             newpath = '/3D/Objects/object_mg%d_%s' % (i, os.path.basename(bp))
             try:
                 data = zf.read(bp.lstrip('/'))
             except KeyError:
-                data = zf.read(fpaths[k].lstrip('/')) if k < len(fpaths) else None
-            if data is None:
                 continue
             new_members[newpath.lstrip('/')] = data
             new_rels.append(newpath)
-            pmap[bp] = newpath
+            comps = comps.replace('p:path="%s"' % bp, 'p:path="%s"' % newpath)
+        msm = re.search(r'<object id="%s">(.*?)</object>' % s0, s_ms, re.S)
+        spec_card[i] = {'comps': comps, 'msinner': msm.group(1) if msm else None}
         zf.close()
 
-        def _swap(mo, pmap=pmap):
-            block = mo.group(0)
-            for old, new in pmap.items():
-                block = block.replace('p:path="%s"' % old, 'p:path="%s"' % new)
-            return block
-        for oid in ids:
-            mt = re.sub(r'<object id="%s"[^>]*>.*?</object>' % re.escape(oid), _swap, mt, flags=re.S)
+    # ---- 3dmodel: thay components cho ô clone ----
+    def _obj3d(m):
+        oid, attr, inner = m.group(1), m.group(2), m.group(3)
+        si = slot_spec.get(oid, 0)
+        sc = spec_card.get(si)
+        if si == 0 or not sc:
+            return m.group(0)
+        comps = _reuuid(sc['comps'], int(oid), 'p:UUID')
+        return '<object id="%s"%s>\n   <components>%s</components>\n  </object>' % (oid, attr, comps)
+    mt = re.sub(r'<object id="(\d+)"([^>]*)>\s*<components>(.*?)</components>\s*</object>', _obj3d, mt, flags=re.S)
 
     out_members = {'3D/3dmodel.model': mt}
+
+    # ---- model_settings ----
     if 'Metadata/model_settings.config' in names:
         ms = zbase.read('Metadata/model_settings.config').decode('utf-8')
         ms = re.sub(r'<object id="(\d+)">.*?</object>',
@@ -906,24 +1014,104 @@ def _merge_3mf_bytes(specs):
         ms = re.sub(r'<model_instance>.*?</model_instance>', _mi, ms, flags=re.S)
         ms = re.sub(r'<assemble_item object_id="(\d+)"[^>]*/>\s*',
                     lambda m: (m.group(0) if m.group(1) in keep else ''), ms)
-        for i, ids in enumerate(assign):
-            ten = (specs[i][2] or '').strip()
-            if not ten:
-                continue
-            for oid in ids:
-                def _rename(mo, ten=ten, oid=oid):
-                    return re.sub(r'(<object id="%s">\s*<metadata key="name" value=")[^"]*(")' % oid,
-                                  lambda x: x.group(1) + ten + x.group(2), mo.group(0), count=1)
-                ms = re.sub(r'<object id="%s">.*?</object>' % oid, _rename, ms, flags=re.S)
+
+        def _msobj(m):
+            oid = m.group(1)
+            si = slot_spec.get(oid, 0)
+            ten = (specs[si][2] or '').strip() if si < len(specs) else ''
+            ten_x = _xml_esc(ten)
+            fmap = spec_fmap[si] if si < len(spec_fmap) else []
+            remap = {str(e + 1): str(fmap[e] + 1) for e in range(len(fmap)) if fmap[e] != e}
+            sc = spec_card.get(si)
+            if si != 0 and sc and sc.get('msinner') is not None:
+                block = '<object id="%s">%s</object>' % (oid, _reuuid(sc['msinner'], int(oid), 'uuid'))
+            else:
+                block = m.group(0)
+            if ten:
+                block = re.sub(r'(<object id="\d+">\s*<metadata key="name" value=")[^"]*(")',
+                               lambda x: x.group(1) + ten_x + x.group(2), block, count=1)
+            if remap:
+                block = re.sub(r'(key="extruder"\s+value=")(\d+)(")',
+                               lambda x: x.group(1) + remap.get(x.group(2), x.group(2)) + x.group(3), block)
+                if ten:
+                    block = re.sub(r'(<text_info text=")[^"]*(")',
+                                   lambda x: x.group(1) + ten_x + x.group(2), block)
+            return block
+        ms = re.sub(r'<object id="(\d+)">.*?</object>', _msobj, ms, flags=re.S)
         out_members['Metadata/model_settings.config'] = ms
 
+    # ---- project_settings: nới per-filament khi có thêm màu ----
+    if do_colour:
+        ps_name = next((n for n in names if n.endswith('project_settings.config')), None)
+        if ps_name:
+            ps = dict(base_ps)
+            SKIP_PREFIX = ('machine_',)
+            SKIP_KEYS = {'start_end_points', 'extruder_ams_count'}
+            for k, v in list(ps.items()):
+                if not isinstance(v, list) or len(v) != NB:
+                    continue
+                if k.startswith(SKIP_PREFIX) or k in SKIP_KEYS:
+                    continue
+                newv = list(v)
+                for (mi, si, l) in added:
+                    sv = (spec_ps[si] or {}).get(k)
+                    newv.append(sv[l] if isinstance(sv, list) and l < len(sv) else v[-1])
+                ps[k] = newv
+            ps['filament_colour'] = list(merged_cols)
+            ps['filament_self_index'] = [str(j + 1) for j in range(Nf)]
+            ps.pop('flush_volumes_matrix', None)
+            ps.pop('flush_volumes_vector', None)
+            out_members[ps_name] = _json.dumps(ps, ensure_ascii=False, indent=4)
+
+    # ---- nhiệt vòi theo THÂN/CHỮ + nhiệt bàn (ghi nozzle_temperature theo index cuộn) ----
+    if (t_than or t_chu or t_bed) and base_ps:
+        ps_name2 = next((n for n in names if n.endswith('project_settings.config')), None)
+        if ps_name2:
+            ps2 = _json.loads(out_members[ps_name2]) if ps_name2 in out_members else dict(base_ps)
+            try:
+                ms_idx = zbase.read('Metadata/model_settings.config').decode('utf-8')
+            except Exception:
+                ms_idx = ''
+            th_idx, ch_idx = _than_chu_idx(ms_idx)
+
+            def _put(key, idx, val):
+                arr = ps2.get(key)
+                if isinstance(arr, list) and 0 <= idx < len(arr):
+                    arr = list(arr)
+                    arr[idx] = str(val)
+                    ps2[key] = arr
+            for key in ('nozzle_temperature', 'nozzle_temperature_initial_layer'):
+                if t_than:
+                    _put(key, th_idx, t_than)
+                if t_chu:
+                    _put(key, ch_idx, t_chu)
+            if t_bed:
+                for key in ('hot_plate_temp', 'textured_plate_temp',
+                            'hot_plate_temp_initial_layer', 'textured_plate_temp_initial_layer'):
+                    arr = ps2.get(key)
+                    if isinstance(arr, list):
+                        ps2[key] = [str(t_bed)] * len(arr)
+            out_members[ps_name2] = _json.dumps(ps2, ensure_ascii=False, indent=4)
+
+    # ---- rels: DỰNG LẠI SẠCH (luôn hợp lệ) — liệt kê mọi mesh thật, không phụ thuộc rels base ----
     rels_name = '3D/_rels/3dmodel.model.rels'
-    if rels_name in names and new_rels:
-        rl = zbase.read(rels_name).decode('utf-8')
-        add = ''.join('<Relationship Target="%s" Id="rel-mg%d" '
-                      'Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>' % (t, k + 1)
-                      for k, t in enumerate(new_rels))
-        out_members[rels_name] = rl.replace('</Relationships>', add + '</Relationships>')
+    if rels_name in names:
+        allmesh = set(re.findall(r'p:path="([^"]+)"', mt))
+        allmesh |= set('/' + p for p in new_members)
+
+        def _tgt(x):
+            t = re.search(r'Target="([^"]*)"', x)
+            return t.group(1) if t else ''
+        extra = [x for x in re.findall(r'<Relationship [^>]*/>', zbase.read(rels_name).decode('utf-8'))
+                 if '/3D/Objects/' not in _tgt(x)]
+        lines = ['<?xml version="1.0" encoding="UTF-8"?>',
+                 '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">']
+        lines += extra
+        for k, p in enumerate(sorted(allmesh), 1):
+            lines.append('<Relationship Target="%s" Id="relm%d" '
+                         'Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>' % (p, k))
+        lines.append('</Relationships>')
+        out_members[rels_name] = '\n'.join(lines)
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as o:
@@ -939,6 +1127,23 @@ def _merge_3mf_bytes(specs):
     zbase.close()
     chi_tiet = [(specs[i][2], len(assign[i])) for i in range(len(specs))]
     return buf.getvalue(), len(keep), chi_tiet
+
+
+def _spec_colors(src):
+    """Đọc filament_colour (chữ hoa, bỏ khoảng trắng) của 1 file .3mf — để biết trộn có sinh thêm màu không."""
+    import json as _j
+    try:
+        zf = zipfile.ZipFile(src)
+        try:
+            for n in zf.namelist():
+                if n.endswith('project_settings.config'):
+                    d = _j.loads(zf.read(n).decode('utf-8'))
+                    return [(c or '').strip().upper() for c in (d.get('filament_colour') or [])]
+        finally:
+            zf.close()
+    except Exception:
+        pass
+    return []
 
 
 @staff_required
@@ -985,9 +1190,24 @@ def xuat_file(request):
     if len(dp_set) > 1:
         return JsonResponse({'ok': False, 'error': 'Các thẻ khác ĐẦU PHUN nhau (%s) — 1 file chỉ 1 đầu phun.'
                              % '/'.join(sorted(dp_set))}, status=400)
+    # CHẶN AN TOÀN: trộn thẻ KHÁC MÀU (>2 màu) hiện làm Bambu TREO khi cắt (lỗi gộp màu đang sửa).
+    # Thẻ 1 loại hoặc nhiều thẻ CÙNG MÀU vẫn cắt tốt -> cho qua.
+    if len(specs) > 1:
+        allcols = set()
+        for src, _, _ in specs:
+            allcols.update(c for c in _spec_colors(src) if c)
+        if len(allcols) > 2:
+            return JsonResponse({'ok': False, 'error':
+                                 'Hiện chưa trộn được các thẻ KHÁC MÀU vào 1 file (file in bị treo khi cắt — '
+                                 'đang sửa). Tạm thời: xuất riêng từng loại, hoặc chỉ trộn các thẻ CÙNG MÀU.'},
+                                status=400)
     want = sum(q for _, q, _ in specs)
+    t_than = _toint(request.GET.get('t_than'))
+    t_chu = _toint(request.GET.get('t_chu'))
+    t_bed = _toint(request.GET.get('bed'))
     try:
-        data, got, chi_tiet = _merge_3mf_bytes(specs)
+        data, got, chi_tiet = _merge_3mf_bytes(specs, t_than=t_than or None,
+                                               t_chu=t_chu or None, t_bed=t_bed or None)
     except Exception as e:
         return JsonResponse({'ok': False, 'error': 'Lỗi tạo file: %s' % str(e)[:140]}, status=500)
     if got < want:   # tràn sức chứa 1 khay -> KHÔNG xuất file thiếu thẻ (báo rõ thay vì âm thầm bỏ)
