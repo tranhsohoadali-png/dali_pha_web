@@ -490,6 +490,11 @@ function fillGroups(){ var gs={}; FILES.forEach(function(f){ if(f.nhom) gs[f.nho
   $("fFilter").innerHTML='<option value="">Tất cả nhóm</option>'+keys.map(function(k){return '<option value="'+esc(k)+'">'+esc(k)+'</option>';}).join("");
   $("fFilter").value=cur; }
 function fmtKB(kb){ return kb>=1024?(kb/1024).toFixed(1)+" MB":kb+" KB"; }
+function fmtWhen(s){ if(!s) return ""; var m=String(s).replace("T"," ").match(/(\d{4})-(\d{2})-(\d{2})(?:[ ](\d{2}:\d{2}))?/); if(!m) return String(s);
+  var d=new Date(+m[1],+m[2]-1,+m[3]), n=new Date();
+  var days=Math.round((new Date(n.getFullYear(),n.getMonth(),n.getDate())-d)/86400000);
+  var rel=days<=0?"hôm nay":(days===1?"hôm qua":(days<30?days+" ngày trước":(m[3]+"/"+m[2]+"/"+m[1].slice(2))));
+  return rel+(m[4]?" "+m[4]:""); }
 function renderFile(){
   var q=($("fSearch").value||"").toLowerCase(), fg=$("fFilter").value;
   var list=FILES.filter(function(f){ return (!fg||f.nhom===fg) && (!q||(f.ten||"").toLowerCase().indexOf(q)>=0 || (f.ten_file||"").toLowerCase().indexOf(q)>=0); });
@@ -515,6 +520,8 @@ function renderFile(){
       if(f.so_the||f.con) tags+='<span class="mtag"><b>'+(f.so_the||f.con)+'</b> thẻ/file</span>';
       if(f.mau) tags+='<span class="mtag">'+esc(f.mau)+'</span>';
       tags+='<span class="mtag">'+esc(f.kieu||"")+" · "+fmtKB(f.kb||0)+'</span>';
+      var _upd=f.luc_sua||f.luc_them||"";
+      if(_upd) tags+='<span class="mtag" title="'+(f.luc_sua?"Sửa lúc ":"Tải lúc ")+esc(_upd)+'" style="color:var(--ink-faint)"><i class="bi bi-clock-history"></i> '+(f.luc_sua?"Sửa ":"Tải ")+esc(fmtWhen(_upd))+'</span>';
       el.innerHTML='<div class="fico"><i class="bi bi-box"></i></div>'
         +'<div class="fmain"><div class="fname">'+esc(f.ten)+'</div><div class="fmeta">'+tags+'</div>'
         +(f.ghi_chu?'<div class="fnote">'+esc(f.ghi_chu)+'</div>':'')+'</div>'

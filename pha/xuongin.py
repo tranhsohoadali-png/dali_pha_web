@@ -214,6 +214,7 @@ def file_sua(request):
                     it[k] = _toint(d.get(k))
             if 'nhua' in d:
                 it['nhua'] = _tofloat(d.get('nhua'))
+            it['luc_sua'] = time.strftime('%Y-%m-%d %H:%M')
             _save('file.json', items)
             return JsonResponse({'ok': True, 'item': it})
     return JsonResponse({'ok': False, 'error': 'Không thấy file.'})
