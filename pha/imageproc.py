@@ -52,11 +52,17 @@ def save_img(edge_img, dpi=(72, 72)):
     return name_output
 
 
-def create_image_color(color_mapping, hex_list, percentages=None):
+def create_image_color(color_mapping, hex_list, percentages=None, code_map=None):
+    # code_map (tuỳ chọn): {(r,g,b): 'mã'} — KHÓA KIT dùng đúng mã kit thay vì tự dò
+    # nearest_dali (vd màu Trắng không có trong bảng DALI -> ép mã 'Trắng').
     result = []
     for i in range(len(color_mapping)):
         rgb = color_mapping[i][1]
-        dali = nearest_dali(rgb)
+        dali = None
+        if code_map:
+            dali = code_map.get(tuple(int(v) for v in rgb))
+        if not dali:
+            dali = nearest_dali(rgb)
         pct = percentages[i] if percentages and i < len(percentages) else 0
         result.append([color_mapping[i][0], hex_list[i][1], dali, pct])
     return result
@@ -226,7 +232,8 @@ def _process_large_into(obj, name, long_cm, color_limit):
 def process_image(rec_id, name, enhance=False, style_category=None, color_limit=0,
                   min_area=0, smooth=0, ai_prompt=None, use_refs=False, print_long_cm=0,
                   detail=False, face_priority=False, large=False, num_detail=1.0,
-                  auto_crop=True, keep_holes=False):
+                  auto_crop=True, keep_holes=False, fixed_palette=None, kit_codes=None,
+                  kit_warn=''):
     """Chạy nền: (tùy chọn) tăng cường ảnh bằng AI, rồi xử lý + cập nhật ImageResult.
 
     enhance=True: gọi Google AI làm sạch/nâng cấp ảnh khách trước khi đánh số.
@@ -249,10 +256,13 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
     Khâu đánh số + khớp mã DALI luôn chạy như cũ trên ảnh (đã hoặc chưa tăng cường).
     """
     obj = ImageResult.objects.get(id=rec_id)
-    if large:                                          # TRANH KHỔ TO SIÊU CHI TIẾT
+    if large and not fixed_palette:                    # TRANH KHỔ TO SIÊU CHI TIẾT
         _process_large_into(obj, name, print_long_cm, color_limit)
         return
-    warn = ''
+    if fixed_palette:                                  # KHÓA KIT: tắt AI + zoom, giữ nét thiết kế
+        enhance = False
+        face_priority = False
+    warn = (kit_warn + ' ') if kit_warn else ''        # cảnh báo mã kit lỗi (nếu có)
     zoom_path = None                  # bản crop tạm (xoá ở finally để không rác đĩa)
     try:
         path = os.path.join(settings.MEDIA_ROOT, name)
@@ -327,12 +337,24 @@ def process_image(rec_id, name, enhance=False, style_category=None, color_limit=
                 warn += 'Bỏ qua tăng cường AI (' + str(e)[:140] + '). Đã xử lý ảnh gốc.'
         design_name = f'{os.path.splitext(name)[0]}_design.png'
         design_path = os.path.join(settings.MEDIA_ROOT, design_name)
-        edge_img, color_mapping, percentages = index_color(
-            path, debug=False, num_colors=color_limit, min_area=min_area, smooth=smooth,
-            design_out=design_path, print_long_cm=print_long_cm, detail=detail,
-            face_priority=face_priority, num_detail=num_detail, keep_holes=keep_holes)
+        if fixed_palette:
+            # KHÓA KIT: nhánh PHẲNG (giữ nét thiết kế) + ép đúng bộ màu kit + số theo thứ tự kit.
+            from pha.color_index_lib import index_color_flat
+            edge_img, color_mapping, percentages = index_color_flat(
+                path, min_area=min_area, design_out=design_path, fixed_palette=fixed_palette)
+        else:
+            edge_img, color_mapping, percentages = index_color(
+                path, debug=False, num_colors=color_limit, min_area=min_area, smooth=smooth,
+                design_out=design_path, print_long_cm=print_long_cm, detail=detail,
+                face_priority=face_priority, num_detail=num_detail, keep_holes=keep_holes)
         name_output = save_img(edge_img, orig_dpi)
-        colors = create_image_color(color_mapping, convert_to_hex(color_mapping), percentages)
+        if fixed_palette:
+            _cmap = {tuple(int(v) for v in rgb): code
+                     for rgb, code in zip(fixed_palette, (kit_codes or []))}
+            colors = create_image_color(color_mapping, convert_to_hex(color_mapping),
+                                        percentages, code_map=_cmap)
+        else:
+            colors = create_image_color(color_mapping, convert_to_hex(color_mapping), percentages)
         obj.name_output = name_output
         obj.design_name = design_name if os.path.exists(design_path) else ''
         obj.colors = colors

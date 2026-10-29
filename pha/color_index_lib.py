@@ -1687,18 +1687,24 @@ def _despeckle_flat(arr, min_radius, min_area=0, max_pass=4):
     return img
 
 
-def _flat_work_file(path, min_area=0):
+def _flat_work_file(path, min_area=0, fixed_palette=None):
     """Chuẩn bị ảnh LÀM VIỆC cho nhánh PHẲNG: thu nhỏ về WORK_MAX_SIDE, GIỮ NGUYÊN
     bảng màu thiết kế (KHÔNG median-cut, KHÔNG giảm màu) + LUÔN dọn 'dăm' (mảnh nhỏ
     không thể đặt số) bằng _despeckle_flat — vẫn giữ 100% màu + mọi ô đánh số được.
-    min_area > 0: lọc thêm theo diện tích. Trả đường dẫn file tạm."""
+    min_area > 0: lọc thêm theo diện tích.
+    fixed_palette (list (r,g,b)): KHÓA KIT — ép mọi pixel về đúng bộ màu kit (gán 1-1
+    ưu tiên màu trội) thay vì giữ bảng màu thiết kế. Trả đường dẫn file tạm."""
     import os
     import tempfile
     im = Image.open(path).convert('RGB')
     if WORK_MAX_SIDE and max(im.size) > WORK_MAX_SIDE:
         im.thumbnail((WORK_MAX_SIDE, WORK_MAX_SIDE), Resampling.LANCZOS)
     arr = np.array(im)
-    arr = _snap_to_design_palette(arr)                   # khử răng cưa (ảnh >256 màu); phẳng -> giữ nguyên
+    if fixed_palette:
+        from pha.kit_palette import snap_to_kit
+        arr = snap_to_kit(arr, fixed_palette)            # KHÓA về đúng bộ màu kit
+    else:
+        arr = _snap_to_design_palette(arr)               # khử răng cưa (ảnh >256 màu); phẳng -> giữ nguyên
     # Dọn dăm: chỉ gộp mảnh KHÔNG lọt số (rad < cỡ tối thiểu) -> giữ 100% màu, hết dăm.
     min_radius = (MIN_TEXT_SIZE + 2 * PADDING_CIRCLE) / 2.0
     arr = _despeckle_flat(arr, min_radius=min_radius, min_area=int(min_area or 0), max_pass=4)
@@ -1823,7 +1829,7 @@ def _place_detail_numbers(img_white, mask, num_str, draws, rs, size_scale=1.0):
 
 def _number_work_image(work_path, design_out=None, debug=False,
                        render_arr=None, render_scale=1.0, keep_all=False,
-                       size_scale=1.0):
+                       size_scale=1.0, fixed_palette=None):
     """ĐÁNH SỐ + đếm % trên 1 ảnh LÀM VIỆC đã chuẩn bị — đây là phần index_color GỐC
     (extract màu -> contour từng màu -> polylabel -> vẽ số). design_out: lưu ảnh work
     (bản màu phẳng) để xem trước. Xoá file work tạm khi xong.
@@ -1840,7 +1846,18 @@ def _number_work_image(work_path, design_out=None, debug=False,
         except OSError:
             pass
     img = load_image(work_path, debug=debug)
-    if keep_all:
+    if fixed_palette is not None:
+        # KHÓA KIT: bảng màu = ĐÚNG bộ kit theo THỨ TỰ dán vào (số 1..N = thứ tự kit),
+        # KHÔNG sắp lại, KHÔNG lọc bỏ. Đếm pixel từng màu kit (màu vắng -> count 0, vẫn
+        # giữ slot để số ổn định + bảng đủ bộ).
+        _srck = render_arr if render_arr is not None else cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        _rgbk = np.ascontiguousarray(_srck).reshape(-1, 3)
+        _uqk, _cqk = np.unique(_rgbk, axis=0, return_counts=True)
+        _cntmap = {(int(c[0]), int(c[1]), int(c[2])): int(n) for c, n in zip(_uqk, _cqk)}
+        colors = [((int(r), int(g), int(b)), _cntmap.get((int(r), int(g), int(b)), 0))
+                  for (r, g, b) in fixed_palette]
+        pixel_count = int(_rgbk.shape[0])
+    elif keep_all:
         # HOA/CẢNH: bảng màu = TẤT CẢ màu trong ảnh (đúng N), KHÔNG lọc bỏ màu nhỏ; SẮP
         # theo nhóm tông (đỏ->tím, rồi đen/xám/trắng). Lấy từ ảnh THIẾT KẾ 2x (render_arr)
         # nếu có -> KHÔNG sót màu bị NEAREST làm rớt khi thu nhỏ 1x (đánh số cũng dùng 2x).
@@ -1887,14 +1904,20 @@ def _number_work_image(work_path, design_out=None, debug=False,
     color_counts = []
     color_idx = 1
     draws = []
-    for color, count in colors:
+    kit_mode = fixed_palette is not None
+    for ci, (color, count) in enumerate(colors):
         # print(f"Processing color {color_idx}: {color} with count: {count}")
+        # KHÓA KIT: số = THỨ TỰ kit (ci+1), cố định; thường: số = màu thứ mấy đã giữ.
+        num_str = str(ci + 1) if kit_mode else f'{len(color_mapping) + 1}'
         range_img = get_color_areas(img_rgb, color, color, color_idx, debug=debug)
         # (Mảng nhỏ đã được GỘP vào hàng xóm ở bước _quantize_file -> không xoá nữa.)
 
         contours, hierarchy = cv2.findContours(range_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-        # Phòng trường hợp màu không còn vùng nào -> bỏ qua.
+        # Phòng trường hợp màu không còn vùng nào -> bỏ qua (kit: vẫn giữ slot để số đủ bộ).
         if hierarchy is None or not contours:
+            if kit_mode:
+                color_mapping.append(color)
+                color_counts.append(count)
             color_idx += 1
             continue
 
@@ -1904,10 +1927,11 @@ def _number_work_image(work_path, design_out=None, debug=False,
         # chân dung dùng get_center_poly đặt nhiều số/vùng theo polylabel -> cỡ nhảy loạn.)
         num_src = big_rgb if (rs > 1.0 and big_rgb is not None) else img_rgb
         count_number = _place_detail_numbers(img_white, cv2.inRange(num_src, color, color),
-                                             f'{len(color_mapping) + 1}', draws, rs,
+                                             num_str, draws, rs,
                                              size_scale=ss)
         # Màu nào (hiếm) không còn ô đánh số được -> BỎ khỏi bảng (ưu tiên SẠCH).
-        if count_number > 0:
+        # KHÓA KIT: LUÔN giữ (số phải khớp mã kit theo thứ tự -> không được dịch số).
+        if kit_mode or count_number > 0:
             color_mapping.append(color)
             color_counts.append(count)
         color_idx += 1
@@ -1985,13 +2009,15 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
                               size_scale=size_scale)
 
 
-def index_color_flat(path, min_area=0, design_out=None):
+def index_color_flat(path, min_area=0, design_out=None, fixed_palette=None):
     """ẢNH ĐÃ THIẾT KẾ PHẲNG: GIỮ NGUYÊN bảng màu thiết kế (KHÔNG quantize / KHÔNG
     giảm màu) — đúng phần mềm 'index_color' gốc + (tuỳ chọn) gộp đốm < min_area px
     vào hàng xóm. Chỉ đánh số; khớp mã DALI làm ở bước ngoài (≡ 'django_dali').
-    min_area=0 -> y hệt index_color gốc (chỉ tự lọc màu chiếm < 0.03% diện tích)."""
-    work_path = _flat_work_file(path, min_area=min_area)
-    return _number_work_image(work_path, design_out=design_out)
+    min_area=0 -> y hệt index_color gốc (chỉ tự lọc màu chiếm < 0.03% diện tích).
+    fixed_palette (list (r,g,b)): KHÓA KIT — ép ảnh về đúng bộ màu kit + đánh số theo
+    THỨ TỰ kit (số 1..N = thứ tự dán), giữ đủ mọi màu kit trong bảng."""
+    work_path = _flat_work_file(path, min_area=min_area, fixed_palette=fixed_palette)
+    return _number_work_image(work_path, design_out=design_out, fixed_palette=fixed_palette)
 
 
 def cal_padding_in_pixel(im_path: str) -> int:

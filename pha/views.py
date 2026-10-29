@@ -2933,6 +2933,19 @@ def xu_ly_anh(request):
         name = f'{datetime.now():%Y-%m-%d_%H-%M-%S}_{uuid.uuid4().hex[:8]}_{upload.name}'
         name = fss.save(name, upload)
         enhance = request.POST.get('enhance') in ('1', 'on', 'true')
+        # BỘ MÀU CỐ ĐỊNH (kit): dán danh sách mã DALI -> KHÓA đúng bộ màu đó + TẮT AI.
+        kit_codes_raw = (request.POST.get('kit_codes') or '').strip()
+        kit_palette, kit_code_list, kit_unknown = [], [], []
+        kit_warn = ''
+        if kit_codes_raw:
+            from pha.kit_palette import resolve_kit
+            kit_palette, kit_code_list, kit_unknown = resolve_kit(kit_codes_raw)
+            enhance = False                    # đã DÁN kit -> TẮT AI (kể cả khi mã lỗi)
+            if kit_unknown:
+                _uk = ', '.join(kit_unknown[:12])
+                kit_warn = ('KHÔNG nhận dạng được mã kit nào (' + _uk + ') -> đã xử lý '
+                            'chế độ THƯỜNG, CHƯA khóa bộ màu. Kiểm tra lại mã.'
+                            ) if not kit_palette else ('Bỏ qua mã kit không nhận dạng: ' + _uk + '.')
         style_category = (request.POST.get('style_category') or '').strip() or None
         try:
             color_limit = int(request.POST.get('color_limit') or 0)
@@ -2995,11 +3008,12 @@ def xu_ly_anh(request):
                     'preset': preset_key, 'print_size': size_str, 'ai_level': ai_level,
                     'detail': detail, 'face_priority': face_priority, 'large': large,
                     'num_detail': num_detail_key, 'auto_crop': auto_crop,
-                    'keep_holes': keep_holes})
+                    'keep_holes': keep_holes, 'kit_codes': kit_codes_raw})
         _img_executor.submit(process_image, rec.id, name, enhance, style_category,
                              color_limit, min_area, smooth, ai_prompt, use_refs,
                              print_long_cm, detail, face_priority, large, num_detail,
-                             auto_crop, keep_holes)
+                             auto_crop, keep_holes, (kit_palette or None), kit_code_list,
+                             kit_warn)
         _prune_image_results()                 # giữ 10 kết quả gần nhất (bộ nhớ tạm)
         ctx = build_ctx()
         ctx['file_url'] = '/media/' + name
