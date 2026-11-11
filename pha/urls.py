@@ -27,8 +27,14 @@ from pha import shopee_export
 from pha import tkb as tkb_views
 from pha import xuongin as xuongin_views
 from pha import portal
+from pha import giaoviec as giaoviec_views
 
 urlpatterns = [
+    # GIAO VIỆC theo phòng ban (module riêng, lưu JSON ở runtime/giaoviec — không migration)
+    path('giao-viec', giaoviec_views.trang, name='giao_viec'),
+    path('giao-viec/api/<str:act>', giaoviec_views.api, name='giao_viec_api'),
+    path('giao-viec/nhac', giaoviec_views.nhac, name='giao_viec_nhac'),
+    path('manifest-giaoviec.webmanifest', giaoviec_views.manifest, name='manifest_giaoviec'),
     path('trung-tam', portal.trung_tam, name='trung_tam'),   # Portal lưới (web tổng)
     path('inbox', inbox_views.inbox, name='inbox'),
     path('inbox/api/list', inbox_views.api_list, name='inbox_list'),

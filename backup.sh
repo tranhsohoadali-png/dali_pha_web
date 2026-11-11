@@ -10,7 +10,8 @@ TS="$(date +%Y%m%d_%H%M%S)"
 tar -czf "$BK/backup_$TS.tar.gz" -C "$APP_DIR" \
     db.sqlite3 \
     pha/base_colors.json \
-    pha/recipes.json 2>/dev/null || true
+    pha/recipes.json \
+    runtime 2>/dev/null || true   # runtime/ = dữ liệu Giao việc (JSON nhỏ)
 
 # Chỉ giữ 14 bản mới nhất
 ls -1t "$BK"/backup_*.tar.gz 2>/dev/null | tail -n +15 | xargs -r rm -f

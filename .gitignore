@@ -21,3 +21,12 @@ tools/dali_agent_seen.json
 tools/dali_agent_config.json
 # Bảng màu DALI runtime (thêm/sửa trên server) — KHÔNG commit để deploy khỏi đụng/hỏng
 pha/dali_reference_runtime.json
+# Dữ liệu chạy (Giao việc...) — ngoài media/ vì nginx phục vụ /media/ công khai. KHÔNG commit.
+runtime/
+# Kế hoạch Giao việc (seed) chứa dữ liệu kinh doanh NỘI BỘ (tài chính, nhân sự, kế hoạch sản phẩm...).
+# Repo CÔNG KHAI -> KHÔNG BAO GIỜ commit. Nạp bằng /giao-viec -> Cài đặt -> "Tải file kế hoạch"
+# (server lưu ở runtime/giaoviec/seed_<chuong_trinh>.json).
+*giaoviec*seed*.json
+*giao_viec*seed*.json
+seed_*.json
+plan_result*.json

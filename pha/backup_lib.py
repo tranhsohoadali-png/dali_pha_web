@@ -58,6 +58,17 @@ def run_backup(include_media=False):
     try:
         with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
             z.write(tmp_db, 'db.sqlite3')
+            # runtime/ (Giao việc...) — JSON nhỏ, LUÔN kèm (không nằm trong media/)
+            rroot = os.path.join(str(settings.BASE_DIR), 'runtime')
+            for root, _dirs, files in os.walk(rroot):
+                for f in files:
+                    if f.endswith('.tmp') or f == '.lock':
+                        continue
+                    p = os.path.join(root, f)
+                    try:
+                        z.write(p, os.path.join('runtime', os.path.relpath(p, rroot)))
+                    except OSError:
+                        pass
             if include_media:
                 mroot = str(settings.MEDIA_ROOT)
                 for root, _dirs, files in os.walk(mroot):

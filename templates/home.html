@@ -106,6 +106,12 @@
       <span class="tile-label">{{ t.label }}</span>
     </a>
     {% endfor %}
+    {# Giao việc: tile cứng ở template (views.home viết cứng danh sách tile — không sửa views.py) #}
+    <a class="tile position-relative" href="/giao-viec">
+      <span class="tile-ic" style="background:#0F766E"><i class="bi bi-list-check"></i></span>
+      <span class="tile-label">Giao việc</span>
+      {% if nav_viec %}<span class="badge rounded-pill text-bg-danger position-absolute" style="top:10px;right:10px">{{ nav_viec }}</span>{% endif %}
+    </a>
   </div>
 </div>
 

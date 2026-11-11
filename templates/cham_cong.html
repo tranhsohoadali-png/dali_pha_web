@@ -177,6 +177,18 @@
     </div>
   </div>
 
+  <!-- Việc hôm nay (module Giao việc) — chỉ hiện khi có việc; đọc /giao-viec/api/dem -->
+  <a id="gvCard" href="/giao-viec?tab=toi" class="cc-card p-3 mb-3 text-decoration-none text-reset" style="display:none">
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-list-check fs-3 text-success"></i>
+      <div class="flex-grow-1">
+        <div class="fw-bold">Việc hôm nay</div>
+        <div class="small text-secondary" id="gvTxt"></div>
+      </div>
+      <i class="bi bi-chevron-right text-secondary"></i>
+    </div>
+  </a>
+
   <!-- Mini thống kê tháng -->
   <div class="row g-2 mb-3 text-center">
     <div class="col-4"><div class="m-tile"><div class="m-lbl">Công {{ month_label }}</div><div class="m-val text-success">{{ m_days }}</div></div></div>
@@ -446,6 +458,18 @@
       if(res.ok) setTimeout(function(){ location.reload(); }, 1200);
     }).catch(function(){ btn.disabled=false; toast('Lỗi kết nối'); });
   });
+</script>
+<script>
+  // Thẻ "Việc hôm nay": số việc trễ / đến hạn hôm nay-mai của mình (module /giao-viec)
+  fetch('/giao-viec/api/dem', {credentials:'same-origin', cache:'no-store'}).then(function(r){ return r.json(); }).then(function(d){
+    if(!d || !d.ok || !d.mo) return;
+    var p = [];
+    if(d.tre) p.push('<span class="text-danger fw-bold">' + d.tre + ' trễ</span>');
+    if(d.han_mai) p.push('<span class="fw-bold" style="color:#d9730d">' + d.han_mai + ' đến hạn hôm nay/mai</span>');
+    p.push(d.mo + ' việc đang mở');
+    document.getElementById('gvTxt').innerHTML = p.join(' · ');
+    document.getElementById('gvCard').style.display = 'block';
+  }).catch(function(){});
 </script>
 </body>
 </html>

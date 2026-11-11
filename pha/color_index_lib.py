@@ -1027,7 +1027,7 @@ def _refine_faces(arr, im_pre, boxes, s, k_face=32, nd=1.0):
 
 def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=None,
                    detail=False, face_priority=False, size_scale=1.0, num_detail=1.0,
-                   keep_holes=False):
+                   keep_holes=False, keep_strokes=None):
     """Tạo ảnh THIẾT KẾ chất lượng Illustrator-trace rồi lưu file LÀM VIỆC tạm (1x)
     cho khâu đánh số. Trả đường_dẫn_tạm.
 
@@ -1041,7 +1041,8 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     đánh số (palette y hệt bản 2x).
     smooth (0..1): không tiền xử lý (ảnh AI/anime đã phẳng); (2..3): mean-shift.
     num_detail: hệ số sàn cỡ số ở nhánh CHI TIẾT (xem DETAIL_LEVELS); <1 = giữ ô nhỏ
-    hơn -> chi tiết hơn. Chỉ ăn vào _merge_unnumberable (nhánh khác không đổi)."""
+    hơn -> chi tiết hơn. Chỉ ăn vào _merge_unnumberable (nhánh khác không đổi).
+    keep_strokes: LỚP NÉT mắt/miệng (chỉ nhánh detail); None = theo DETAIL_KEEP_STROKES."""
     import os
     import tempfile
     im = Image.open(path).convert('RGB')
@@ -1172,16 +1173,39 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         except Exception:
             counter_mask, counter_src = None, None
     nd_face = 1.0                                       # hệ số chi tiết cho refine mặt (else set)
+    strokes, stroke_mask = None, None                   # LỚP NÉT (chỉ nhánh chi tiết)
     if detail:
+        # TÁCH LỚP NÉT: mắt nhắm/miệng con vật (nét tối mảnh tương phản cao) -> tô 1 màu tối
+        # của bảng + nới tới cỡ số bé nhất + BẢO VỆ qua các bước gộp/làm mượt bên dưới và ở
+        # _merge_unnumberable (nếu không, nét mảnh hơn sàn cỡ số bị gộp vào màu lông).
+        if (DETAIL_KEEP_STROKES if keep_strokes is None else keep_strokes):
+            try:
+                nd_s = min(2.0, max(0.4, float(num_detail or 1.0)))
+                r_need_s, r_floor_s = _number_radii(_DETAIL_NUM_MIN_H * size_scale * nd_s, s,
+                                                    n_colors=target, size_scale=size_scale)
+                arr, stroke_mask, strokes = _feature_stroke_layer(
+                    arr, src2x, r_need_s * 1.15, r_floor_s, exclude=counter_mask,
+                    r_need=r_need_s)
+                if not strokes:
+                    strokes, stroke_mask = None, None
+                elif stroke_mask.shape != arr.shape[:2] or stroke_mask.dtype != np.uint8:
+                    raise ValueError('stroke_mask lệch cỡ')   # chặn lỗi ở các bước sau
+            except Exception:
+                strokes, stroke_mask = None, None
         # CHI TIẾT (cây/hoa): giữ NHIỀU ô nhỏ (cánh hoa/lá) -> nhiều số nhỏ. Chỉ dọn
         # bụi/đốm gần-trùng-màu, KHÔNG gộp theo trần (feature_cap vô hạn), bán kính
         # giữ rất nhỏ. Vẫn làm mượt biên nhẹ cho nét đẹp.
         arr, feat = _merge_keep_features(arr, r_keep=2.2 * s, de_keep=8.0,
                                          min_area=int(min_area * s * s), max_pass=2,
-                                         feature_cap=10 ** 7)
+                                         feature_cap=10 ** 7, hard_keep=stroke_mask)
+        if stroke_mask is not None:
+            try:
+                feat = cv2.bitwise_or(feat, stroke_mask)   # nét: chừa khỏi làm mượt voting
+            except Exception:
+                strokes, stroke_mask = None, None      # lỗi bất ngờ: bỏ lớp nét, chạy như cũ
         arr = _smooth_labels_voting(arr, sigma=1.3 * s, protect=feat)
         arr, _ = _merge_keep_features(arr, r_keep=1.3 * s, de_keep=6.0, max_pass=1,
-                                      feature_cap=10 ** 7)
+                                      feature_cap=10 ** 7, hard_keep=stroke_mask)
         # HOA/CẢNH: ÉP ĐỦ 'target' màu ("cài bao nhiêu ra bấy nhiêu") — ảnh ít màu thì
         # TÁCH màu nhiều-pixel/biến-thiên cao thành sắc gần nhau (dựa MÀU GỐC src2x).
         arr = _ensure_n_colors(arr, src2x, target)
@@ -1256,6 +1280,14 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
     if counter_mask is not None and counter_src is not None:
         m = counter_mask > 0
         arr[m] = counter_src[m]
+    # ĐÓNG DẤU LỚP NÉT LẦN CUỐI (như ruột chữ): mỗi nét đúng 1 màu, đúng hình đã nới.
+    # Lỗi bất ngờ -> BỎ lớp nét (không bảo vệ ở _merge_unnumberable = y hệt bản cũ),
+    # không làm hỏng cả lượt xử lý.
+    if strokes:
+        try:
+            arr = _restamp_strokes(arr, strokes)
+        except Exception:
+            strokes, stroke_mask = None, None
 
     if detail:
         # HOA/CẢNH: gộp ô không đặt nổi SỐ NGANG vào hàng xóm (sau khi mượt biên) ->
@@ -1266,7 +1298,7 @@ def _quantize_file(path, n, smooth=0, min_area=0, print_long_cm=0, design_out=No
         # hạ sàn tới đâu (các bước gộp trước có bán kính nhỏ hơn sàn này -> không chặn).
         nd = min(2.0, max(0.4, float(num_detail or 1.0)))
         arr = _merge_unnumberable(arr, _DETAIL_NUM_MIN_H * size_scale * nd, s,
-                                  n_colors=target, size_scale=size_scale)
+                                  n_colors=target, size_scale=size_scale, protect=stroke_mask)
 
     if design_out:
         try:
@@ -1481,16 +1513,12 @@ def detail_scale(key):
     return DETAIL_LEVELS.get((key or '').strip().lower(), 1.0)
 
 
-def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99, size_scale=1.0):
-    """HOA/CẢNH: GỘP ô KHÔNG đặt nổi số NGANG (vòng tròn nội tiếp quá nhỏ) vào hàng xóm
-    gần nhất -> bản đồ SẠCH (không ô trống), số NGANG to & đều. Tiêu chí: bán kính nội
-    tiếp (distanceTransform, KHỚP get_number_size) < nửa đường chéo SỐ RỘNG NHẤT có thể
-    (n_colors chữ số) cao min_h + lề. ƯU TIÊN SẠCH: chấp nhận rớt màu nếu màu đó không
-    còn ô nào đủ to. arr 2x. n_colors: số màu tối đa -> số chữ số worst-case của nhãn.
-
-    size_scale: PHẢI khớp size_scale của _place_detail_numbers (khổ NHỎ 20x20/30x30 vẽ
-    số to hơn). Khâu đặt số bỏ số khi CAO < MIN_TEXT_SIZE*size_scale (@1x) -> mọi ngưỡng
-    GIỮ ô ở đây phải >= sàn đó, kẻo giữ ô rồi không vẽ nổi số => Ô TRỐNG."""
+def _number_radii(min_h, s, n_colors=99, size_scale=1.0):
+    """Bán kính nội tiếp (px ảnh 2x) mà một ô cần để NHÉT NỔI số NGANG — dùng chung cho
+    _merge_unnumberable và lớp NÉT (_feature_stroke_layer) để 2 nơi KHỚP nhau tuyệt đối.
+    Trả (r_need, r_floor): r_need = số cao min_h (sàn cỡ số của mức chi tiết); r_floor =
+    số BÉ NHẤT khâu đặt số còn vẽ (MIN_TEXT_SIZE·size_scale) — ô >= r_floor không bao giờ
+    thành ô trống. Nhãn worst-case = số chữ số của n_colors (vd 35 màu -> '99')."""
     ss = float(size_scale) if (size_scale and float(size_scale) > 1.0) else 1.0
     floor_h = float(MIN_TEXT_SIZE) * ss                # SÀN của khâu đặt số (@1x)
     need = max(float(min_h), floor_h) * float(s)       # CAO số tối thiểu (2x)
@@ -1517,13 +1545,48 @@ def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99, size_scale=1.0):
             break
         scf += 0.05
     r_floor = (gwf * gwf + ghf * ghf) ** 0.5 / 2.0 + PADDING_CIRCLE
+    return r_need, r_floor
+
+
+def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99, size_scale=1.0, protect=None):
+    """HOA/CẢNH: GỘP ô KHÔNG đặt nổi số NGANG (vòng tròn nội tiếp quá nhỏ) vào hàng xóm
+    gần nhất -> bản đồ SẠCH (không ô trống), số NGANG to & đều. Tiêu chí: bán kính nội
+    tiếp (distanceTransform, KHỚP get_number_size) < nửa đường chéo SỐ RỘNG NHẤT có thể
+    (n_colors chữ số) cao min_h + lề. ƯU TIÊN SẠCH: chấp nhận rớt màu nếu màu đó không
+    còn ô nào đủ to. arr 2x. n_colors: số màu tối đa -> số chữ số worst-case của nhãn.
+
+    size_scale: PHẢI khớp size_scale của _place_detail_numbers (khổ NHỎ 20x20/30x30 vẽ
+    số to hơn). Khâu đặt số bỏ số khi CAO < MIN_TEXT_SIZE*size_scale (@1x) -> mọi ngưỡng
+    GIỮ ô ở đây phải >= sàn đó, kẻo giữ ô rồi không vẽ nổi số => Ô TRỐNG.
+
+    protect: mask 0/255 LỚP NÉT (mắt nhắm/miệng... từ _feature_stroke_layer). Ô mà phần
+    lớn là nét được GIỮ tới r_floor (số bé nhất vẫn vẽ được -> không ô trống) thay vì bị
+    gộp vào màu lông chỉ vì nét MẢNH hơn sàn cỡ số. Ô KỀ nét (mũi chạm miệng) không bị
+    gộp vào màu nét và vẫn được coi là lỗ kín nếu nét chỉ chạm < 1/2 viền. None = y hệt trước."""
+    r_need, r_floor = _number_radii(min_h, s, n_colors=n_colors, size_scale=size_scale)
     k3 = np.ones((3, 3), np.uint8)
     img = arr.copy()
     H, W = img.shape[:2]
+    prot_d, s_code = None, None         # vùng SÁT nét (nới 3px) + MÀU của lớp nét (mã 24-bit)
+    if protect is not None:
+        try:
+            pm = protect > 0
+            prot_d = cv2.dilate(pm.astype(np.uint8), np.ones((7, 7), np.uint8))
+            px = img[pm]
+            s_code = np.unique((px[:, 0].astype(np.int32) << 16)
+                               | (px[:, 1].astype(np.int32) << 8) | px[:, 2].astype(np.int32))
+            del pm, px
+        except Exception:
+            protect, prot_d, s_code = None, None, None
     for _ in range(max_pass):
         flat = img.reshape(-1, 3)
         colors, inv = np.unique(flat, axis=0, return_inverse=True)
         lbl = inv.reshape(H, W).astype(np.int32)
+        s_lbl = None                                    # nhãn (lượt này) của các màu nét
+        if s_code is not None and s_code.size:
+            cc = ((colors[:, 0].astype(np.int32) << 16) | (colors[:, 1].astype(np.int32) << 8)
+                  | colors[:, 2].astype(np.int32))
+            s_lbl = np.where(np.isin(cc, s_code))[0]
         changed = False
         for ci in range(len(colors)):
             mask = (lbl == ci).astype(np.uint8)
@@ -1544,21 +1607,47 @@ def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99, size_scale=1.0):
                 rad = float(cv2.distanceTransform(subp, cv2.DIST_L2, 3).max())
                 if rad >= r_need * 1.15:               # biên 1.15 bù làm tròn -> khớp 100% khâu đánh số
                     continue                           # đủ to cho số ngang -> GIỮ
+                # LỚP NÉT (mắt nhắm/miệng con vật): ô chủ yếu là nét (hoặc phần nét trong ô
+                # đủ chứa vòng số bé nhất) và còn nhét nổi số BÉ NHẤT -> GIỮ, không gộp vào
+                # màu lông. Nét đã được NỚI tới >= r_floor ở _feature_stroke_layer.
+                if protect is not None and rad >= r_floor:
+                    try:
+                        pv = protect[y:y + h, x:x + w][sub > 0]
+                        npx = int((pv > 0).sum())
+                        keep_s = bool(npx) and npx >= min(0.5 * pv.size, np.pi * r_floor * r_floor)
+                    except Exception:
+                        protect, keep_s = None, False   # lỗi bất ngờ: bỏ bảo vệ nét (như cũ)
+                    if keep_s:
+                        continue
                 x0, y0 = max(x - 1, 0), max(y - 1, 0)
                 x1, y1 = min(x + w + 1, W), min(y + h + 1, H)
                 sub2 = comp[y0:y1, x0:x1] == k
                 ring = (cv2.dilate(sub2.astype(np.uint8), k3) > 0) & (~sub2)
                 nb = lbl[y0:y1, x0:x1][ring]
-                nb = nb[(nb != ci) & (nb >= 0)]
+                nbm = (nb != ci) & (nb >= 0)
+                nb = nb[nbm]
                 if nb.size == 0:
                     continue
+                # Ô KỀ LỚP NÉT (vd mũi hồng chạm miệng): viền là NÉT (pr = màu nét, sát mask
+                # nét) không tính khi chọn màu gộp -> không gộp mũi/ô lạ vào MÀU NÉT; và khi nét
+                # chỉ chạm < 1/2 viền thì cũng bỏ qua nét khi xét LỖ KÍN -> mũi giữa mõm vẫn
+                # được giữ như khi chưa có lớp nét.
+                pr = None
+                if s_lbl is not None and s_lbl.size:
+                    try:
+                        pr = (prot_d[y0:y1, x0:x1][ring][nbm] > 0) & np.isin(nb, s_lbl)
+                        if not pr.any() or pr.all():
+                            pr = None
+                    except Exception:
+                        protect, s_code, s_lbl, pr = None, None, None, None   # lỗi: bỏ bảo vệ nét
+                nb_h = nb if (pr is None or float(pr.mean()) >= 0.5) else nb[~pr]
                 # LỖ KÍN (counter / lỗ trong chữ-logo): ô bao quanh bởi DUY NHẤT 1 màu ->
                 # KHÔNG gộp (gộp = lấp lỗ -> hỏng thiết kế chữ/logo). Giữ nguyên màu, để khâu
                 # đánh số đặt số NHỎ, miễn còn nhét nổi số bé nhất (rad >= r_floor). Quá bé
                 # (không số nổi) -> vẫn gộp. (Ô giữa 2+ màu = vệt/sliver -> gộp như cũ.)
-                if np.unique(nb).size == 1 and rad >= r_floor:
+                if np.unique(nb_h).size == 1 and rad >= r_floor:
                     continue
-                nbc = int(np.bincount(nb).argmax())
+                nbc = int(np.bincount(nb if pr is None else nb[~pr]).argmax())
                 yy, xx = np.where(sub2)
                 img[y0 + yy, x0 + xx] = colors[nbc]
                 lbl[y0 + yy, x0 + xx] = nbc
@@ -1566,6 +1655,206 @@ def _merge_unnumberable(arr, min_h, s, max_pass=3, n_colors=99, size_scale=1.0):
         if not changed:
             break
     return img
+
+
+# TÁCH LỚP NÉT (chỉ nhánh CHI TIẾT = ảnh minh hoạ/cây-hoa): mắt NHẮM, miệng cười, nét mặt
+# con vật vẽ phẳng là NÉT TỐI MẢNH (4-8px @1x). Nét mảnh hơn sàn cỡ số nên các bước gộp
+# (_merge_keep_features lượt 1, _merge_unnumberable) gộp nó vào màu LÔNG => mất mắt/miệng
+# dù tương phản rất cao. Lớp nét dò các nét này trên ảnh 2x TRƯỚC khi gộp, tô 1 màu tối
+# của bảng, NỚI tới cỡ số bé nhất rồi BẢO VỆ qua mọi bước gộp/làm mượt. Tắt: env
+# DETAIL_KEEP_STROKES=False (hoặc tham số keep_strokes=False) -> y hệt bản cũ.
+DETAIL_KEEP_STROKES = config("DETAIL_KEEP_STROKES", default=True, cast=bool)
+_STROKE_BH_LO = 30          # black-hat L (thang 0..255) tối thiểu để là pixel "nét tối"
+_STROKE_SIDE_MAX = 0.08     # nét dài hơn 8% cạnh dài ảnh = đường viền/cành/dây -> bỏ
+# Phần được TÔ của nét: L <= lõi + frac·(nền - lõi). Nét MỰC (A) chỉ lấy lõi đậm (0.35:
+# viền mắt + con ngươi, KHÔNG nuốt tròng xanh của mắt mở); nét NHẠT (B) lấy rộng hơn (0.5)
+# vì lõi chỉ đậm hơn nền chút ít (miệng nâu nhạt) — cắt chặt sẽ đứt nét.
+_STROKE_INK_FRAC = 0.35
+_STROKE_SOFT_FRAC = 0.5
+# MÀU LẠ dính nét (mũi hồng/cam, tròng mắt xanh...): pixel có sắc (a,b) cách ĐOẠN lõi->nền
+# > _STROKE_ALIEN_DAB (pha trộn khử răng cưa nét+nền nằm GẦN đoạn này) VÀ chroma cao hơn
+# lõi > _STROKE_ALIEN_DC -> KHÔNG phải mực: không tô màu nét, không cho nét nới lấn vào.
+_STROKE_ALIEN_DAB = 10.0
+_STROKE_ALIEN_DC = 8.0
+
+
+def _feature_stroke_layer(arr, src_rgb, r_keep, r_floor, exclude=None, r_need=None):
+    """TÁCH LỚP NÉT tối mảnh tương phản cao (mắt nhắm/miệng/nét mặt) làm ô số RIÊNG.
+
+    arr: ảnh đã lượng tử (2x, sửa TẠI CHỖ); src_rgb: ảnh gốc 2x (cùng cỡ) để dò nét.
+    r_keep: bán kính ô _merge_unnumberable giữ bình thường (r_need*1.15); r_floor: bán kính
+    số BÉ NHẤT (cùng nguồn _number_radii). exclude: mask không được tô (ruột chữ đã đục).
+    Trả (arr, mask 0/255 các nét, list nét [(y0, y1, x0, x1, sub_bool)]) để đóng dấu lại.
+
+    Dò: black-hat độ sáng L (cửa sổ ~4·r_keep) = vùng TỐI HƠN xung quanh mà HẸP hơn ô số;
+    bỏ phần RỘNG (opening) để nét dính mũi/mảng tối vẫn tách ra được. Mỗi mảnh giữ nếu:
+      - ngắn (<8% cạnh ảnh), không phải viền của mảng tối rộng (chạm phần rộng <=20%),
+      - vòng quanh SÁNG gần kín (<=20% pixel tối: loại khe/rìa của mảng tối lớn),
+      - A) nét MỰC: đỉnh black-hat >=130, lõi L<=35, ít màu (chroma<=25), lõi <=45% độ sáng
+           nền — mắt nhắm, miệng đậm (tới bán kính 0.5·r_floor);
+      - B) nét NHẠT trên mõm trắng: đỉnh >=75, nền rất sáng (L>=85) & phẳng (std<=8),
+           lõi <=78% nền, chroma<=35 — miệng nâu nhạt (từ bán kính 0.6·r_floor).
+    Màu nét = màu bảng TỐI (sáng <= giữa lõi & nền) GẦN màu lõi nhất, chỉ tô phần "mực" của
+    mảnh: tối (_STROKE_INK_FRAC/_SOFT_FRAC) VÀ không phải MÀU LẠ (mũi hồng/cam, tròng mắt:
+    _STROKE_ALIEN_*) — màu lạ cũng chặn không cho nét nới lấn vào. Mỗi đoạn mực được NỚI
+    (dilate, tối đa pad-1 px, không lấn màu lạ) tới bán kính đích
+    max(r_floor+0.3, min(r_need, 2×bề rộng gốc)), bề rộng gốc = 2×bán kính nội tiếp: luôn
+    đặt được số bé nhất (không ô trống); nét mắt/miệng thường đạt r_need -> số ~1mm (cỡ
+    sàn mức chi tiết) thay vì số bé nhất 0.78mm; nét sợi tóc không bị thổi phồng tới r_need.
+    r_need None = r_keep/1.15. Không tạo màu mới; chỉ tính theo bbox từng mảnh (không
+    mảng float toàn ảnh)."""
+    if r_need is None:
+        r_need = r_keep / 1.15
+    H, W = src_rgb.shape[:2]
+    L = cv2.cvtColor(src_rgb, cv2.COLOR_RGB2LAB)[:, :, 0].copy()
+    ks = int(round(4.0 * r_keep)) | 1
+    bh = cv2.morphologyEx(L, cv2.MORPH_BLACKHAT,
+                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (ks, ks)))
+    del L
+    m = (bh >= _STROKE_BH_LO).astype(np.uint8)
+    k3 = np.ones((3, 3), np.uint8)
+    rw = int(round(1.5 * r_keep))
+    wide = cv2.morphologyEx(m, cv2.MORPH_OPEN,
+                            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * rw + 1, 2 * rw + 1)))
+    wide = cv2.dilate(wide, k3)
+    thin = m & (1 - wide)
+    if exclude is not None:
+        thin[exclude > 0] = 0
+    nc, comp, st, _ = cv2.connectedComponentsWithStats(thin, connectivity=8)
+    stroke_mask = np.zeros((H, W), np.uint8)
+    if nc <= 1:
+        return arr, stroke_mask, []
+    # Bảng màu hiện có (mã hoá 24-bit -> unique 1 chiều, nhanh) + LAB của bảng.
+    code = ((arr[:, :, 0].astype(np.int32) << 16) | (arr[:, :, 1].astype(np.int32) << 8)
+            | arr[:, :, 2].astype(np.int32))
+    ucode = np.unique(code)
+    del code
+    pal = np.stack([(ucode >> 16) & 255, (ucode >> 8) & 255, ucode & 255], 1).astype(np.uint8)
+    pal_lab = cv2.cvtColor(pal.reshape(-1, 1, 3), cv2.COLOR_RGB2LAB).reshape(-1, 3).astype(np.float32)
+    side_max = _STROKE_SIDE_MAX * max(H, W)
+    a_min = 2.0 * r_floor * r_floor
+    r_tgt = r_floor + 0.3
+    e5 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    e13 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13))
+    cross = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+    pad = 8
+    picks = []
+    for k in range(1, nc):
+        x, y = int(st[k, cv2.CC_STAT_LEFT]), int(st[k, cv2.CC_STAT_TOP])
+        w, h = int(st[k, cv2.CC_STAT_WIDTH]), int(st[k, cv2.CC_STAT_HEIGHT])
+        area = int(st[k, cv2.CC_STAT_AREA])
+        if area < a_min or max(w, h) > side_max:
+            continue
+        x0, y0 = max(x - pad, 0), max(y - pad, 0)
+        x1, y1 = min(x + w + pad, W), min(y + h + pad, H)
+        sub = comp[y0:y1, x0:x1] == k
+        bhs = bh[y0:y1, x0:x1]
+        pk = float(bhs[sub].max())
+        if pk < 75:
+            continue
+        sub8 = sub.astype(np.uint8)
+        rad = float(cv2.distanceTransform(sub8, cv2.DIST_L2, 3).max())
+        if rad < 0.5 * r_floor or rad > 1.5 * r_keep:
+            continue
+        r1 = (cv2.dilate(sub8, k3) > 0) & ~sub
+        if r1.any() and float((wide[y0:y1, x0:x1][r1] > 0).mean()) > 0.2:
+            continue                                   # rìa của mảng tối RỘNG (thân chữ, mũi)
+        d1 = cv2.dilate(sub8, e5) > 0
+        band = (cv2.dilate(sub8, e13) > 0) & ~d1        # vòng cách nét 2..6px
+        ring = band & (m[y0:y1, x0:x1] == 0)
+        if int(ring.sum()) < 10:
+            continue
+        lab_c = cv2.cvtColor(np.ascontiguousarray(src_rgb[y0:y1, x0:x1]),
+                             cv2.COLOR_RGB2LAB).astype(np.float32)
+        core = sub & (bhs >= 0.75 * pk)
+        lc, lr = lab_c[core], lab_c[ring]
+        core_l = float(lc[:, 0].mean()) * 100.0 / 255.0
+        ring_l = float(lr[:, 0].mean()) * 100.0 / 255.0
+        ring_std = float(np.sqrt(lr.var(axis=0).sum()))
+        chroma = float(np.sqrt(((lc[:, 1:] - 128.0) ** 2).sum(axis=1)).mean())
+        ratio = core_l / max(ring_l, 1.0)
+        mid255 = (core_l + 0.5 * (ring_l - core_l)) * 255.0 / 100.0
+        ring_dark = float((lab_c[band][:, 0] < mid255).mean())
+        ink = (pk >= 130 and core_l <= 35.0 and chroma <= 25.0 and ratio <= 0.45
+               and ring_dark <= 0.2)
+        soft = (rad >= 0.6 * r_floor and ring_l >= 85.0 and ring_std <= 8.0
+                and chroma <= 35.0 and ratio <= 0.78 and ring_dark <= 0.1)
+        if not (ink or soft):
+            continue
+        # MÀU NÉT: màu bảng TỐI (L <= giữa lõi & nền) gần màu lõi nhất -> không màu mới.
+        cand = np.where(pal_lab[:, 0] <= mid255)[0]
+        if cand.size == 0:
+            continue
+        tgt = lc.mean(axis=0)
+        ci = int(cand[((pal_lab[cand] - tgt) ** 2).sum(axis=1).argmin()])
+        # MÀU LẠ (mũi hồng/cam, tròng mắt...) liền nét: sắc (a,b) XA đoạn lõi->nền VÀ đậm
+        # màu hơn lõi rõ rệt. Bỏ vụn lẻ (nhiễu nén), nới 1px phủ viền khử răng cưa của mũi.
+        ab = lab_c[:, :, 1:] - 128.0
+        ca = lc[:, 1:].mean(axis=0) - 128.0
+        sg = lr[:, 1:].mean(axis=0) - 128.0 - ca
+        tt = np.clip(((ab - ca) * sg).sum(axis=2) / max(float((sg * sg).sum()), 1e-6), 0.0, 1.0)
+        d_seg = np.sqrt(((ab - ca - tt[:, :, None] * sg) ** 2).sum(axis=2))
+        alien = ((d_seg > _STROKE_ALIEN_DAB)
+                 & (np.sqrt((ab * ab).sum(axis=2)) > chroma + _STROKE_ALIEN_DC)).astype(np.uint8)
+        del ab, tt, d_seg
+        if alien.any():
+            _na, acomp, ast, _ = cv2.connectedComponentsWithStats(alien, connectivity=8)
+            small = np.where(ast[:, cv2.CC_STAT_AREA] < 0.5 * a_min)[0]
+            alien[np.isin(acomp, small[small > 0])] = 0
+            alien = cv2.dilate(alien, k3)
+        ok = alien == 0
+        # CHỈ tô phần "MỰC" của mảnh (L <= lõi + frac·(nền-lõi), không màu lạ): mảnh
+        # black-hat có thể dính mũi hồng / tròng mắt xanh liền kề -> không tô cả mũi/tròng.
+        # Mỗi đoạn tối NỚI riêng (không lấn màu lạ) tới đích max(r_floor+0.3, min(r_need,
+        # 2×bề rộng gốc)), bề rộng gốc = 2·r0 -> luôn vẽ được số bé nhất; số trong nét ≈1mm.
+        frac = _STROKE_INK_FRAC if ink else _STROKE_SOFT_FRAC
+        ink255 = (core_l + frac * (ring_l - core_l)) * 255.0 / 100.0
+        dark = (sub & ok & (lab_c[:, :, 0] <= ink255)).astype(np.uint8)
+        npc, pcomp, pst, _ = cv2.connectedComponentsWithStats(dark, connectivity=8)
+        g = np.zeros_like(sub)
+        for q in range(1, npc):
+            if int(pst[q, cv2.CC_STAT_AREA]) < 0.5 * a_min:
+                continue                               # vụn tối lẻ (đầu nét khử răng cưa)
+            grown = (pcomp == q).astype(np.uint8)
+            r0 = float(cv2.distanceTransform(grown, cv2.DIST_L2, 3).max())
+            r_q = max(r_tgt, min(r_need, 2.0 * (2.0 * r0)))
+            for _ in range(pad - 1):
+                if r0 >= r_q:
+                    break
+                grown = cv2.dilate(grown, cross) & ok
+                r0 = float(cv2.distanceTransform(grown, cv2.DIST_L2, 3).max())
+            g |= grown > 0
+        if exclude is not None:
+            g &= exclude[y0:y1, x0:x1] == 0
+        if not g.any():
+            continue
+        picks.append((y0, y1, x0, x1, g, pal[ci]))
+    strokes = []
+    for y0, y1, x0, x1, g, col in picks:                # tô SAU khi dò xong (lỗi giữa chừng
+        arr[y0:y1, x0:x1][g] = col                      # không để arr tô dở dang)
+        stroke_mask[y0:y1, x0:x1][g] = 255
+        strokes.append((y0, y1, x0, x1, g))
+    return arr, stroke_mask, strokes
+
+
+def _restamp_strokes(arr, strokes):
+    """ĐÓNG DẤU LẠI lớp nét sau _ensure_n_colors/_smooth_fill: mỗi nét về ĐÚNG 1 màu (màu
+    đang chiếm nhiều nhất trong nét — bảng màu có thể vừa bị tách/gộp) và đúng hình đã nới
+    -> nét liền 1 ô, đủ bán kính đặt số. Sửa arr TẠI CHỖ. Tính hết màu TRƯỚC rồi mới tô
+    (lỗi giữa chừng không để arr tô dở dang)."""
+    todo = []
+    for y0, y1, x0, x1, g in strokes:
+        px = arr[y0:y1, x0:x1][g]
+        if px.size == 0:
+            continue
+        cc = ((px[:, 0].astype(np.int32) << 16) | (px[:, 1].astype(np.int32) << 8)
+              | px[:, 2].astype(np.int32))
+        u, c = np.unique(cc, return_counts=True)
+        best = int(u[c.argmax()])
+        todo.append((y0, y1, x0, x1, g, ((best >> 16) & 255, (best >> 8) & 255, best & 255)))
+    for y0, y1, x0, x1, g, col in todo:
+        arr[y0:y1, x0:x1][g] = col
+    return arr
 
 
 def _restore_missing_colors(small, big):
@@ -1970,7 +2259,7 @@ def _number_work_image(work_path, design_out=None, debug=False,
 
 def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_out=None,
                 print_long_cm=0, detail=False, face_priority=False, num_detail=1.0,
-                keep_holes=False):
+                keep_holes=False, keep_strokes=None):
     """num_colors > 0: gom ảnh về tối đa N màu (để trống = DEFAULT_NUM_COLORS).
     min_area > 0: gộp các mảng màu nhỏ hơn N pixel vào hàng xóm (đỡ lấm tấm).
     smooth (0..3): làm phẳng vùng (mean-shift) trước khi gom — dọn ảnh màu nước/chụp.
@@ -1981,7 +2270,9 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
     tỉ lệ 50/khổ để số/ô IN RA giữ đúng mm như chuẩn 40x50 (in 20cm số không teo còn
     một nửa, ô li ti không tô nổi). Khổ >=40cm giữ NGUYÊN chuẩn cũ (không đổi kết quả).
     num_detail: nút "Độ chi tiết đánh số" (1.0 = chuẩn, <1 = giữ ô nhỏ hơn -> chi tiết
-    hơn). CHỈ có tác dụng khi detail=True; 1.0 -> kết quả y hệt trước."""
+    hơn). CHỈ có tác dụng khi detail=True; 1.0 -> kết quả y hệt trước.
+    keep_strokes: (detail=True) GIỮ nét tối mảnh mắt nhắm/miệng làm ô số riêng (lớp nét).
+    None = mặc định DETAIL_KEEP_STROKES (bật); False = y hệt bản cũ."""
     cv2.setRNGSeed(0)              # cv2.kmeans khong seed -> so mau nhay moi lan;
     #                               co dinh -> chon 60 ra 60 on dinh, chay lai giong het.
     effective_n = num_colors if (num_colors and num_colors > 0) else DEFAULT_NUM_COLORS
@@ -1999,7 +2290,8 @@ def index_color(path, debug=False, num_colors=0, min_area=0, smooth=0, design_ou
                                          face_priority=face_priority,
                                          size_scale=size_scale,
                                          num_detail=num_detail,
-                                         keep_holes=keep_holes)
+                                         keep_holes=keep_holes,
+                                         keep_strokes=keep_strokes)
     # keep_all=True cho MỌI preset: bảng màu = ĐÚNG các màu có trong ảnh thiết kế,
     # KHÔNG lọc bỏ màu chiếm ít diện tích. Trước đây path chân dung lọc theo
     # THRESHOLD_PERCENT_COLOR (0.03%) -> "chọn 60 màu mà chỉ ra 32" (đo thật: thiết kế

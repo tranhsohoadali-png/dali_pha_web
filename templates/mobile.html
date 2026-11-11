@@ -50,6 +50,13 @@
       display:inline-flex; align-items:center; gap:.3rem; background:rgba(255,255,255,.14);
       border-radius:50rem; padding:.28rem .6rem; font-size:.78rem; font-weight:600; color:#fff; white-space:nowrap;
     }
+    /* Màn hẹp (≤ 399px, vd 360/375): ẩn chip tên để 5–6 nút tròn không tràn thanh trên
+       (tên vẫn ở tooltip nút Đăng xuất); tiêu đề được co + "…" thay vì đẩy nút ra ngoài */
+    .topbar .brandtxt { min-width:0; }
+    .topbar .brandtxt h1, .topbar .brandtxt .brand-sub { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    @media (max-width: 399.98px) {
+      .topbar .userchip { display:none; }
+    }
 
     /* ----- Tab pill (JS setBtn ghi đè className -> style theo .tabbar con) ----- */
     .tabbar .btn { border-radius:12px; letter-spacing:.1px; }
@@ -138,15 +145,16 @@
   <div class="topwrap">
     <div class="d-flex align-items-center gap-2 mb-2">
       <span class="brandic"><i class="bi bi-droplet-half"></i></span>
-      <div class="flex-grow-1 lh-1">
+      <div class="flex-grow-1 lh-1 brandtxt">
         <h1 class="h6 mb-0">Công thức pha</h1>
         <span class="brand-sub">DALI · Pha màu</span>
       </div>
       <button id="installBtn" class="btn btn-sm btn-light" style="display:none"><i class="bi bi-download"></i></button>
       <button id="bellToggle" class="btn btn-sm btn-light" title="Chuông dậy trưa trên máy này"><i class="bi bi-bell-fill"></i></button>
       <a href="/cham-cong" class="btn btn-sm btn-light" title="Chấm công"><i class="bi bi-fingerprint"></i></a>
+      <a href="/giao-viec" class="btn btn-sm btn-light" title="Giao việc — việc của tôi"><i class="bi bi-list-check"></i></a>
       <span class="userchip"><i class="bi bi-person-circle"></i> {{ user.username }}</span>
-      <a href="/logout" class="btn btn-sm btn-outline-light" title="Đăng xuất"><i class="bi bi-box-arrow-right"></i></a>
+      <a href="/logout" class="btn btn-sm btn-outline-light" title="Đăng xuất ({{ user.username }})"><i class="bi bi-box-arrow-right"></i></a>
     </div>
     <div class="d-flex gap-1 mb-2 tabbar">
       <button id="tabRecipes" class="btn btn-light flex-fill fw-bold px-1" style="height:44px;font-size:.85rem">Công thức</button>

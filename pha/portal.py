@@ -38,6 +38,7 @@ CATALOG = [
     ]},
     {'title': 'Nhân sự', 'icon': 'bi-people', 'accent': 'teal', 'apps': [
         {'name': 'Chấm công', 'desc': 'Vào/ra theo WiFi xưởng', 'url': '/cham-cong', 'icon': 'bi-fingerprint'},
+        {'name': 'Giao việc', 'desc': 'Việc của tôi · theo phòng ban', 'url': '/giao-viec', 'icon': 'bi-list-check', 'badge': 'viec'},
         {'name': 'Quản lý chấm công', 'desc': 'Bảng công · lương · IP', 'url': '/cham-cong-quan-ly', 'icon': 'bi-shield-check', 'staff': True},
         {'name': 'Nhân viên', 'desc': 'Tài khoản & phân quyền', 'url': '/nhan-vien', 'icon': 'bi-person-badge', 'staff': True},
         {'name': 'Nghỉ phép', 'desc': 'Xin & duyệt nghỉ', 'url': '/nghi-phep', 'icon': 'bi-calendar-x'},
@@ -72,11 +73,21 @@ CATALOG = [
 ]
 
 
-def _live_badges(is_staff):
+def _live_badges(is_staff, username=''):
     """Số liệu sống cho badge trên tile. An toàn: lỗi -> 0."""
     low = pour = rip = 0
+    viec = {}
+    try:
+        from pha.giaoviec import dem_viec   # theo TỪNG người (cả nhân viên thường)
+        dv = dem_viec(username)
+        n = dv['tre'] + dv['han_mai']
+        if n:
+            viec = {'viec': (n, ('%d trễ' % dv['tre']) if dv['tre'] else ('%d sắp hạn' % n),
+                             'text-bg-danger' if dv['tre'] else 'text-bg-warning')}
+    except Exception:
+        viec = {}
     if not is_staff:
-        return {}
+        return viec
     try:
         from pha.models import PaintStock
         low = sum(1 for p in PaintStock.objects.all()
@@ -97,6 +108,7 @@ def _live_badges(is_staff):
         'low': (low, '%d sắp hết' % low, 'text-bg-danger'),
         'pour': (pour, '%d chờ rót' % pour, 'text-bg-warning'),
         'rip': (rip, '%d chờ RIP' % rip, 'text-bg-primary'),
+        **viec,
     }
 
 
@@ -104,7 +116,7 @@ def _live_badges(is_staff):
 def trung_tam(request):
     """Lưới portal. Lọc tile theo quyền (staff), gắn badge số liệu sống."""
     is_staff = bool(getattr(request.user, 'is_staff', False))
-    badges = _live_badges(is_staff)
+    badges = _live_badges(is_staff, request.user.username)
     cats, total = [], 0
     for cat in CATALOG:
         apps = []

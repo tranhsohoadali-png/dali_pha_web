@@ -31,6 +31,9 @@
           <a class="nav-link position-relative{% if '/ma-tranh' in request.path %} active fw-semibold{% endif %}" href="/ma-tranh"><i class="bi bi-paint-bucket"></i> Rót màu{% if nav_pour_pending %} <span class="badge text-bg-warning">{{ nav_pour_pending }}</span>{% endif %}</a>
         </li>
         <li class="nav-item">
+          <a class="nav-link{% if '/giao-viec' in request.path %} active fw-semibold{% endif %}" href="/giao-viec"><i class="bi bi-list-check"></i> Giao việc{% if nav_viec %} <span class="badge text-bg-danger">{{ nav_viec }}</span>{% endif %}</a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link{% if '/inbox' in request.path %} active fw-semibold{% endif %}" href="/inbox"><i class="bi bi-chat-dots"></i> Hộp thư</a>
         </li>
         <li class="nav-item">
