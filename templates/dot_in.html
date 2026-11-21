@@ -25,6 +25,9 @@
 .dq h1,.dq h2,.dq h3{margin:0}
 .dq button,.dq input,.dq textarea{font-family:inherit}
 .dq-wrap{max-width:980px;margin:0 auto;padding:0 14px}
+.dq-xtabs{display:flex;gap:8px;flex-wrap:wrap;padding-top:16px}
+.dq-xtabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);font-weight:700;font-size:14px;text-decoration:none;min-height:40px}
+.dq-xtabs a.on{border-color:var(--accent);background:var(--accent-wash);color:var(--accent-ink)}
 .dq-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:18px 0 6px}
 .dq-logo{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#E8590C,#F59F00);display:grid;place-items:center;box-shadow:var(--shadow)}
 .dq-logo i{color:#fff;font-size:20px}
@@ -135,6 +138,11 @@
 {% endif %}
 <div class="dq" id="dq">
   <div class="dq-wrap">
+    {% if is_chu %}<div class="dq-xtabs no-print" aria-label="Xưởng in">
+      <a href="/quan-ly-in"><i class="bi bi-printer"></i> In thẻ</a>
+      <a class="on" href="/dot-in" aria-current="page"><i class="bi bi-boxes"></i> Đếm &amp; gửi Hà Nội</a>
+      <a href="/quan-ly-in?tab=file"><i class="bi bi-folder2-open"></i> Thư viện file</a>
+    </div>{% endif %}
     <div class="dq-head">
       <div class="dq-ttl">
         <span class="dq-logo"><i class="bi bi-boxes"></i></span>

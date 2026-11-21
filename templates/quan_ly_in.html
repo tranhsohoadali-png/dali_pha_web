@@ -193,7 +193,26 @@
 .btdot.ok{background:var(--ok)} .btdot.bad{background:#D64545}
 .btstep .ck{margin-left:auto;font-size:12px;color:var(--ink-soft);white-space:nowrap}
 .btstep .ck.bad{color:#D64545;font-weight:600}
-@media (max-width:600px){ .tabs{grid-template-columns:1fr} .frm .act{grid-column:1/-1} .keybox{margin-left:0} }
+/* v6: 4 nút lớn cho thợ in + hàng nút Nâng cao + chip Cần in */
+.tab.xlink{text-decoration:none;color:inherit}
+.advbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.apill{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 15px;font-size:13.5px;font-weight:700;cursor:pointer;color:var(--ink-soft);display:inline-flex;gap:6px;align-items:center}
+.apill[aria-selected="true"]{border-color:var(--accent);background:var(--accent-wash);color:var(--accent-ink)}
+.canin{margin-top:14px}
+.canin .lbl{font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:7px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.canin .chips{display:flex;gap:7px;flex-wrap:wrap}
+.cchip{border:1px solid #F0CD97;background:#FFFBF4;color:var(--amber);border-radius:999px;padding:8px 13px;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;gap:6px;align-items:center;transition:.14s;min-height:38px}
+.cchip.bad{border-color:#F0B7B1;background:#FFF6F5;color:#B23A2E}
+.cchip:hover{filter:brightness(.97)}
+.canin a.lnk{font-size:12.5px;font-weight:700;color:var(--accent-ink);text-decoration:none;margin-left:auto}
+details.addfile{margin-top:16px;padding:0}
+details.addfile>summary{cursor:pointer;list-style:none;padding:14px 16px;font-family:"Baloo 2";font-weight:700;font-size:15px;color:var(--accent-ink);display:flex;align-items:center;gap:8px}
+details.addfile>summary::-webkit-details-marker{display:none}
+details.addfile>.frm,details.addfile>.addbody{padding:0 16px 16px}
+details.fdetail{grid-column:1/-1;border:1px dashed var(--line);border-radius:10px;padding:8px 12px}
+details.fdetail>summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--ink-soft)}
+details.fdetail .frm{margin-top:10px}
+@media (max-width:600px){ .thead{display:none!important} .trow{flex-wrap:wrap} .trow .tsel{flex:1 1 100%!important;min-width:0;width:100%} .tabs{grid-template-columns:1fr 1fr;gap:8px} .tab{padding:11px 12px} .tab .ts{display:none} .tab i{font-size:20px} .tab .tn{font-size:15px} .frm .act{grid-column:1/-1} .keybox{margin-left:0} }
 </style>
 </head>
 <body class="bg-body-tertiary">
@@ -203,7 +222,7 @@
   <div class="pagehead">
     <div class="ttl">
       <span class="logo"><i class="bi bi-printer-fill"></i></span>
-      <div><h1>Quản lý xưởng in 3D</h1><div class="sub">Máy Bambu Lab A1 · thư viện file in</div></div>
+      <div><h1>Xưởng in</h1><div class="sub">Chọn thẻ · tải file in · đếm &amp; gửi Hà Nội</div></div>
     </div>
     <button type="button" class="btn primary" id="installBtn" style="display:none"><i class="bi bi-phone"></i> Cài app</button>
   </div>
@@ -212,28 +231,28 @@
   </div>
 
   <div class="tabs" role="tablist">
-    <button type="button" class="tab" role="tab" data-tab="may" aria-selected="true">
-      <i class="bi bi-hdd-stack"></i><div><div class="tn">Máy in</div><div class="ts">Trạng thái từng máy A1</div></div>
+    <button type="button" class="tab" role="tab" data-tab="in" aria-selected="true">
+      <i class="bi bi-printer"></i><div><div class="tn">In thẻ</div><div class="ts">Chọn thẻ · tải file in</div></div>
     </button>
-    <button type="button" class="tab" role="tab" data-tab="file" aria-selected="false">
-      <i class="bi bi-folder2-open"></i><div><div class="tn">Thư viện file in</div><div class="ts">File thẻ · cắt &amp; gửi máy</div></div>
-    </button>
-    <button type="button" class="tab" role="tab" data-tab="job" aria-selected="false">
-      <i class="bi bi-list-check"></i><div><div class="tn">Lệnh in</div><div class="ts">Hàng đợi &amp; lịch sử</div></div>
-    </button>
-    <button type="button" class="tab" role="tab" data-tab="live" aria-selected="false">
-      <i class="bi bi-broadcast"></i><div><div class="tn">Realtime</div><div class="ts">Trạng thái máy A1 · điều khiển</div></div>
-    </button>
-    <button type="button" class="tab" role="tab" data-tab="bt" aria-selected="false">
-      <i class="bi bi-tools"></i><div><div class="tn">Bảo trì</div><div class="ts">Nhắc &amp; tích bước bảo trì máy</div></div>
-    </button>
-    <a class="tab" href="/dot-in" role="link" style="text-decoration:none;color:inherit">
-      <i class="bi bi-boxes"></i><div><div class="tn">Phụ kiện TKB</div><div class="ts">Đếm bảng &amp; phụ kiện · gửi Hà Nội</div></div>
+    <a class="tab xlink" href="/dot-in" role="link">
+      <i class="bi bi-boxes"></i><div><div class="tn">Đếm &amp; gửi Hà Nội</div><div class="ts">Bảng + gói phụ kiện</div></div>
     </a>
+    <button type="button" class="tab" role="tab" data-tab="file" aria-selected="false">
+      <i class="bi bi-folder2-open"></i><div><div class="tn">Thư viện file</div><div class="ts">Duyệt · tải · thêm file mới</div></div>
+    </button>
+    <button type="button" class="tab" role="tab" data-tab="adv" aria-selected="false">
+      <i class="bi bi-gear"></i><div><div class="tn">Nâng cao (chủ)</div><div class="ts">Máy · Lệnh in · Realtime · Bảo trì</div></div>
+    </button>
+  </div>
+  <div class="advbar hidden" id="advBar" role="tablist" aria-label="Mục nâng cao">
+    <button type="button" class="apill" role="tab" data-tab="may" aria-selected="true"><i class="bi bi-hdd-stack"></i> Máy in</button>
+    <button type="button" class="apill" role="tab" data-tab="job" aria-selected="false"><i class="bi bi-list-check"></i> Lệnh in</button>
+    <button type="button" class="apill" role="tab" data-tab="live" aria-selected="false"><i class="bi bi-broadcast"></i> Realtime</button>
+    <button type="button" class="apill" role="tab" data-tab="bt" aria-selected="false"><i class="bi bi-tools"></i> Bảo trì</button>
   </div>
 
   <!-- ===== TAB MÁY ===== -->
-  <div id="paneMay">
+  <div id="paneMay" class="hidden">
     <section class="card panel">
       <h2><span class="pin">◆</span> <span id="mFormTitle">Thêm máy in</span></h2>
       <div class="frm">
@@ -257,55 +276,63 @@
     </section>
   </div>
 
-  <!-- ===== TAB FILE (gộp: thư viện + cắt & gửi máy) ===== -->
-  <div id="paneFile" class="hidden">
+  <!-- ===== TAB IN THẺ (mặc định): chip Cần in + chọn thẻ + tải file ===== -->
+  <div id="paneIn">
+    <div class="canin" id="canIn"></div>
     <section class="card panel">
-      <h2><span class="pin">◆</span> Cắt &amp; gửi máy — chọn file thẻ + số lượng/thời gian</h2>
-      <div class="frm">
-        <div class="fld"><label>Máy in</label><select id="tMay"></select></div>
-        <div class="fld"><label>Đầu phun</label><select id="tDauPhun"><option value="0.2">0.2</option><option value="0.4">0.4</option></select></div>
-      </div>
-      <div style="font-size:12px;color:var(--ink-faint);margin-top:8px"><i class="bi bi-thermometer-half"></i> Nhiệt vòi thân/chữ in theo <b>từng thẻ</b> — sửa ở mục "Sửa thông tin" của thẻ bên dưới (Thư viện file in).</div>
-      <div style="position:relative;margin-top:14px;z-index:20">
+      <h2><span class="pin">◆</span> Chọn thẻ + số lượng/giờ in → tải file in</h2>
+      <!-- Máy in + Đầu phun: ẩn (chưa có máy nối; đầu phun tự theo thẻ đã chọn, không trộn khác vòi). Giữ trong DOM cho code cũ. -->
+      <div class="hidden"><select id="tMay"></select><select id="tDauPhun"><option value="0.2">0.2</option><option value="0.4">0.4</option></select></div>
+      <div style="position:relative;margin-top:4px;z-index:20">
         <i class="bi bi-search" style="position:absolute;left:11px;top:19px;transform:translateY(-50%);color:var(--ink-faint);font-size:14px;pointer-events:none"></i>
-        <input id="tSearch" placeholder="Tìm nhanh thẻ (gõ tên môn)…" autocomplete="off" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 11px 9px 34px;background:var(--surface-2);color:var(--ink);font-size:14px">
+        <input id="tSearch" placeholder="Tìm nhanh thẻ (gõ tên môn)…" autocomplete="off" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 11px 11px 34px;background:var(--surface-2);color:var(--ink);font-size:15px">
         <div id="tSug" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);max-height:300px;overflow-y:auto;background:var(--surface,#fff);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
       </div>
-      <div style="display:flex;gap:8px;margin:12px 0 6px;font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em">
+      <div class="thead" style="display:flex;gap:8px;margin:12px 0 6px;font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em">
         <span style="flex:2">Thẻ</span><span style="width:96px">Giờ in</span><span style="width:84px">Số lượng</span><span style="width:34px"></span>
       </div>
       <div id="tRows"></div>
       <div style="font-size:12px;color:var(--ink-faint);margin-top:2px">Gõ <b>Giờ in</b> → tự tính Số lượng (theo phút/thẻ); hoặc gõ thẳng Số lượng.</div>
-      <div style="margin-top:8px"><button type="button" class="btn sm" id="tAddRow"><i class="bi bi-plus-lg"></i> Thêm loại thẻ (trộn trong 1 file)</button></div>
+      <div style="margin-top:8px"><button type="button" class="btn sm" id="tAddRow"><i class="bi bi-plus-lg"></i> Thêm thẻ khác (trộn cùng 1 file)</button></div>
       <div id="tEstimate" style="font-size:13px;color:var(--ink-soft);margin-top:12px"></div>
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button type="button" class="btn primary" id="tXuat"><i class="bi bi-download"></i> Xuất file (tải về máy)</button>
-        <button type="button" class="btn" id="tSend"><i class="bi bi-printer"></i> Gửi cắt &amp; in (cần máy)</button>
-        <span style="font-size:12px;color:var(--ink-faint)">Xuất file = tải .3mf đúng số thẻ về, mở Bambu Studio in. <b>Trộn tất cả loại thẻ đang chọn vào 1 file.</b></span>
+        <button type="button" class="btn primary" id="tXuat" style="padding:12px 18px;font-size:15px"><i class="bi bi-download"></i> Tải file in (.3mf)</button>
+        <button type="button" class="btn hidden" id="tSend"><i class="bi bi-printer"></i> Gửi cắt &amp; in (cần máy)</button>
+        <span style="font-size:12px;color:var(--ink-faint)">Tải .3mf đúng số thẻ → mở Bambu Studio rồi bấm In. Chọn nhiều loại thẻ thì <b>trộn vào 1 file</b> (cùng đầu phun).</span>
       </div>
     </section>
+  </div>
 
-    <section class="card panel">
-      <h2><span class="pin">◆</span> <span id="fFormTitle">Thêm file in</span></h2>
+  <!-- ===== TAB THƯ VIỆN FILE ===== -->
+  <div id="paneFile" class="hidden">
+    <details class="card panel addfile" id="fAddBox">
+      <summary><i class="bi bi-plus-lg"></i> <span id="fFormTitle">Thêm file mới</span></summary>
       <div class="frm">
         <div class="fld wide" id="fFileWrap"><label>File in (.3mf / .gcode / .stl / .zip)</label><input id="fFile" type="file" accept=".3mf,.gcode,.stl,.zip,.gcode.3mf"></div>
         <div class="fld"><label>Nhóm sản phẩm</label><input id="fNhom" placeholder="VD: Thẻ môn học" autocomplete="off" list="nhomList"><datalist id="nhomList"></datalist></div>
         <div class="fld"><label>Tên hiển thị</label><input id="fTen" placeholder="VD: TOÁN" autocomplete="off"></div>
         <div class="fld"><label>Đầu phun</label><select id="fDauPhun"><option value="">— tự đọc —</option><option value="0.2">0.2</option><option value="0.4">0.4</option></select></div>
-        <div class="fld"><label>Phút / thẻ</label><input id="fPhut" type="number" min="0" inputmode="numeric" placeholder="phút"></div>
-        <div class="fld"><label>Nhựa (g) / thẻ</label><input id="fNhua" type="number" min="0" step="0.1" inputmode="decimal" placeholder="gam"></div>
-        <div class="fld"><label>Số thẻ / file</label><input id="fCon" type="number" min="0" inputmode="numeric" placeholder="thẻ"></div>
-        <div class="fld"><label>Nhiệt vòi · thân (°C)</label><input id="fThan" type="number" min="0" inputmode="numeric" placeholder="tự đọc file"></div>
-        <div class="fld"><label>Nhiệt vòi · chữ (°C)</label><input id="fChu" type="number" min="0" inputmode="numeric" placeholder="tự đọc file"></div>
-        <div class="fld"><label>Nhiệt bàn (°C)</label><input id="fBed" type="number" min="0" inputmode="numeric" placeholder="tự đọc file"></div>
-        <div class="fld"><label>Màu gợi ý</label><input id="fMau" placeholder="VD: Xanh dương" autocomplete="off"></div>
         <div class="fld wide"><label>Ghi chú</label><input id="fGhiChu" placeholder="Đầu phun, tốc độ, lưu ý…" autocomplete="off"></div>
+        <details class="fdetail" id="fDetail">
+          <summary>Chi tiết (tuỳ chọn)</summary>
+          <div class="frm">
+            <div class="fld"><label>Phút / thẻ</label><input id="fPhut" type="number" min="0" inputmode="numeric" placeholder="phút"></div>
+            <div class="fld"><label>Nhựa (g) / thẻ</label><input id="fNhua" type="number" min="0" step="0.1" inputmode="decimal" placeholder="gam"></div>
+            <div class="fld"><label>Số thẻ / file</label><input id="fCon" type="number" min="0" inputmode="numeric" placeholder="thẻ"></div>
+            <div class="fld"><label>Màu gợi ý</label><input id="fMau" placeholder="VD: Xanh dương" autocomplete="off"></div>
+          </div>
+          <div class="frm hidden" id="fTempWrap">
+            <div class="fld"><label>Nhiệt vòi · thân (°C)</label><input id="fThan" type="number" min="0" inputmode="numeric" placeholder="tự đọc file"></div>
+            <div class="fld"><label>Nhiệt vòi · chữ (°C)</label><input id="fChu" type="number" min="0" inputmode="numeric" placeholder="tự đọc file"></div>
+            <div class="fld"><label>Nhiệt bàn (°C)</label><input id="fBed" type="number" min="0" inputmode="numeric" placeholder="tự đọc file"></div>
+          </div>
+        </details>
         <div class="act">
           <button type="button" class="btn primary" id="fSave"><i class="bi bi-cloud-arrow-up"></i> Tải lên</button>
           <button type="button" class="btn hidden" id="fCancel">Hủy sửa</button>
         </div>
       </div>
-    </section>
+    </details>
     <div class="filters">
       <select id="fFilter"><option value="">Tất cả nhóm</option></select>
       <input id="fSearch" class="grow" placeholder="Tìm theo tên file…">
@@ -406,7 +433,7 @@
     </section>
   </div>
 
-  <p class="foot">Dữ liệu lưu trên máy chủ (media/print). Realtime + tự cắt cần <b>agent</b> chạy ở PC xưởng (Bambu Studio + MQTT/FTPS tới máy A1 trong LAN).<br>DALI 3D · Xưởng in</p>
+  <p class="foot">DALI 3D · Xưởng in</p>
 </div>
 </div>
 <div class="toast" id="toast"><i class="bi bi-check-circle-fill"></i><span id="toastTxt"></span></div>
@@ -424,19 +451,22 @@ function postJSON(url,data){return fetch(url,{method:"POST",headers:{"Content-Ty
 var TT={ranh:"Rảnh",dang_in:"Đang in",bao_tri:"Bảo trì"};
 
 /* ---------- TABS ---------- */
-document.querySelectorAll(".tab[data-tab]").forEach(function(t){ t.addEventListener("click",function(){
-  var tab=t.dataset.tab;
-  document.querySelectorAll(".tab[data-tab]").forEach(function(x){x.setAttribute("aria-selected",x===t?"true":"false");});
-  $("paneMay").classList.toggle("hidden",tab!=="may");
-  $("paneFile").classList.toggle("hidden",tab!=="file");
-  $("paneJob").classList.toggle("hidden",tab!=="job");
-  $("paneLive").classList.toggle("hidden",tab!=="live");
-  $("paneBT").classList.toggle("hidden",tab!=="bt");
+var PANES={in:"paneIn",file:"paneFile",may:"paneMay",job:"paneJob",live:"paneLive",bt:"paneBT"}, ADV=["may","job","live","bt"], lastAdv="may";
+function showTab(tab){
+  if(tab==="adv") tab=lastAdv;
+  if(!PANES[tab]) tab="in";
+  var isAdv=ADV.indexOf(tab)>=0; if(isAdv) lastAdv=tab;
+  Object.keys(PANES).forEach(function(k){ $(PANES[k]).classList.toggle("hidden",k!==tab); });
+  document.querySelectorAll("[data-tab]").forEach(function(x){ var k=x.dataset.tab; x.setAttribute("aria-selected",(k===tab||(k==="adv"&&isAdv))?"true":"false"); });
+  $("advBar").classList.toggle("hidden",!isAdv);
+  if(tab==="in"){ startFileTab(); loadCanIn(); }
   if(tab==="file"){ startFileTab(); }
   if(tab==="job"){ loadJob(); loadKhoSuggest(); }
   if(tab==="live"){ startLive(); } else { stopLive(); }
   if(tab==="bt"){ startBT(); }
-}); });
+  if(tab==="may"){ loadMay(); }
+}
+document.addEventListener("click",function(e){ var t=e.target.closest("[data-tab]"); if(t) showTab(t.dataset.tab); });
 
 /* ---------- MÁY IN ---------- */
 var mEdit="";
@@ -540,13 +570,13 @@ function renderFile(){
   });
 }
 function editFile(f){ fEdit=f.id; $("fFormTitle").textContent="Sửa thông tin: "+f.ten;
-  $("fFileWrap").classList.add("hidden");
+  $("fFileWrap").classList.add("hidden"); $("fAddBox").open=true; $("fDetail").open=true; $("fTempWrap").classList.remove("hidden");
   $("fNhom").value=f.nhom||""; $("fTen").value=f.ten||""; $("fPhut").value=f.phut||"";
   $("fNhua").value=f.nhua||""; $("fCon").value=f.so_the||f.con||""; $("fMau").value=f.mau||""; $("fGhiChu").value=f.ghi_chu||""; $("fDauPhun").value=f.dau_phun||"";
   $("fThan").value=f.nhiet_than||""; $("fChu").value=f.nhiet_chu||""; $("fBed").value=f.bed||"";
   $("fSave").innerHTML='<i class="bi bi-save"></i> Lưu sửa'; $("fCancel").classList.remove("hidden");
   window.scrollTo({top:0,behavior:"smooth"}); }
-function resetFileForm(){ fEdit=""; $("fFormTitle").textContent="Thêm file in"; $("fFileWrap").classList.remove("hidden");
+function resetFileForm(){ fEdit=""; $("fFormTitle").textContent="Thêm file mới"; $("fFileWrap").classList.remove("hidden"); $("fTempWrap").classList.add("hidden"); $("fDetail").open=false; $("fAddBox").open=false;
   ["fFile","fTen","fPhut","fNhua","fCon","fMau","fGhiChu","fThan","fChu","fBed"].forEach(function(i){$(i).value="";}); $("fDauPhun").value="";
   $("fSave").innerHTML='<i class="bi bi-cloud-arrow-up"></i> Tải lên'; $("fCancel").classList.add("hidden"); }
 $("fCancel").addEventListener("click",resetFileForm);
@@ -666,6 +696,38 @@ function prefillFromKho(ten){ $("jTen").value=ten;
   $("jFile").value=f?f.id:""; $("jUT").value=1;
   window.scrollTo({top:0,behavior:"smooth"}); $("jTen").focus(); toast("Điền lệnh in bù: "+ten); }
 
+/* ---------- CẦN IN: chỗ đang thiếu ở "Đếm & gửi Hà Nội" + kho nút sắp hết ---------- */
+function openLib(nhom,q){
+  showTab("file");
+  var hasG=FILES.some(function(f){return f.nhom===nhom;});
+  $("fFilter").value=hasG?nhom:"";
+  var g=$("fFilter").value, ql=(q||"").toLowerCase();
+  var n=FILES.filter(function(f){ return (!g||f.nhom===g)&&(!ql||(f.ten||"").toLowerCase().indexOf(ql)>=0||(f.ten_file||"").toLowerCase().indexOf(ql)>=0); }).length;
+  $("fSearch").value=n?(q||""):""; renderFile(); window.scrollTo({top:0,behavior:"smooth"}); }
+function addFromName(ten){
+  var t=dnorm(ten), f=FILES.filter(function(x){ return dnorm(x.ten)===t||(x.nhom==="Nút môn học"&&dnorm(x.ten).indexOf(t)>=0); })[0];
+  if(f){ addFromFile(f); return; }
+  $("tSearch").value=ten; applyTagFilter(); renderSug(); $("tSearch").focus(); toast("Chọn thẻ "+ten+" ở danh sách gợi ý"); }
+function loadCanIn(){
+  var box=$("canIn"); if(!box) return;
+  function getj(u){ return fetch(u,{credentials:"same-origin"}).then(function(r){ return (r.status===200&&(r.headers.get("content-type")||"").indexOf("json")>=0)?r.json():null; }).catch(function(){ return null; }); }
+  Promise.all([getj("/dot-in/tt"),getj("/quan-ly-in/kho-goi-y")]).then(function(res){
+    var dot=res[0], kho=res[1], chips=[];
+    if(dot&&dot.ok&&dot.tom_tat){
+      (dot.tom_tat.bang_can_in||[]).forEach(function(x){ chips.push({cls:"",txt:"Cần in thêm "+x.thieu+" bảng "+x.mau,go:function(){ openLib("Bảng TKB",x.mau); }}); });
+      (dot.tom_tat.thieu||[]).forEach(function(x){
+        var chung=(x.mau==="Chung");
+        chips.push({cls:"bad",txt:"Thiếu "+(chung?x.ten:x.ten+" "+x.mau)+" ×"+x.thieu,
+          go:function(){ if(chung){ $("tSearch").focus(); toast("Gõ tên thẻ ở ô tìm rồi chọn số lượng"); } else openLib("Phụ kiện TKB",""); }}); });   // gói gồm nhiều file (chân đế, kẹp, chữ…) -> hiện cả nhóm
+    }
+    ((kho&&kho.items)||[]).forEach(function(it){ chips.push({cls:it.trang_thai==="het"?"bad":"",txt:"Kho nút: "+it.ten+" · còn "+it.con_lai,go:function(){ addFromName(it.ten); }}); });
+    var link='<a class="lnk" href="/dot-in">Mở Đếm &amp; gửi Hà Nội →</a>';
+    if(!chips.length){ box.innerHTML='<div class="lbl"><i class="bi bi-check-circle-fill" style="color:var(--ok)"></i> Chưa có gì báo thiếu '+link+'</div>'; return; }
+    box.innerHTML='<div class="lbl"><i class="bi bi-exclamation-triangle-fill" style="color:var(--amber)"></i> Cần in — bấm để làm ngay '+link+'</div><div class="chips"></div>';
+    var cb=box.querySelector(".chips");
+    chips.forEach(function(c){ var b=document.createElement("button"); b.type="button"; b.className="cchip"+(c.cls?" "+c.cls:""); b.textContent=c.txt; b.addEventListener("click",c.go); cb.appendChild(b); });
+  }); }
+
 /* ---------- REALTIME (v3) ---------- */
 var liveTimer=null, LIVEKEY="", liveSel={}, liveAms={};
 function startLive(){ if(!FILES.length) loadFile(); loadLive(); if(liveTimer) clearInterval(liveTimer); liveTimer=setInterval(loadLive,4000); }
@@ -774,34 +836,42 @@ function loadTagMachines(){ fetch("/quan-ly-in/may").then(function(r){return r.j
 }).catch(function(){}); }
 function syncNozzleFromMachine(){ var m=MAYS.filter(function(x){return x.id===$("tMay").value;})[0]; if(m&&m.dau_phun){ $("tDauPhun").value=m.dau_phun; rebuildTagRows(); } }
 function dnorm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/đ/g,"d"); }
-function tagMatch(m){ if((m.dau_phun||"")!==$("tDauPhun").value) return false;
+/* Đầu phun của thẻ ĐÃ chọn đầu tiên (null = chưa chọn thẻ nào). Không còn ô chọn đầu phun: chọn thẻ nào thì các thẻ sau
+   chỉ hiện cùng đầu phun (backend vẫn chặn trộn khác vòi). */
+function curNozzle(){ var sels=document.querySelectorAll("#tRows .tsel");
+  for(var i=0;i<sels.length;i++){ var id=sels[i].value; if(!id) continue;
+    var f=FILES.filter(function(x){return x.id===id;})[0]; if(f) return f.dau_phun||""; }
+  return null; }
+function tagMatch(m){ var n=curNozzle(); if(n!==null && (m.dau_phun||"")!==n) return false;
   var q=dnorm((($("tSearch")||{}).value||"").trim()); if(!q) return true;
   return dnorm((m.ten||"")+" "+(m.nhom||"")+" "+(m.mon||"")).indexOf(q)>=0; }
 function tagOptionsHTML(selId){ var list=FILES.filter(function(m){ return tagMatch(m)||m.id===selId; });
   return '<option value="">— chọn thẻ —</option>'+list.map(function(m){
-  return '<option value="'+m.id+'"'+(m.id===selId?" selected":"")+'>'+esc(m.ten)+(m.nhom?" ("+esc(m.nhom)+")":"")+(m.phut?" · "+m.phut+"ph/thẻ":"")+'</option>'; }).join(""); }
+  return '<option value="'+m.id+'"'+(m.id===selId?" selected":"")+'>'+esc(m.ten)+(m.nhom?" ("+esc(m.nhom)+")":"")+(m.dau_phun?" · đầu "+m.dau_phun:"")+(m.phut?" · "+m.phut+"ph/thẻ":"")+'</option>'; }).join(""); }
 function applyTagFilter(){ document.querySelectorAll("#tRows .tsel").forEach(function(sel){ var cur=sel.value; sel.innerHTML=tagOptionsHTML(cur); sel.value=cur; }); }
 var SUG=[], sugActive=-1;
 function renderSug(){ var box=$("tSug"), q=($("tSearch").value||"").trim();
   if(!q){ box.style.display="none"; box.innerHTML=""; SUG=[]; sugActive=-1; return; }
   SUG=FILES.filter(tagMatch).slice(0,12);
-  if(!SUG.length){ box.innerHTML='<div class="sugempty">Không có thẻ nào khớp (đầu phun '+esc($("tDauPhun").value)+')</div>'; box.style.display="block"; sugActive=-1; return; }
+  if(!SUG.length){ var _n=curNozzle(); box.innerHTML='<div class="sugempty">Không có thẻ nào khớp'+(_n!==null&&_n?' (đang trộn đầu phun '+esc(_n)+')':'')+'</div>'; box.style.display="block"; sugActive=-1; return; }
   box.innerHTML=SUG.map(function(m,i){ return '<div class="sugit" data-i="'+i+'">'
     +'<span class="sugname">'+esc(m.ten)+'</span>'
     +(m.nhom?'<span class="sugnhom">'+esc(m.nhom)+'</span>':'')
-    +(m.phut?'<span class="sugmeta">'+m.phut+'ph/thẻ'+(m.max_khay?' · '+m.max_khay+' thẻ/khay':'')+'</span>':'')
+    +'<span class="sugmeta">'+(m.dau_phun?'đầu '+esc(m.dau_phun):'')+(m.phut?' · '+m.phut+'ph/thẻ':'')+(m.max_khay?' · '+m.max_khay+' thẻ/khay':'')+'</span>'
     +'</div>'; }).join("");
   box.style.display="block"; sugActive=-1; }
 function sugHi(d){ var items=$("tSug").querySelectorAll(".sugit"); if(!items.length) return;
   sugActive=(sugActive+d+items.length)%items.length;
   items.forEach(function(el,i){ el.classList.toggle("on",i===sugActive); if(i===sugActive) el.scrollIntoView({block:"nearest"}); }); }
-function pickSug(i){ var m=SUG[i]; if(!m) return;
+function pickSug(i){ var m=SUG[i]; if(!m) return; if(addFromFile(m)) $("tSearch").focus(); }
+function addFromFile(m){
+  var n=curNozzle(); if(n!==null && (m.dau_phun||"")!==n){ toast("Khác đầu phun với thẻ đang chọn — tải file riêng cho thẻ này.",true); return false; }
   var trow=null, rows=document.querySelectorAll("#tRows .trow");
   for(var k=0;k<rows.length;k++){ if(!rows[k].querySelector(".tsel").value){ trow=rows[k]; break; } }
   if(trow){ trow.querySelector(".tsel").value=m.id; var q=trow.querySelector(".tqty"); if(q&&!(parseInt(q.value,10)>0)) q.value=1; }
   else { addTagRow(m.id,1); }   // chọn thẻ = mặc định 1 (khỏi để trống rồi bị bỏ khi xuất)
   $("tSearch").value=""; applyTagFilter(); renderSug(); updateEstimate();
-  toast("Đã thêm thẻ: "+m.ten); $("tSearch").focus(); }
+  toast("Đã thêm thẻ: "+m.ten); return true; }
 function addTagRow(selId,qty){ var wrap=document.createElement("div"); wrap.className="trow"; wrap.style.cssText="display:flex;gap:8px;margin-bottom:8px;align-items:center";
   var inp="border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface-2);color:var(--ink)";
   wrap.innerHTML='<select class="tsel" style="flex:2;'+inp+'">'+tagOptionsHTML(selId)+'</select>'
@@ -815,10 +885,11 @@ function addTagRow(selId,qty){ var wrap=document.createElement("div"); wrap.clas
     // KHÔNG prefill nhiệt từ thẻ: để trống = backend giữ nhiệt per-filament gốc của file (đúng);
     // điền 1 giá trị cho cả thân+chữ sẽ ghi sai khi file có thân≠chữ. Nhiệt lấy từ "Lưu nhiệt mặc định" hoặc nhập tay.
     if(gio.value) fromGio(); else updateEstimate();
+    applyTagFilter();
   });
   gio.addEventListener("input",fromGio);
   qel.addEventListener("input",function(){ gio.value=""; updateEstimate(); });
-  wrap.querySelector(".del").addEventListener("click",function(){ wrap.remove(); updateEstimate(); });
+  wrap.querySelector(".del").addEventListener("click",function(){ wrap.remove(); applyTagFilter(); updateEstimate(); });
   $("tRows").appendChild(wrap); updateEstimate(); }
 function rebuildTagRows(){ var prev=[]; document.querySelectorAll("#tRows .trow").forEach(function(w){ var s=w.querySelector(".tsel"), q=w.querySelector(".tqty"); prev.push({id:s?s.value:"",qty:q?q.value:""}); });
   $("tRows").innerHTML="";
@@ -944,6 +1015,7 @@ loadMay();
 loadFile();
 loadJob();
 loadKhoSuggest();
+loadCanIn();
 </script>
 <script>
 /* ---------- PWA: app "Xưởng in" (cài màn hình chính) ---------- */
@@ -952,8 +1024,8 @@ var _pwaDefer=null;
 window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); _pwaDefer=e; var b=document.getElementById('installBtn'); if(b) b.style.display=''; });
 (function(){ var b=document.getElementById('installBtn'); if(b) b.addEventListener('click',function(){ if(_pwaDefer){ _pwaDefer.prompt(); _pwaDefer=null; this.style.display='none'; } }); })();
 (function(){ var iOS=/iphone|ipad|ipod/i.test(navigator.userAgent); var sa=window.navigator.standalone===true||window.matchMedia('(display-mode: standalone)').matches; if(iOS&&!sa){ var t=document.getElementById('iosTip'); if(t) t.style.display=''; } })();
-/* mở thẳng 1 tab qua ?tab=live|file|job|bt (dùng cho shortcut app) */
-(function(){ var m=(location.search.match(/[?&]tab=([a-z]+)/)||[])[1]; if(m){ var btn=document.querySelector('.tab[data-tab="'+m+'"]'); if(btn) btn.click(); } })();
+/* mở thẳng 1 tab qua ?tab=in|file|may|job|live|bt|adv (dùng cho shortcut app + link từ trang Đếm & gửi) */
+(function(){ var m=(location.search.match(/[?&]tab=([a-z]+)/)||[])[1]; if(m) showTab(m); })();
 </script>
 </body>
 </html>
