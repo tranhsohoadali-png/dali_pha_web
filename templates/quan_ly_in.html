@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Quản lý xưởng in · DALI</title>
+  <title>Xưởng in · DALI</title>
   <link rel="manifest" href="/manifest-xuong.webmanifest">
   <meta name="theme-color" content="#0F9C9C">
   <link rel="apple-touch-icon" href="/media/icon-xuong-192.png">
@@ -201,7 +201,7 @@
 .canin{margin-top:14px}
 .canin .lbl{font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:7px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .canin .chips{display:flex;gap:7px;flex-wrap:wrap}
-.cchip{border:1px solid #F0CD97;background:#FFFBF4;color:var(--amber);border-radius:999px;padding:8px 13px;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;gap:6px;align-items:center;transition:.14s;min-height:38px}
+.cchip{border:1px solid #F0CD97;background:#FFFBF4;color:#8A5A0E;border-radius:999px;padding:8px 13px;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;gap:6px;align-items:center;transition:.14s;min-height:38px}
 .cchip.bad{border-color:#F0B7B1;background:#FFF6F5;color:#B23A2E}
 .cchip:hover{filter:brightness(.97)}
 .canin a.lnk{font-size:12.5px;font-weight:700;color:var(--accent-ink);text-decoration:none;margin-left:auto}
@@ -212,7 +212,8 @@ details.addfile>.frm,details.addfile>.addbody{padding:0 16px 16px}
 details.fdetail{grid-column:1/-1;border:1px dashed var(--line);border-radius:10px;padding:8px 12px}
 details.fdetail>summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--ink-soft)}
 details.fdetail .frm{margin-top:10px}
-@media (max-width:600px){ .thead{display:none!important} .trow{flex-wrap:wrap} .trow .tsel{flex:1 1 100%!important;min-width:0;width:100%} .tabs{grid-template-columns:1fr 1fr;gap:8px} .tab{padding:11px 12px} .tab .ts{display:none} .tab i{font-size:20px} .tab .tn{font-size:15px} .frm .act{grid-column:1/-1} .keybox{margin-left:0} }
+@media (max-width:600px){ .iconbtn{width:40px;height:40px} .btn.sm,.apill,.cchip{min-height:40px} details.fdetail>summary{padding:8px 0} .fname{white-space:normal}
+  .thead{display:none!important} .trow{flex-wrap:wrap} .trow .tsel{flex:1 1 100%!important;min-width:0;width:100%} .tabs{grid-template-columns:1fr 1fr;gap:8px} .tab{padding:11px 12px} .tab .ts{display:none} .tab i{font-size:20px} .tab .tn{font-size:15px} .frm .act{grid-column:1/-1} .keybox{margin-left:0} }
 </style>
 </head>
 <body class="bg-body-tertiary">
@@ -234,8 +235,8 @@ details.fdetail .frm{margin-top:10px}
     <button type="button" class="tab" role="tab" data-tab="in" aria-selected="true">
       <i class="bi bi-printer"></i><div><div class="tn">In thẻ</div><div class="ts">Chọn thẻ · tải file in</div></div>
     </button>
-    <a class="tab xlink" href="/dot-in" role="link">
-      <i class="bi bi-boxes"></i><div><div class="tn">Đếm &amp; gửi Hà Nội</div><div class="ts">Bảng + gói phụ kiện</div></div>
+    <a class="tab xlink" href="/dot-in">
+      <i class="bi bi-boxes"></i><div><div class="tn">Phụ kiện TKB</div><div class="ts">Đếm bảng · gửi Hà Nội</div></div>
     </a>
     <button type="button" class="tab" role="tab" data-tab="file" aria-selected="false">
       <i class="bi bi-folder2-open"></i><div><div class="tn">Thư viện file</div><div class="ts">Duyệt · tải · thêm file mới</div></div>
@@ -285,7 +286,7 @@ details.fdetail .frm{margin-top:10px}
       <div class="hidden"><select id="tMay"></select><select id="tDauPhun"><option value="0.2">0.2</option><option value="0.4">0.4</option></select></div>
       <div style="position:relative;margin-top:4px;z-index:20">
         <i class="bi bi-search" style="position:absolute;left:11px;top:19px;transform:translateY(-50%);color:var(--ink-faint);font-size:14px;pointer-events:none"></i>
-        <input id="tSearch" placeholder="Tìm nhanh thẻ (gõ tên môn)…" autocomplete="off" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 11px 11px 34px;background:var(--surface-2);color:var(--ink);font-size:15px">
+        <input id="tSearch" placeholder="Tìm nhanh thẻ (gõ tên môn)…" autocomplete="off" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 11px 11px 34px;background:var(--surface-2);color:var(--ink);font-size:16px" aria-label="Tìm thẻ">
         <div id="tSug" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);max-height:300px;overflow-y:auto;background:var(--surface,#fff);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
       </div>
       <div class="thead" style="display:flex;gap:8px;margin:12px 0 6px;font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em">
@@ -298,7 +299,7 @@ details.fdetail .frm{margin-top:10px}
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button type="button" class="btn primary" id="tXuat" style="padding:12px 18px;font-size:15px"><i class="bi bi-download"></i> Tải file in (.3mf)</button>
         <button type="button" class="btn hidden" id="tSend"><i class="bi bi-printer"></i> Gửi cắt &amp; in (cần máy)</button>
-        <span style="font-size:12px;color:var(--ink-faint)">Tải .3mf đúng số thẻ → mở Bambu Studio rồi bấm In. Chọn nhiều loại thẻ thì <b>trộn vào 1 file</b> (cùng đầu phun).</span>
+        <span style="font-size:12.5px;color:var(--ink-soft)">Tải .3mf đúng số thẻ → mở Bambu Studio rồi bấm In. Chọn nhiều loại thẻ thì <b>trộn vào 1 file</b> (cùng đầu phun).</span>
       </div>
     </section>
   </div>
@@ -333,9 +334,10 @@ details.fdetail .frm{margin-top:10px}
         </div>
       </div>
     </details>
+    <div id="libNote" class="hidden" style="margin:12px 2px 0;font-size:13px;color:var(--ink-soft);display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
     <div class="filters">
-      <select id="fFilter"><option value="">Tất cả nhóm</option></select>
-      <input id="fSearch" class="grow" placeholder="Tìm theo tên file…">
+      <select id="fFilter" aria-label="Lọc theo nhóm"><option value="">Tất cả nhóm</option></select>
+      <input id="fSearch" class="grow" placeholder="Tìm theo tên file…" aria-label="Tìm file">
       <span class="cnt" id="fCount" style="font-size:12px;color:var(--ink-soft)"></span>
     </div>
     <div id="flist"><div class="empty">Đang tải…</div></div>
@@ -446,7 +448,7 @@ function esc(s){return (s||"").replace(/[&<>"]/g,function(c){return {"&":"&amp;"
 function toast(m,bad){var t=$("toast");$("toastTxt").textContent=m;
   t.querySelector("i").className=bad?"bi bi-exclamation-circle-fill":"bi bi-check-circle-fill";
   t.style.background=bad?"#B4341F":"var(--ink)";t.classList.add("show");
-  clearTimeout(toast._t);toast._t=setTimeout(function(){t.classList.remove("show");},2300);}
+  clearTimeout(toast._t);toast._t=setTimeout(function(){t.classList.remove("show");},bad?4800:2300);}
 function postJSON(url,data){return fetch(url,{method:"POST",headers:{"Content-Type":"application/json","X-CSRFToken":CSRF},body:JSON.stringify(data)}).then(function(r){return r.json();});}
 var TT={ranh:"Rảnh",dang_in:"Đang in",bao_tri:"Bảo trì"};
 
@@ -454,7 +456,7 @@ var TT={ranh:"Rảnh",dang_in:"Đang in",bao_tri:"Bảo trì"};
 var PANES={in:"paneIn",file:"paneFile",may:"paneMay",job:"paneJob",live:"paneLive",bt:"paneBT"}, ADV=["may","job","live","bt"], lastAdv="may";
 function showTab(tab){
   if(tab==="adv") tab=lastAdv;
-  if(!PANES[tab]) tab="in";
+  if(!Object.prototype.hasOwnProperty.call(PANES,tab)) tab="in";
   var isAdv=ADV.indexOf(tab)>=0; if(isAdv) lastAdv=tab;
   Object.keys(PANES).forEach(function(k){ $(PANES[k]).classList.toggle("hidden",k!==tab); });
   document.querySelectorAll("[data-tab]").forEach(function(x){ var k=x.dataset.tab; x.setAttribute("aria-selected",(k===tab||(k==="adv"&&isAdv))?"true":"false"); });
@@ -466,7 +468,7 @@ function showTab(tab){
   if(tab==="bt"){ startBT(); }
   if(tab==="may"){ loadMay(); }
 }
-document.addEventListener("click",function(e){ var t=e.target.closest("[data-tab]"); if(t) showTab(t.dataset.tab); });
+document.addEventListener("click",function(e){ var t=e.target.closest("[data-tab]"); if(!t) return; if(t.dataset.tab==="file") clearLibFilter(); showTab(t.dataset.tab); });
 
 /* ---------- MÁY IN ---------- */
 var mEdit="";
@@ -529,8 +531,8 @@ function fmtWhen(s){ if(!s) return ""; var m=String(s).replace("T"," ").match(/(
   var rel=days<=0?"hôm nay":(days===1?"hôm qua":(days<30?days+" ngày trước":(m[3]+"/"+m[2]+"/"+m[1].slice(2))));
   return rel+(m[4]?" "+m[4]:""); }
 function renderFile(){
-  var q=($("fSearch").value||"").toLowerCase(), fg=$("fFilter").value;
-  var list=FILES.filter(function(f){ return (!fg||f.nhom===fg) && (!q||(f.ten||"").toLowerCase().indexOf(q)>=0 || (f.ten_file||"").toLowerCase().indexOf(q)>=0); });
+  var q=dnorm($("fSearch").value||""), fg=$("fFilter").value;
+  var list=FILES.filter(function(f){ return (!fg||f.nhom===fg) && (!q||dnorm(f.ten).indexOf(q)>=0 || dnorm(f.ten_file).indexOf(q)>=0); });
   $("fCount").textContent=list.length+"/"+FILES.length+" file";
   var box=$("flist");
   if(!list.length){ box.innerHTML='<div class="empty">'+(FILES.length?"Không có file khớp lọc.":"Chưa có file. Tải file .3mf lên ở trên.")+'</div>'; return; }
@@ -697,22 +699,30 @@ function prefillFromKho(ten){ $("jTen").value=ten;
   window.scrollTo({top:0,behavior:"smooth"}); $("jTen").focus(); toast("Điền lệnh in bù: "+ten); }
 
 /* ---------- CẦN IN: chỗ đang thiếu ở "Đếm & gửi Hà Nội" + kho nút sắp hết ---------- */
+function libNote(t){ var el=$("libNote"); if(!t){ el.classList.add("hidden"); el.innerHTML=""; return; }
+  el.classList.remove("hidden"); el.innerHTML='<span>'+esc(t)+'</span><button type="button" class="btn sm" id="libAll">Xem tất cả</button>';
+  $("libAll").onclick=clearLibFilter; }
+function clearLibFilter(){ $("fFilter").value=""; $("fSearch").value=""; libNote(""); renderFile(); }
 function openLib(nhom,q){
   showTab("file");
-  var hasG=FILES.some(function(f){return f.nhom===nhom;});
-  $("fFilter").value=hasG?nhom:"";
-  var g=$("fFilter").value, ql=(q||"").toLowerCase();
-  var n=FILES.filter(function(f){ return (!g||f.nhom===g)&&(!ql||(f.ten||"").toLowerCase().indexOf(ql)>=0||(f.ten_file||"").toLowerCase().indexOf(ql)>=0); }).length;
-  $("fSearch").value=n?(q||""):""; renderFile(); window.scrollTo({top:0,behavior:"smooth"}); }
+  var hasG=FILES.some(function(f){return f.nhom===nhom;}), g=hasG?nhom:"", qn=dnorm(q||"");
+  var n=FILES.filter(function(f){ return (!g||f.nhom===g)&&(!qn||dnorm(f.ten+" "+f.ten_file).indexOf(qn)>=0); }).length;
+  $("fFilter").value=g; $("fSearch").value=(n&&q)?q:"";
+  libNote(g?("Đang lọc: "+g+((n&&q)?' · "'+q+'"':"")):("Không thấy nhóm “"+nhom+"” — đang hiện tất cả file"));
+  renderFile(); window.scrollTo({top:0,behavior:"smooth"}); }
 function addFromName(ten){
-  var t=dnorm(ten), f=FILES.filter(function(x){ return dnorm(x.ten)===t||(x.nhom==="Nút môn học"&&dnorm(x.ten).indexOf(t)>=0); })[0];
+  var t=dnorm(ten), all=FILES.filter(okTile);
+  var f=all.filter(function(x){ return dnorm(x.ten)===t; })[0]                                  // ưu tiên TRÙNG TÊN
+      ||all.filter(function(x){ return x.nhom==="Nút môn học"&&dnorm(x.ten).indexOf(t)>=0; })[0];
   if(f){ addFromFile(f); return; }
   $("tSearch").value=ten; applyTagFilter(); renderSug(); $("tSearch").focus(); toast("Chọn thẻ "+ten+" ở danh sách gợi ý"); }
+var CANIN_MAX=8;
 function loadCanIn(){
   var box=$("canIn"); if(!box) return;
   function getj(u){ return fetch(u,{credentials:"same-origin"}).then(function(r){ return (r.status===200&&(r.headers.get("content-type")||"").indexOf("json")>=0)?r.json():null; }).catch(function(){ return null; }); }
   Promise.all([getj("/dot-in/tt"),getj("/quan-ly-in/kho-goi-y")]).then(function(res){
     var dot=res[0], kho=res[1], chips=[];
+    var failed=!(dot&&dot.ok)||!kho;                     // 1 trong 2 nguồn không tải được (mạng / hết phiên)
     if(dot&&dot.ok&&dot.tom_tat){
       (dot.tom_tat.bang_can_in||[]).forEach(function(x){ chips.push({cls:"",txt:"Cần in thêm "+x.thieu+" bảng "+x.mau,go:function(){ openLib("Bảng TKB",x.mau); }}); });
       (dot.tom_tat.thieu||[]).forEach(function(x){
@@ -720,13 +730,23 @@ function loadCanIn(){
         chips.push({cls:"bad",txt:"Thiếu "+(chung?x.ten:x.ten+" "+x.mau)+" ×"+x.thieu,
           go:function(){ if(chung){ $("tSearch").focus(); toast("Gõ tên thẻ ở ô tìm rồi chọn số lượng"); } else openLib("Phụ kiện TKB",""); }}); });   // gói gồm nhiều file (chân đế, kẹp, chữ…) -> hiện cả nhóm
     }
-    ((kho&&kho.items)||[]).forEach(function(it){ chips.push({cls:it.trang_thai==="het"?"bad":"",txt:"Kho nút: "+it.ten+" · còn "+it.con_lai,go:function(){ addFromName(it.ten); }}); });
-    var link='<a class="lnk" href="/dot-in">Mở Đếm &amp; gửi Hà Nội →</a>';
-    if(!chips.length){ box.innerHTML='<div class="lbl"><i class="bi bi-check-circle-fill" style="color:var(--ok)"></i> Chưa có gì báo thiếu '+link+'</div>'; return; }
-    box.innerHTML='<div class="lbl"><i class="bi bi-exclamation-triangle-fill" style="color:var(--amber)"></i> Cần in — bấm để làm ngay '+link+'</div><div class="chips"></div>';
-    var cb=box.querySelector(".chips");
-    chips.forEach(function(c){ var b=document.createElement("button"); b.type="button"; b.className="cchip"+(c.cls?" "+c.cls:""); b.textContent=c.txt; b.addEventListener("click",c.go); cb.appendChild(b); });
+    ((kho&&kho.items)||[]).forEach(function(it){ var het=(it.trang_thai==="het"); chips.push({cls:het?"bad":"",txt:(het?"Hết nút ":"Sắp hết nút ")+it.ten+" · còn "+it.con_lai,go:function(){ addFromName(it.ten); }}); });
+    var link='<a class="lnk" href="/dot-in">Mở Phụ kiện TKB →</a>';
+    if(!chips.length){
+      box.innerHTML= failed
+        ? '<div class="lbl"><i class="bi bi-wifi-off" style="color:var(--amber)"></i> Chưa tải được danh sách Cần in (mạng yếu hoặc hết phiên đăng nhập) <button type="button" class="btn sm" id="canRetry">Thử lại</button> '+link+'</div>'
+        : '<div class="lbl"><i class="bi bi-check-circle-fill" style="color:var(--ok)"></i> Chưa có gì báo thiếu '+link+'</div>';
+      var rb=$("canRetry"); if(rb) rb.onclick=loadCanIn; return; }
+    box.innerHTML='<div class="lbl"><i class="bi bi-exclamation-triangle-fill" style="color:var(--amber)"></i> Cần in — bấm vào chip để mở '+(failed?'<span style="color:var(--amber)">(một phần chưa tải được)</span> <button type="button" class="btn sm" id="canRetry">Thử lại</button> ':'')+link+'</div><div class="chips"></div>';
+    var cb=box.querySelector(".chips"), more=[];
+    chips.forEach(function(c,i){ var b=document.createElement("button"); b.type="button"; b.className="cchip"+(c.cls?" "+c.cls:""); b.textContent=c.txt; b.addEventListener("click",c.go);
+      if(i>=CANIN_MAX){ b.style.display="none"; more.push(b); } cb.appendChild(b); });
+    if(more.length){ var mb=document.createElement("button"); mb.type="button"; mb.className="cchip"; mb.style.cssText="background:#fff;border-style:dashed"; mb.textContent="Xem thêm ("+more.length+")";
+      mb.addEventListener("click",function(){ more.forEach(function(b){ b.style.display=""; }); mb.remove(); }); cb.appendChild(mb); }
+    var rb2=$("canRetry"); if(rb2) rb2.onclick=loadCanIn;
   }); }
+setInterval(function(){ if(!document.hidden&&!$("paneIn").classList.contains("hidden")) loadCanIn(); },60000);   // PWA mở cả ngày: chip không bị cũ
+document.addEventListener("visibilitychange",function(){ if(!document.hidden&&!$("paneIn").classList.contains("hidden")) loadCanIn(); });
 
 /* ---------- REALTIME (v3) ---------- */
 var liveTimer=null, LIVEKEY="", liveSel={}, liveAms={};
@@ -836,24 +856,26 @@ function loadTagMachines(){ fetch("/quan-ly-in/may").then(function(r){return r.j
 }).catch(function(){}); }
 function syncNozzleFromMachine(){ var m=MAYS.filter(function(x){return x.id===$("tMay").value;})[0]; if(m&&m.dau_phun){ $("tDauPhun").value=m.dau_phun; rebuildTagRows(); } }
 function dnorm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/đ/g,"d"); }
-/* Đầu phun của thẻ ĐÃ chọn đầu tiên (null = chưa chọn thẻ nào). Không còn ô chọn đầu phun: chọn thẻ nào thì các thẻ sau
-   chỉ hiện cùng đầu phun (backend vẫn chặn trộn khác vòi). */
-function curNozzle(){ var sels=document.querySelectorAll("#tRows .tsel");
-  for(var i=0;i<sels.length;i++){ var id=sels[i].value; if(!id) continue;
-    var f=FILES.filter(function(x){return x.id===id;})[0]; if(f) return f.dau_phun||""; }
+/* Đầu phun của thẻ ĐÃ chọn đầu tiên (null = chưa có). Không còn ô chọn đầu phun: chọn thẻ nào thì các thẻ sau chỉ hiện cùng
+   đầu phun (backend vẫn chặn trộn khác vòi). Thẻ chưa rõ đầu phun coi là "chấp nhận mọi vòi" (giống backend). exceptId: bỏ qua
+   dòng đang sửa để 1 dòng đơn lẻ vẫn đổi được 0.2 <-> 0.4. Chỉ .3mf mới cắt/trộn được. */
+function okTile(m){ return !m.kieu||String(m.kieu).toLowerCase()===".3mf"; }
+function curNozzle(exceptId){ var sels=document.querySelectorAll("#tRows .tsel");
+  for(var i=0;i<sels.length;i++){ var id=sels[i].value; if(!id||id===exceptId) continue;
+    var f=FILES.filter(function(x){return x.id===id;})[0]; if(f&&f.dau_phun) return f.dau_phun; }
   return null; }
-function tagMatch(m){ var n=curNozzle(); if(n!==null && (m.dau_phun||"")!==n) return false;
+function tagMatch(m,selId){ if(!okTile(m)) return false; var n=curNozzle(selId); if(n!==null && m.dau_phun && m.dau_phun!==n) return false;
   var q=dnorm((($("tSearch")||{}).value||"").trim()); if(!q) return true;
   return dnorm((m.ten||"")+" "+(m.nhom||"")+" "+(m.mon||"")).indexOf(q)>=0; }
-function tagOptionsHTML(selId){ var list=FILES.filter(function(m){ return tagMatch(m)||m.id===selId; });
+function tagOptionsHTML(selId){ var list=FILES.filter(function(m){ return tagMatch(m,selId)||m.id===selId; });
   return '<option value="">— chọn thẻ —</option>'+list.map(function(m){
   return '<option value="'+m.id+'"'+(m.id===selId?" selected":"")+'>'+esc(m.ten)+(m.nhom?" ("+esc(m.nhom)+")":"")+(m.dau_phun?" · đầu "+m.dau_phun:"")+(m.phut?" · "+m.phut+"ph/thẻ":"")+'</option>'; }).join(""); }
 function applyTagFilter(){ document.querySelectorAll("#tRows .tsel").forEach(function(sel){ var cur=sel.value; sel.innerHTML=tagOptionsHTML(cur); sel.value=cur; }); }
 var SUG=[], sugActive=-1;
 function renderSug(){ var box=$("tSug"), q=($("tSearch").value||"").trim();
   if(!q){ box.style.display="none"; box.innerHTML=""; SUG=[]; sugActive=-1; return; }
-  SUG=FILES.filter(tagMatch).slice(0,12);
-  if(!SUG.length){ var _n=curNozzle(); box.innerHTML='<div class="sugempty">Không có thẻ nào khớp'+(_n!==null&&_n?' (đang trộn đầu phun '+esc(_n)+')':'')+'</div>'; box.style.display="block"; sugActive=-1; return; }
+  SUG=FILES.filter(function(m){ return tagMatch(m); }).slice(0,12);
+  if(!SUG.length){ var _n=curNozzle(); box.innerHTML='<div class="sugempty">Không có thẻ nào khớp'+(_n?' (đang chọn thẻ đầu phun '+esc(_n)+' — thẻ khác vòi bị ẩn; bỏ thẻ cũ bằng nút × để chọn lại)':'')+'</div>'; box.style.display="block"; sugActive=-1; return; }
   box.innerHTML=SUG.map(function(m,i){ return '<div class="sugit" data-i="'+i+'">'
     +'<span class="sugname">'+esc(m.ten)+'</span>'
     +(m.nhom?'<span class="sugnhom">'+esc(m.nhom)+'</span>':'')
@@ -865,22 +887,29 @@ function sugHi(d){ var items=$("tSug").querySelectorAll(".sugit"); if(!items.len
   items.forEach(function(el,i){ el.classList.toggle("on",i===sugActive); if(i===sugActive) el.scrollIntoView({block:"nearest"}); }); }
 function pickSug(i){ var m=SUG[i]; if(!m) return; if(addFromFile(m)) $("tSearch").focus(); }
 function addFromFile(m){
-  var n=curNozzle(); if(n!==null && (m.dau_phun||"")!==n){ toast("Khác đầu phun với thẻ đang chọn — tải file riêng cho thẻ này.",true); return false; }
+  if(!okTile(m)){ toast("File này không phải .3mf nên không trộn/cắt được — tải file gốc ở Thư viện file.",true); return false; }
+  var n=curNozzle(); if(n!==null && m.dau_phun && m.dau_phun!==n){ toast("Thẻ này đầu phun "+m.dau_phun+", còn thẻ đang chọn đầu "+n+" — bỏ thẻ cũ (nút ×) hoặc tải file riêng.",true); return false; }
+  var dup=false; document.querySelectorAll("#tRows .tsel").forEach(function(sl){ if(sl.value===m.id) dup=true; });
+  if(dup){ toast("Thẻ "+m.ten+" đã có trong danh sách."); return false; }
+  $("tSearch").value=""; applyTagFilter();          // xóa chữ đang tìm trước: nếu không, ô chọn không có thẻ này và việc gán bị bỏ qua lặng lẽ
   var trow=null, rows=document.querySelectorAll("#tRows .trow");
   for(var k=0;k<rows.length;k++){ if(!rows[k].querySelector(".tsel").value){ trow=rows[k]; break; } }
-  if(trow){ trow.querySelector(".tsel").value=m.id; var q=trow.querySelector(".tqty"); if(q&&!(parseInt(q.value,10)>0)) q.value=1; }
+  if(trow){ var ts=trow.querySelector(".tsel"); ts.value=m.id; var q=trow.querySelector(".tqty"); if(q&&!(parseInt(q.value,10)>0)) q.value=1;
+    if(ts.value!==m.id){ trow.remove(); addTagRow(m.id,1); } }
   else { addTagRow(m.id,1); }   // chọn thẻ = mặc định 1 (khỏi để trống rồi bị bỏ khi xuất)
-  $("tSearch").value=""; applyTagFilter(); renderSug(); updateEstimate();
+  applyTagFilter(); renderSug(); updateEstimate();
   toast("Đã thêm thẻ: "+m.ten); return true; }
 function addTagRow(selId,qty){ var wrap=document.createElement("div"); wrap.className="trow"; wrap.style.cssText="display:flex;gap:8px;margin-bottom:8px;align-items:center";
   var inp="border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface-2);color:var(--ink)";
-  wrap.innerHTML='<select class="tsel" style="flex:2;'+inp+'">'+tagOptionsHTML(selId)+'</select>'
-    +'<input class="tgio" type="number" min="0" step="0.5" inputmode="decimal" placeholder="giờ" style="width:96px;'+inp+'">'
-    +'<input class="tqty" type="number" min="0" inputmode="numeric" placeholder="SL" value="'+(qty||"")+'" style="width:84px;'+inp+'">'
+  wrap.innerHTML='<select class="tsel" aria-label="Chọn thẻ" style="flex:2;'+inp+'">'+tagOptionsHTML(selId)+'</select>'
+    +'<input class="tgio" aria-label="Giờ in" type="number" min="0" step="0.5" inputmode="decimal" placeholder="giờ" style="width:96px;'+inp+'">'
+    +'<input class="tqty" aria-label="Số lượng" type="number" min="0" inputmode="numeric" placeholder="SL" value="'+(qty||"")+'" style="width:84px;'+inp+'">'
     +'<button type="button" class="iconbtn del" title="Bỏ"><i class="bi bi-x-lg"></i></button>';
   var sel=wrap.querySelector(".tsel"), gio=wrap.querySelector(".tgio"), qel=wrap.querySelector(".tqty");
   function fromGio(){ var m=FILES.filter(function(x){return x.id===sel.value;})[0], h=parseFloat(gio.value)||0;
-    if(m&&m.phut>0&&h>0){ qel.value=Math.max(1,Math.round(h*60/m.phut)); } updateEstimate(); }
+    if(m&&m.phut>0&&h>0){ qel.value=Math.max(1,Math.round(h*60/m.phut)); }
+    else if(m&&h>0){ toast("Thẻ "+m.ten+" chưa có Phút/thẻ — nhập thẳng Số lượng.",true); }
+    updateEstimate(); }
   sel.addEventListener("change",function(){
     // KHÔNG prefill nhiệt từ thẻ: để trống = backend giữ nhiệt per-filament gốc của file (đúng);
     // điền 1 giá trị cho cả thân+chữ sẽ ghi sai khi file có thân≠chữ. Nhiệt lấy từ "Lưu nhiệt mặc định" hoặc nhập tay.
@@ -893,7 +922,7 @@ function addTagRow(selId,qty){ var wrap=document.createElement("div"); wrap.clas
   $("tRows").appendChild(wrap); updateEstimate(); }
 function rebuildTagRows(){ var prev=[]; document.querySelectorAll("#tRows .trow").forEach(function(w){ var s=w.querySelector(".tsel"), q=w.querySelector(".tqty"); prev.push({id:s?s.value:"",qty:q?q.value:""}); });
   $("tRows").innerHTML="";
-  if(!prev.length) prev=[{}]; prev.forEach(function(p){ addTagRow(p.id,p.qty); }); }
+  if(!prev.length) prev=[{}]; prev.forEach(function(p){ addTagRow(p.id,p.qty); }); applyTagFilter(); }
 function fmtMinFull(m){ m=Math.round(m||0); if(m<60) return m+" phút"; return Math.floor(m/60)+"h"+(m%60?(m%60)+"'":""); }
 function updateEstimate(){ var box=$("tEstimate");
   var totMin=0,totG=0,totN=0,warn="";
@@ -1025,7 +1054,9 @@ window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); _
 (function(){ var b=document.getElementById('installBtn'); if(b) b.addEventListener('click',function(){ if(_pwaDefer){ _pwaDefer.prompt(); _pwaDefer=null; this.style.display='none'; } }); })();
 (function(){ var iOS=/iphone|ipad|ipod/i.test(navigator.userAgent); var sa=window.navigator.standalone===true||window.matchMedia('(display-mode: standalone)').matches; if(iOS&&!sa){ var t=document.getElementById('iosTip'); if(t) t.style.display=''; } })();
 /* mở thẳng 1 tab qua ?tab=in|file|may|job|live|bt|adv (dùng cho shortcut app + link từ trang Đếm & gửi) */
-(function(){ var m=(location.search.match(/[?&]tab=([a-z]+)/)||[])[1]; if(m) showTab(m); })();
+(function(){ var m=(location.search.match(/[?&]tab=([a-z]+)/)||[])[1]; if(!m) return;
+  if(m==="file") m="in"; else if(m==="lib") m="file";   // ?tab=file cũ = "Xuất file thẻ" của shortcut app -> In thẻ; ?tab=lib = Thư viện
+  showTab(m); })();
 </script>
 </body>
 </html>
