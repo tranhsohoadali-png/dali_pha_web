@@ -25,6 +25,7 @@ from pha import agent_ai as ai_views
 from pha import a3_sheet
 from pha import shopee_export
 from pha import tkb as tkb_views
+from pha import dotin as dotin_views
 from pha import xuongin as xuongin_views
 from pha import portal
 from pha import giaoviec as giaoviec_views
@@ -209,6 +210,16 @@ urlpatterns = [
     path('soan-tkb/xoa', tkb_views.soan_tkb_xoa, name='soan_tkb_xoa'),
     path('soan-tkb/kho', tkb_views.soan_tkb_kho, name='soan_tkb_kho'),
     path('soan-tkb/kho-luu', tkb_views.soan_tkb_kho_luu, name='soan_tkb_kho_luu'),
+
+    # ĐẾM PHỤ KIỆN TKB THEO ĐỢT (xưởng in dưới quê -> gửi Hà Nội): bảng + phụ kiện, thiếu/đủ, gửi xong reset
+    path('dot-in', dotin_views.dot_in, name='dot_in'),
+    path('dot-in/tt', dotin_views.dot_in_tt, name='dot_in_tt'),
+    path('dot-in/cong', dotin_views.dot_in_cong, name='dot_in_cong'),
+    path('dot-in/dat', dotin_views.dot_in_dat, name='dot_in_dat'),
+    path('dot-in/gui', dotin_views.dot_in_gui, name='dot_in_gui'),
+    path('dot-in/khoi-phuc', dotin_views.dot_in_khoi_phuc, name='dot_in_khoi_phuc'),
+    path('dot-in/danh-muc', dotin_views.dot_in_danh_muc, name='dot_in_danh_muc'),
+    path('dot-in/xuat', dotin_views.dot_in_xuat, name='dot_in_xuat'),
 
     # QUẢN LÝ XƯỞNG IN 3D (Bambu A1) — máy in + thư viện file in
     path('quan-ly-in', xuongin_views.quan_ly_in, name='quan_ly_in'),

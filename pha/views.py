@@ -993,6 +993,7 @@ def home(request):
             {'url': '/kho-son', 'icon': 'bi-box-seam', 'label': 'Kho sơn', 'bg': '#8D6E63'},
             {'url': '/xu-ly-anh', 'icon': 'bi-image', 'label': 'Xử lý ảnh', 'bg': '#E83E8C'},
             {'url': '/quan-ly-in', 'icon': 'bi-printer-fill', 'label': 'Xưởng in', 'bg': '#0F9C9C'},
+            {'url': '/dot-in', 'icon': 'bi-boxes', 'label': 'Phụ kiện TKB', 'bg': '#E8590C'},
             {'url': '/dashboard', 'icon': 'bi-speedometer2', 'label': 'Dashboard', 'bg': '#343A40'},
             {'url': '/nhan-vien', 'icon': 'bi-people', 'label': 'Nhân viên', 'bg': '#6C757D'},
             {'url': '/quan-ly', 'icon': 'bi-phone-vibrate', 'label': 'App kho (QL)', 'bg': '#0DCAF0'},
@@ -1002,6 +1003,7 @@ def home(request):
         tiles = [
             {'url': '/app', 'icon': 'bi-droplet-half', 'label': 'Pha màu & Rót màu', 'bg': '#2E7D32'},
             {'url': '/cham-cong', 'icon': 'bi-fingerprint', 'label': 'Chấm công', 'bg': '#198754'},
+            {'url': '/dot-in', 'icon': 'bi-boxes', 'label': 'Phụ kiện TKB', 'bg': '#E8590C'},
         ]
     return render(request, 'home.html', {'tiles': tiles})
 

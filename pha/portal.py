@@ -61,6 +61,7 @@ CATALOG = [
     ]},
     {'title': 'Mảng kinh doanh khác', 'icon': 'bi-grid-1x2', 'accent': 'slate', 'apps': [
         {'name': 'Xưởng in 3D', 'desc': 'Máy Bambu · file in', 'url': '/quan-ly-in', 'icon': 'bi-box', 'staff': True},
+        {'name': 'Phụ kiện TKB', 'desc': 'Đếm bảng + phụ kiện theo đợt, gửi Hà Nội', 'url': '/dot-in', 'icon': 'bi-boxes'},
         {'name': 'Soạn TKB nút học', 'desc': 'Nút môn học · kho nút', 'url': '/soan-tkb', 'icon': 'bi-calendar3'},
         {'name': 'Ghép-in thương mại', 'desc': 'Dịch vụ cho xưởng khác', 'url': '#', 'icon': 'bi-briefcase', 'dev': True, 'staff': True},
     ]},

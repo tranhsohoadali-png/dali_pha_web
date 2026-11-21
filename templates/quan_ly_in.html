@@ -227,6 +227,9 @@
     <button type="button" class="tab" role="tab" data-tab="bt" aria-selected="false">
       <i class="bi bi-tools"></i><div><div class="tn">Bảo trì</div><div class="ts">Nhắc &amp; tích bước bảo trì máy</div></div>
     </button>
+    <a class="tab" href="/dot-in" role="link" style="text-decoration:none;color:inherit">
+      <i class="bi bi-boxes"></i><div><div class="tn">Phụ kiện TKB</div><div class="ts">Đếm bảng &amp; phụ kiện · gửi Hà Nội</div></div>
+    </a>
   </div>
 
   <!-- ===== TAB MÁY ===== -->
@@ -421,9 +424,9 @@ function postJSON(url,data){return fetch(url,{method:"POST",headers:{"Content-Ty
 var TT={ranh:"Rảnh",dang_in:"Đang in",bao_tri:"Bảo trì"};
 
 /* ---------- TABS ---------- */
-document.querySelectorAll(".tab").forEach(function(t){ t.addEventListener("click",function(){
+document.querySelectorAll(".tab[data-tab]").forEach(function(t){ t.addEventListener("click",function(){
   var tab=t.dataset.tab;
-  document.querySelectorAll(".tab").forEach(function(x){x.setAttribute("aria-selected",x===t?"true":"false");});
+  document.querySelectorAll(".tab[data-tab]").forEach(function(x){x.setAttribute("aria-selected",x===t?"true":"false");});
   $("paneMay").classList.toggle("hidden",tab!=="may");
   $("paneFile").classList.toggle("hidden",tab!=="file");
   $("paneJob").classList.toggle("hidden",tab!=="job");
