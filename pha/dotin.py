@@ -64,10 +64,12 @@ _BANG_KHONG_PK = [
     {'key': 'spiderman', 'ten': 'Spider-Man', 'mau': '#C92A2A', 'phu_kien': []},
     {'key': 'songoku', 'ten': 'Songoku', 'mau': '#FD7E14', 'phu_kien': []},
     {'key': 'muadong', 'ten': 'Mùa đông', 'mau': '#74C0FC', 'phu_kien': []},
-    {'key': 'begai', 'ten': 'Bé gái', 'mau': '#CC5DE8', 'phu_kien': []},
+    # "TKB basic" = bảng trơn xanh dương, không nhân vật (thư mục "Thời khóa biểu đầu tiên", file TKB_basic_girl…).
+    # Khoá 'begai' giữ nguyên (bản đầu đặt nhầm tên "Bé gái") để số đếm không mất.
+    {'key': 'begai', 'ten': 'Basic', 'mau': '#3B5BDB', 'phu_kien': []},
 ]
 _DEFAULT_MAU = _DEFAULT_MAU + _BANG_KHONG_PK
-_PHIEN_BAN = 2          # v<2: dữ liệu cũ chưa có các bảng không phụ kiện -> bổ sung 1 lần khi đọc
+_PHIEN_BAN = 3          # v<2: chưa có các bảng không phụ kiện -> bổ sung; v<3: đổi tên "Bé gái" -> "Basic"
 NHOM_KHONG_PK = 'Bảng không phụ kiện'
 _DEFAULT_CHUNG = [
     {'key': 'chung__bothemon', 'ten': 'Bộ thẻ môn', 'dm': 1, 'khay': 0},
@@ -236,14 +238,20 @@ def _nang_cap(st):
     if v >= _PHIEN_BAN:
         return False
     import copy
-    keys = {m.get('key') for m in st['mau'] if isinstance(m, dict)}
-    tens = {str(m.get('ten') or '').strip().lower() for m in st['mau'] if isinstance(m, dict)}
-    for m in _BANG_KHONG_PK:
-        if len(st['mau']) >= 20:
-            break
-        if m['key'] in keys or m['ten'].lower() in tens:
-            continue
-        st['mau'].append(copy.deepcopy(m))
+    if v < 2:
+        keys = {m.get('key') for m in st['mau'] if isinstance(m, dict)}
+        tens = {str(m.get('ten') or '').strip().lower() for m in st['mau'] if isinstance(m, dict)}
+        for m in _BANG_KHONG_PK:
+            if len(st['mau']) >= 20:
+                break
+            if m['key'] in keys or m['ten'].lower() in tens:
+                continue
+            st['mau'].append(copy.deepcopy(m))
+    for m in st['mau']:                     # v<3: sửa tên đặt nhầm (chỉ khi chủ chưa tự đổi tên khác)
+        if isinstance(m, dict) and m.get('key') == 'begai' and m.get('ten') == 'Bé gái':
+            m['ten'] = 'Basic'
+            if m.get('mau') == '#CC5DE8':
+                m['mau'] = '#3B5BDB'
     st['v'] = _PHIEN_BAN
     return True
 
