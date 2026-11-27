@@ -88,10 +88,16 @@
 .dq-ctr input::-webkit-outer-spin-button,.dq-ctr input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .dq-ctr input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent;background:#fff}
 .dq-ctr .khay{width:auto;padding:0 12px;font-size:13px;font-weight:700;gap:4px}
+.dq-line.cmp .nm{display:flex;align-items:center;gap:9px;min-width:0}
+.dq-line.cmp .nm .dq-dot{width:12px;height:12px}
 @media(max-width:520px){
   .dq-line{grid-template-columns:1fr}
   .dq-ctr{justify-content:flex-start}
+  /* bảng không phụ kiện: giữ tên + ô đếm trên 1 hàng cho danh sách ngắn gọn */
+  .dq-line.cmp{grid-template-columns:minmax(0,1fr) auto}
+  .dq-line.cmp .dq-ctr{justify-content:flex-end;flex-wrap:nowrap}
 }
+@media(max-width:360px){ .dq-line.cmp .dq-ctr input{width:58px} }
 
 .dq-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
 .dq-actions .dq-b.pri{flex:1 1 220px;justify-content:center;padding:14px 18px;font-size:16px;border-radius:14px}
@@ -255,8 +261,9 @@ function render(force){
   h+='</div>';
   setHTML(sum,h);
   // từng mẫu
-  var out='';
+  var out='', kpk=S.mau.filter(function(m){ return !m.phu_kien.length; });
   S.mau.forEach(function(m){
+    if(!m.phu_kien.length) return;           // bảng không phụ kiện vẽ gộp 1 thẻ ở dưới
     var soThieu=0; m.phu_kien.forEach(function(p){ soThieu+=p.thieu?1:0; });
     var pill = m.bang===0&&m.muc_tieu===0 ? '<span class="dq-pill gray">Chưa có bảng</span>'
              : (soThieu===0&&m.bang_thieu===0 ? '<span class="dq-pill ok">Đủ '+m.bo_du+' bộ</span>'
@@ -274,6 +281,16 @@ function render(force){
     });
     out+='</div>';
   });
+  if(kpk.length){
+    var tb=0; kpk.forEach(function(m){ tb+=m.bang; });
+    out+='<div class="dq-card dq-mau"><div class="dq-mh"><span class="dq-dot" style="background:#868E96"></span><h2>Bảng không có phụ kiện</h2>'
+       +(tb?'<span class="dq-pill ok">'+tb+' bảng · đủ bộ</span>':'<span class="dq-pill gray">Chưa có bảng</span>')+'</div>';
+    out+='<div class="dq-sec" style="border-top:0">Chỉ đếm số bảng đã in xong — không cần gói phụ kiện</div>';
+    kpk.forEach(function(m){
+      out+='<div class="dq-line cmp"><div class="nm"><span class="dq-dot" style="background:'+esc(m.mau)+'"></span><span>'+esc(m.ten)+'</span></div>'+ctr(m.bang_key,m.bang,{name:"Bảng "+m.ten})+'</div>';
+    });
+    out+='</div>';
+  }
   setHTML(document.getElementById("mauList"),out);
   // dùng chung (Bộ thẻ môn)
   var c='';
@@ -425,7 +442,10 @@ function openSend(){
   var T=S.tom_tat;
   if(T.tong_dem===0){ toast("Chưa đếm gì nên chưa có gì để gửi.",true); return; }
   sendDid=S.dot.id;
-  var rows=[]; S.mau.forEach(function(m){ rows.push({nhom:m.ten,ten:"Bảng",sl:m.bang}); m.phu_kien.forEach(function(p){ rows.push({nhom:m.ten,ten:p.ten,sl:p.co}); }); });
+  var rows=[], kp=[]; S.mau.forEach(function(m){
+    if(!m.phu_kien.length){ if(m.bang) kp.push({nhom:"Bảng không phụ kiện",ten:m.ten,sl:m.bang}); return; }   // giống _rows_phieu
+    rows.push({nhom:m.ten,ten:"Bảng",sl:m.bang}); m.phu_kien.forEach(function(p){ rows.push({nhom:m.ten,ten:p.ten,sl:p.co}); }); });
+  rows=rows.concat(kp);
   S.chung.forEach(function(p){ rows.push({nhom:"Chung",ten:p.ten,sl:p.co}); });
   var h='<h3>Gửi lên Hà Nội — đợt #'+sendDid+'</h3><div class="dq-sub">Gửi được ngay <b>'+T.gui_duoc+' bộ</b> · '+T.tong_bang+' bảng</div>';
   if(T.thieu.length){ h+='<div class="dq-chips" style="margin-top:10px">'; T.thieu.forEach(function(x){ h+='<span class="dq-chip bad">Còn thiếu '+esc(x.ten)+(x.mau&&x.mau!=="Chung"?' ('+esc(x.mau)+')':'')+' ×'+x.thieu+'</span>'; }); h+='</div><div class="dq-note" style="margin-top:6px;color:var(--bad-ink)">Đang còn thiếu phụ kiện. Vẫn gửi thì Hà Nội sẽ nhận thiếu.</div>'; }
@@ -466,7 +486,8 @@ function drawSet(){
     h+='<div class="mrow"><div style="display:flex;gap:8px;align-items:center"><input type="color" value="'+esc(m.mau)+'" data-s="mc" data-mi="'+mi+'" aria-label="Màu mẫu" style="width:42px;height:38px;border:0;padding:0;background:none">'
       +'<input type="text" value="'+esc(m.ten)+'" data-s="mt" data-mi="'+mi+'" placeholder="Tên mẫu bảng" aria-label="Tên mẫu bảng" style="font-weight:700">'
       +'<button class="dq-b sm" data-s="mdel" data-mi="'+mi+'" title="Xóa mẫu" aria-label="Xóa mẫu '+esc(m.ten)+'" style="color:var(--bad-ink)"><i class="bi bi-trash"></i></button></div>'
-      +'<div class="phead" style="margin-top:10px"><span>Phụ kiện / gói</span><span>Định mức</span><span></span></div>';
+      +(m.phu_kien.length?'<div class="phead" style="margin-top:10px"><span>Phụ kiện / gói</span><span>Định mức</span><span></span></div>'
+        :'<div class="dq-sub" style="margin-top:8px">Không có phụ kiện — chỉ đếm số bảng (nằm trong thẻ “Bảng không có phụ kiện”).</div>');
     m.phu_kien.forEach(function(p,pi){
       h+='<div class="prow"><input type="text" value="'+esc(p.ten)+'" data-s="pt" data-mi="'+mi+'" data-pi="'+pi+'" placeholder="Tên (vd Gói phụ kiện)" aria-label="Tên phụ kiện">'
         +'<input type="number" min="0" value="'+p.dm+'" data-s="pd" data-mi="'+mi+'" data-pi="'+pi+'" aria-label="Định mức">'
@@ -474,7 +495,8 @@ function drawSet(){
     });
     h+='<button class="dq-b sm" data-s="padd" data-mi="'+mi+'" style="margin-top:8px"><i class="bi bi-plus-lg"></i> Thêm phụ kiện / gói</button></div>';
   });
-  h+='<button class="dq-b sm" data-s="madd"><i class="bi bi-plus-lg"></i> Thêm mẫu bảng</button>';
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="dq-b sm" data-s="madd"><i class="bi bi-plus-lg"></i> Thêm mẫu bảng có gói phụ kiện</button>'
+    +'<button class="dq-b sm" data-s="maddk"><i class="bi bi-plus-lg"></i> Thêm bảng không phụ kiện</button></div>';
   h+='<div class="mrow" style="margin-top:12px"><div style="font-weight:700;margin-bottom:6px">Dùng chung mọi mẫu (vd Bộ thẻ môn)</div><div class="phead"><span>Tên</span><span>Định mức</span><span></span></div>';
   SET.chung.forEach(function(p,ci){
     h+='<div class="prow"><input type="text" value="'+esc(p.ten)+'" data-s="ct" data-ci="'+ci+'" aria-label="Tên mục chung"><input type="number" min="0" value="'+p.dm+'" data-s="cd" data-ci="'+ci+'" aria-label="Định mức">'
@@ -509,6 +531,7 @@ document.getElementById("setBody").addEventListener("click",function(ev){
   if(s==="padd"){ SET.mau[mi].phu_kien.push({key:"",ten:"",dm:1,khay:0}); drawSet(); }
   else if(s==="pdel"){ SET.mau[mi].phu_kien.splice(pi,1); drawSet(); }
   else if(s==="madd"){ SET.mau.push({key:"",ten:"",mau:"#0F9C9C",phu_kien:[{key:"",ten:"Gói phụ kiện",dm:1,khay:0}]}); drawSet(); }
+  else if(s==="maddk"){ SET.mau.push({key:"",ten:"",mau:"#868E96",phu_kien:[]}); drawSet(); }
   else if(s==="mdel"){ SET.mau.splice(mi,1); drawSet(); }
   else if(s==="cadd"){ SET.chung.push({key:"",ten:"",dm:1}); drawSet(); }
   else if(s==="cdel"){ SET.chung.splice(ci,1); drawSet(); }

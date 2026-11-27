@@ -52,6 +52,23 @@ _DEFAULT_MAU = [
         {'key': 'meo__goi', 'ten': 'Gói phụ kiện', 'dm': 1, 'khay': 0},
     ]},
 ]
+# BẢNG KHÔNG CÓ PHỤ KIỆN (chủ yêu cầu 27/11/2026): chỉ đếm số bảng, luôn tính là đủ bộ (phu_kien rỗng).
+# Lấy theo các mẫu có file in trong E:\DỰ ÁN\in 3D\Thời khóa biểu (bỏ Iron Man: mới có STL thử). Chủ xóa/đổi tên
+# ở "Danh mục & định mức" — đã xóa thì KHÔNG tự thêm lại (cờ v=2).
+_BANG_KHONG_PK = [
+    {'key': 'doraemon', 'ten': 'Doraemon', 'mau': '#1C7ED6', 'phu_kien': []},
+    {'key': 'gundam', 'ten': 'Gundam', 'mau': '#868E96', 'phu_kien': []},
+    {'key': 'pikachu', 'ten': 'Pikachu', 'mau': '#FAB005', 'phu_kien': []},
+    {'key': 'hellokitty', 'ten': 'Hello Kitty', 'mau': '#F06595', 'phu_kien': []},
+    {'key': 'ong', 'ten': 'Ong', 'mau': '#E67700', 'phu_kien': []},
+    {'key': 'spiderman', 'ten': 'Spider-Man', 'mau': '#C92A2A', 'phu_kien': []},
+    {'key': 'songoku', 'ten': 'Songoku', 'mau': '#FD7E14', 'phu_kien': []},
+    {'key': 'muadong', 'ten': 'Mùa đông', 'mau': '#74C0FC', 'phu_kien': []},
+    {'key': 'begai', 'ten': 'Bé gái', 'mau': '#CC5DE8', 'phu_kien': []},
+]
+_DEFAULT_MAU = _DEFAULT_MAU + _BANG_KHONG_PK
+_PHIEN_BAN = 2          # v<2: dữ liệu cũ chưa có các bảng không phụ kiện -> bổ sung 1 lần khi đọc
+NHOM_KHONG_PK = 'Bảng không phụ kiện'
 _DEFAULT_CHUNG = [
     {'key': 'chung__bothemon', 'ten': 'Bộ thẻ môn', 'dm': 1, 'khay': 0},
 ]
@@ -149,7 +166,7 @@ def _now_iso():
 def _new_state():
     import copy
     return {
-        'v': 1,
+        'v': _PHIEN_BAN,
         'mau': copy.deepcopy(_DEFAULT_MAU),
         'chung': copy.deepcopy(_DEFAULT_CHUNG),
         'dem': {}, 'muc_tieu': {},
@@ -204,7 +221,31 @@ def _load():
             st[k] = d
     if not isinstance(st.get('dot'), dict) or not st['dot'].get('id'):
         st['dot'] = {'id': 1, 'bat_dau': _now_iso()}
+    if _nang_cap(st):
+        _save(st)                           # mọi chỗ gọi _load đều đang giữ khoá -> ghi ngay an toàn
     return st
+
+
+def _nang_cap(st):
+    """Bổ sung 1 LẦN các bảng không phụ kiện vào danh mục đang chạy (VPS đã có sẵn 3 mẫu từ trước).
+    Bỏ qua mẫu trùng khoá hoặc trùng tên; không vượt 20 mẫu; không đụng số đếm. Trả True nếu đã đổi."""
+    try:
+        v = int(st.get('v') or 1)
+    except (TypeError, ValueError):
+        v = 1
+    if v >= _PHIEN_BAN:
+        return False
+    import copy
+    keys = {m.get('key') for m in st['mau'] if isinstance(m, dict)}
+    tens = {str(m.get('ten') or '').strip().lower() for m in st['mau'] if isinstance(m, dict)}
+    for m in _BANG_KHONG_PK:
+        if len(st['mau']) >= 20:
+            break
+        if m['key'] in keys or m['ten'].lower() in tens:
+            continue
+        st['mau'].append(copy.deepcopy(m))
+    st['v'] = _PHIEN_BAN
+    return True
 
 
 def _save(st):
@@ -342,11 +383,17 @@ def _tinh(st):
 
 def _rows_phieu(st):
     """Danh sách dòng phiếu gửi (nhóm, tên, số lượng) từ số đếm HIỆN TẠI — chụp vào lịch sử khi gửi."""
-    rows = []
+    rows, khong_pk = [], []
     for m in st['mau']:
-        rows.append({'nhom': m['ten'], 'ten': 'Bảng', 'sl': int(st['dem'].get(_bang_key(m), 0) or 0)})
+        sl = int(st['dem'].get(_bang_key(m), 0) or 0)
+        if not m['phu_kien']:               # bảng không phụ kiện: gom 1 nhóm, bỏ dòng 0 cho phiếu gọn
+            if sl:
+                khong_pk.append({'nhom': NHOM_KHONG_PK, 'ten': m['ten'], 'sl': sl})
+            continue
+        rows.append({'nhom': m['ten'], 'ten': 'Bảng', 'sl': sl})
         for p in m['phu_kien']:
             rows.append({'nhom': m['ten'], 'ten': p['ten'], 'sl': int(st['dem'].get(p['key'], 0) or 0)})
+    rows.extend(khong_pk)
     for c in st['chung']:
         rows.append({'nhom': 'Chung', 'ten': c['ten'], 'sl': int(st['dem'].get(c['key'], 0) or 0)})
     return rows
